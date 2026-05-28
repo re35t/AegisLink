@@ -1,0 +1,28 @@
+{
+  "name": "aegislink",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Privacy-preserving personal agent communication platform.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b",
+    "check": "tsc -b --pretty false",
+    "test": "vitest run",
+    "cli": "node --import tsx apps/agent-cli/src/main.ts"
+  },
+  "dependencies": {
+    "@aegislink/agent-client": "workspace:*",
+    "@aegislink/crypto-identity": "workspace:*",
+    "@aegislink/rag-core": "workspace:*",
+    "@aegislink/storage-core": "workspace:*",
+    "@aegislink/storage-local": "workspace:*",
+    "@aegislink/vector-chroma": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.29",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.4"
+  },
+  "packageManager": "pnpm@10.4.0"
+}

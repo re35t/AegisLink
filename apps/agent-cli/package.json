@@ -1,0 +1,10 @@
+{
+  "name": "@aegislink/agent-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@aegislink/agent-client": "workspace:*",
+    "@aegislink/storage-local": "workspace:*"
+  }
+}

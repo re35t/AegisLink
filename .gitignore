@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.nx/
+coverage/
+*.log
+data/agents/*/conversations.jsonl
+!data/agents/local-agent/conversations.jsonl
