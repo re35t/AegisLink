@@ -8,11 +8,15 @@
     "build": "tsc -b",
     "check": "tsc -b --pretty false",
     "test": "vitest run",
+    "dev:server": "node --import tsx apps/server/src/main.ts",
+    "start:server": "node --import tsx apps/server/src/main.ts",
     "cli": "node --import tsx apps/agent-cli/src/main.ts"
   },
   "dependencies": {
     "@aegislink/agent-client": "workspace:*",
     "@aegislink/crypto-identity": "workspace:*",
+    "@aegislink/permission-core": "workspace:*",
+    "@aegislink/protocol": "workspace:*",
     "@aegislink/rag-core": "workspace:*",
     "@aegislink/storage-core": "workspace:*",
     "@aegislink/storage-local": "workspace:*",

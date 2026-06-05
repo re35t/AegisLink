@@ -14,6 +14,12 @@ importers:
       '@aegislink/crypto-identity':
         specifier: workspace:*
         version: link:packages/crypto-identity
+      '@aegislink/permission-core':
+        specifier: workspace:*
+        version: link:packages/permission-core
+      '@aegislink/protocol':
+        specifier: workspace:*
+        version: link:packages/protocol
       '@aegislink/rag-core':
         specifier: workspace:*
         version: link:packages/rag-core
@@ -48,6 +54,18 @@ importers:
       '@aegislink/storage-local':
         specifier: workspace:*
         version: link:../../packages/storage-local
+
+  apps/server:
+    dependencies:
+      '@aegislink/crypto-identity':
+        specifier: workspace:*
+        version: link:../../packages/crypto-identity
+      '@aegislink/permission-core':
+        specifier: workspace:*
+        version: link:../../packages/permission-core
+      '@aegislink/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
 
   packages/agent-client:
     dependencies:

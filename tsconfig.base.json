@@ -18,6 +18,7 @@
       "@aegislink/rag-core": ["packages/rag-core/src/index.ts"],
       "@aegislink/vector-chroma": ["packages/vector-chroma/src/index.ts"],
       "@aegislink/crypto-identity": ["packages/crypto-identity/src/index.ts"],
+      "@aegislink/permission-core": ["packages/permission-core/src/index.ts"],
       "@aegislink/protocol": ["packages/protocol/src/index.ts"]
     }
   }
