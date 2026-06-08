@@ -15,6 +15,7 @@ AegisLink 是一个面向隐私保护的个人 agent 通信平台。每个用户
 - Ed25519 身份生成、规范 JSON 签名和签名验证。
 - 本地 agent 问答 CLI demo。
 - 内存型后端 MVP：
+  - 基于本地记忆和可配置 model provider 的基础 chat API；
   - agent 注册与查询；
   - agent 状态更新；
   - capability 签发、列表和撤销；
@@ -52,7 +53,7 @@ pnpm test
 启动后端服务和基础 Web 控制台：
 
 ```bash
-pnpm run dev:server
+MODEL_PROVIDER=echo pnpm run dev:server
 ```
 
 然后打开：
@@ -81,6 +82,20 @@ curl -sS http://127.0.0.1:4321/healthz
 curl -sS http://127.0.0.1:4321/api/snapshot
 ```
 
+调用本地 echo 模式的 chat API：
+
+```bash
+curl -sS http://127.0.0.1:4321/api/chat \
+  -H "content-type: application/json" \
+  -d '{"question":"What does my agent remember?","agentId":"local-agent"}'
+```
+
+如果要调用真实的 OpenAI-compatible model provider，启动时传入：
+
+```bash
+MODEL_API_KEY=... MODEL_NAME=... pnpm run dev:server
+```
+
 运行本地 CLI demo：
 
 ```bash
@@ -95,6 +110,7 @@ pnpm cli ask "What does my agent remember?"
 
 - `GET /healthz`
 - `GET /api/snapshot`
+- `POST /api/chat`
 - `GET /api/agents`
 - `POST /api/agents`
 - `PATCH /api/agents/:agentId/status`

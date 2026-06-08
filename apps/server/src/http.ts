@@ -4,10 +4,12 @@ import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { SignedAgentMessage } from "@aegislink/protocol";
 import { AegisLinkServer, HttpError, type RegisterAgentInput, ValidationError } from "./aegislink-server.js";
+import type { ChatService } from "./chat-service.js";
 import type { AgentStatus } from "./types.js";
 
 export interface CreateHttpServerOptions {
   service: AegisLinkServer;
+  chat?: ChatService;
   publicDir?: string;
 }
 
@@ -18,7 +20,7 @@ export function createAegisLinkHttpServer(options: CreateHttpServerOptions) {
 
   return createServer(async (request, response) => {
     try {
-      await handleRequest(options.service, publicDir, request, response);
+      await handleRequest(options.service, options.chat, publicDir, request, response);
     } catch (error) {
       sendError(response, error);
     }
@@ -27,6 +29,7 @@ export function createAegisLinkHttpServer(options: CreateHttpServerOptions) {
 
 async function handleRequest(
   service: AegisLinkServer,
+  chat: ChatService | undefined,
   publicDir: string,
   request: IncomingMessage,
   response: ServerResponse,
@@ -38,7 +41,7 @@ async function handleRequest(
   }
 
   if (url.pathname.startsWith("/api/")) {
-    await handleApi(service, request, response, url);
+    await handleApi(service, chat, request, response, url);
     return;
   }
 
@@ -47,10 +50,25 @@ async function handleRequest(
 
 async function handleApi(
   service: AegisLinkServer,
+  chat: ChatService | undefined,
   request: IncomingMessage,
   response: ServerResponse,
   url: URL,
 ): Promise<void> {
+  if (request.method === "POST" && url.pathname === "/api/chat") {
+    if (!chat) {
+      throw new HttpError(501, "chat_service_not_configured");
+    }
+    const body = assertObject(await readJson(request));
+    sendJson(response, 200, await chat.ask({
+      question: assertString(body.question, "question"),
+      agentId: optionalString(body.agentId),
+      conversationId: optionalString(body.conversationId),
+      useMemory: optionalBoolean(body.useMemory, "useMemory"),
+    }));
+    return;
+  }
+
   if (request.method === "GET" && url.pathname === "/api/agents") {
     sendJson(response, 200, {
       agents: service.listAgents({
@@ -195,6 +213,16 @@ function assertString(value: unknown, field: string): string {
 
 function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
+function optionalBoolean(value: unknown, field: string): boolean | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "boolean") {
+    throw new ValidationError(`${field} must be a boolean`);
+  }
+  return value;
 }
 
 function assertStringArray(value: unknown, field: string): string[] {

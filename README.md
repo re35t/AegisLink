@@ -15,6 +15,7 @@ Implemented:
 - Ed25519 identity generation, canonical JSON signing, and signature verification.
 - CLI demo for local agent questions.
 - In-memory backend server MVP:
+  - basic chat API backed by local memory and a configurable model provider;
   - agent registration and lookup;
   - agent status updates;
   - capability issue, list, and revoke;
@@ -52,7 +53,7 @@ pnpm test
 Start the backend server and basic web console:
 
 ```bash
-pnpm run dev:server
+MODEL_PROVIDER=echo pnpm run dev:server
 ```
 
 Then open:
@@ -81,6 +82,20 @@ Inspect the in-memory server state:
 curl -sS http://127.0.0.1:4321/api/snapshot
 ```
 
+Call the local chat API in echo mode:
+
+```bash
+curl -sS http://127.0.0.1:4321/api/chat \
+  -H "content-type: application/json" \
+  -d '{"question":"What does my agent remember?","agentId":"local-agent"}'
+```
+
+To call a real OpenAI-compatible model provider, start the server with:
+
+```bash
+MODEL_API_KEY=... MODEL_NAME=... pnpm run dev:server
+```
+
 Run the local CLI demo:
 
 ```bash
@@ -95,6 +110,7 @@ Available REST endpoints:
 
 - `GET /healthz`
 - `GET /api/snapshot`
+- `POST /api/chat`
 - `GET /api/agents`
 - `POST /api/agents`
 - `PATCH /api/agents/:agentId/status`

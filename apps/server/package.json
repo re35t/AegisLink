@@ -8,8 +8,10 @@
     "start": "node --import tsx src/main.ts"
   },
   "dependencies": {
+    "@aegislink/agent-client": "workspace:*",
     "@aegislink/crypto-identity": "workspace:*",
     "@aegislink/permission-core": "workspace:*",
-    "@aegislink/protocol": "workspace:*"
+    "@aegislink/protocol": "workspace:*",
+    "@aegislink/storage-local": "workspace:*"
   }
 }

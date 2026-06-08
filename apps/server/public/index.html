@@ -10,10 +10,14 @@
     <main>
       <header>
         <h1>AegisLink Console</h1>
+        <nav aria-label="Primary">
+          <a href="/" data-link>Console</a>
+          <a href="/chat" data-link>Chat</a>
+        </nav>
         <button id="refresh" type="button">Refresh</button>
       </header>
 
-      <section>
+      <section class="route" data-route="/">
         <h2>Register Agent</h2>
         <form id="agent-form">
           <label>Agent ID <input name="id" placeholder="local-agent" /></label>
@@ -24,7 +28,7 @@
         </form>
       </section>
 
-      <section>
+      <section class="route" data-route="/">
         <h2>Issue Capability</h2>
         <form id="capability-form">
           <label>Subject Agent ID <input name="subjectAgentId" value="local-agent" required /></label>
@@ -44,7 +48,7 @@
         </form>
       </section>
 
-      <section>
+      <section class="route" data-route="/">
         <h2>State</h2>
         <div class="grid">
           <article>
@@ -64,6 +68,26 @@
             <pre id="audit"></pre>
           </article>
         </div>
+      </section>
+
+      <section class="route chat-route" data-route="/chat">
+        <div class="section-heading">
+          <h2>Chat</h2>
+          <code>POST /api/chat</code>
+        </div>
+        <form id="chat-form" class="chat-form">
+          <label>Agent ID <input name="agentId" value="local-agent" required /></label>
+          <label>Conversation ID <input name="conversationId" value="local" /></label>
+          <label class="checkbox-label"><input name="useMemory" type="checkbox" checked /> Use memory</label>
+          <label class="message-field">Message <textarea name="question" placeholder="Ask your local agent..." required></textarea></label>
+          <button type="submit">Send</button>
+        </form>
+
+        <div id="chat-log" class="chat-log" aria-live="polite"></div>
+        <article class="sources-panel">
+          <h3>Sources</h3>
+          <pre id="chat-sources">[]</pre>
+        </article>
       </section>
     </main>
     <script src="/app.js"></script>

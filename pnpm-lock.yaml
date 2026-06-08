@@ -57,6 +57,9 @@ importers:
 
   apps/server:
     dependencies:
+      '@aegislink/agent-client':
+        specifier: workspace:*
+        version: link:../../packages/agent-client
       '@aegislink/crypto-identity':
         specifier: workspace:*
         version: link:../../packages/crypto-identity
@@ -66,6 +69,9 @@ importers:
       '@aegislink/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
+      '@aegislink/storage-local':
+        specifier: workspace:*
+        version: link:../../packages/storage-local
 
   packages/agent-client:
     dependencies:

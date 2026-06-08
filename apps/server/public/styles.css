@@ -2,6 +2,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   color: #17212b;
@@ -20,12 +24,38 @@ header {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  flex-wrap: wrap;
 }
 
 h1,
 h2,
 h3 {
   margin: 0 0 12px;
+}
+
+nav {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+nav a {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  color: #314255;
+  text-decoration: none;
+  border: 1px solid #c7d0da;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+nav a.active {
+  color: #ffffff;
+  border-color: #1367d1;
+  background: #1367d1;
 }
 
 section,
@@ -74,6 +104,11 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -91,4 +126,112 @@ pre {
   border-radius: 6px;
   font-size: 12px;
   line-height: 1.4;
+}
+
+.section-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.section-heading code {
+  color: #42566b;
+  font-size: 13px;
+}
+
+.chat-route {
+  display: grid;
+  gap: 14px;
+}
+
+.chat-form {
+  grid-template-columns: minmax(160px, 0.7fr) minmax(180px, 0.8fr) auto;
+}
+
+.message-field {
+  grid-column: 1 / -2;
+}
+
+.checkbox-label {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 1px;
+}
+
+.checkbox-label input {
+  min-height: auto;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+}
+
+.chat-log {
+  min-height: 280px;
+  max-height: 520px;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #d6dde5;
+  border-radius: 8px;
+  background: #f9fbfd;
+}
+
+.chat-message {
+  max-width: min(760px, 92%);
+  padding: 10px 12px;
+  border: 1px solid #d6dde5;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.chat-message.user {
+  justify-self: end;
+  color: #ffffff;
+  border-color: #1367d1;
+  background: #1367d1;
+}
+
+.chat-message strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+
+.chat-message p {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.sources-panel {
+  margin-top: 0;
+}
+
+@media (max-width: 720px) {
+  header {
+    align-items: stretch;
+  }
+
+  nav {
+    order: 3;
+    width: 100%;
+    margin-left: 0;
+  }
+
+  nav a {
+    flex: 1;
+  }
+
+  .chat-form {
+    grid-template-columns: 1fr;
+  }
+
+  .message-field {
+    grid-column: auto;
+  }
 }

@@ -41,5 +41,5 @@ export interface AgentRequestResult {
 }
 
 export interface LlmClient {
-  complete(input: { prompt: string }): Promise<string>;
+  complete(input: { prompt: string; temperature?: number; maxTokens?: number }): Promise<string>;
 }
