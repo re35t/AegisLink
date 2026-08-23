@@ -1,137 +1,94 @@
 # AegisLink
 
-AegisLink 是一个面向隐私保护的个人 agent 通信平台。每个用户拥有一个个人 agent，具备本地记忆、RAG 检索和 Ed25519 加密身份。服务端负责 agent 注册、capability 权限策略、签名消息路由和审计日志，让多个 agent 能以最小权限方式协作。
+AegisLink 是一个本地优先的个人 Agent Web 应用。当前版本采用易读的 Go 模块化单体、基于 `assistant-ui` 的 React 聊天界面、AG-UI 执行协议、进程内 Eino ReAct Agent Runtime、可扩展模型 Provider、Cookie 账户会话，以及由 PostgreSQL 持久化的对话和可回放 Run 事件。当前默认 Provider 使用 DeepSeek API。
 
-当前仓库是早期 TypeScript monorepo 实现，已经可以用于本地开发和后端流程验证，但还不是生产可用版本。
+## 技术栈
 
-## 当前状态
+- Go 1.26、Gin、Eino ADK
+- PostgreSQL、pgx、Goose migrations
+- React 19、Vite、assistant-ui、AG-UI、TanStack Router、TanStack Query
+- OpenAPI 生成前端类型
 
-已实现：
+## Agent Runtime
 
-- TypeScript pnpm monorepo 骨架。
-- 本地 `agent-client` SDK，支持 `ask`、`getMemory`，远程 agent 请求仍是占位流程。
-- 本地 `soul.md` 记忆与 JSONL 对话持久化。
-- RAG 分块、hash embedding 和兼容 Chroma 的向量适配器。
-- Ed25519 身份生成、规范 JSON 签名和签名验证。
-- 本地 agent 问答 CLI demo。
-- 内存型后端 MVP：
-  - agent 注册与查询；
-  - agent 状态更新；
-  - capability 签发、列表和撤销；
-  - 签名消息 envelope 校验；
-  - 基于 capability 的消息路由；
-  - allow/deny 审计日志；
-  - 用于调试的 JSON snapshot API。
-- 基础浏览器控制台，可注册 agent、签发 capability、查看服务端状态。
-- 架构、存储、服务端、安全、API、数据模型、集成和运维文档骨架。
+- `ModelRegistry` 根据 `MODEL_DRIVER` 解析模型 Provider；当前注册 `deepseek` 和 `openai-compatible`，Conversation 层不依赖任何模型 SDK。
+- Eino `ChatModelAgent` 最多执行 `AGENT_MAX_ITERATIONS` 轮模型与工具循环，默认 8 轮。
+- 默认提供只读的 `get_current_time` 工具，用于验证基础 ReAct 调用；外部 MCP 工具尚未接入。
+- `MODEL_ID` 是稳定的模型配置标识，后续可在不改变 Conversation 业务接口的情况下扩展多个模型配置。
 
-暂未实现：
+## Web 与 AG-UI
 
-- PostgreSQL 权威元数据持久化。
-- 真实组织树和基于角色的策略评估。
-- WebSocket/gRPC 流式通信。
-- integration gateway 和 IM 适配器。
-- 生产级认证、限流、部署 manifests 和可观测性流水线。
-- 完整美术和产品级前端 UI。
+- 普通 REST API 继续管理 Conversation、历史和 Run 控制；`POST /api/v1/ag-ui` 接收标准 `RunAgentInput` 并返回 AG-UI SSE 事件。
+- assistant-ui 的 Thread、Message、Composer、停止生成和自动滚动已经接入，`@assistant-ui/react-ag-ui` 负责协议运行时。
+- PostgreSQL 历史是权威数据；AG-UI 请求携带的旧消息不会替代服务端会话历史。
+- 当前 AG-UI 切片覆盖 Run 生命周期、文本流和取消。结构化 Tool UI、Approval、附件和 AG-UI 原生断线续流仍是后续工作。
 
-## 快速启动
+## 账户与 Personal Agent
 
-安装依赖：
+- 注册会在同一个 PostgreSQL 事务中创建登录 Account、对应的 Human Principal（API 中的 `User`）和一个默认 Personal Agent。
+- 登录返回当前 User 与 Personal Agent，并创建服务端不透明 Session。浏览器只获得 `HttpOnly`、`SameSite=Strict` Cookie，数据库只保存 Session Token 的哈希。
+- 密码使用 Argon2id 哈希；现有 Agent、Conversation、Message、Run 和 Event 操作都按登录 Principal 做所有权隔离。
+- 本地 HTTP 开发使用 `AUTH_COOKIE_SECURE=false`；生产 HTTPS 环境必须设为 `true`。
+
+当前 DeepSeek 配置示例：
+
+```dotenv
+MODEL_ID=deepseek-primary
+MODEL_DRIVER=deepseek
+MODEL_BASE_URL=https://api.deepseek.com
+MODEL_NAME=deepseek-v4-flash
+AGENT_MAX_ITERATIONS=8
+```
+
+API key 只通过未提交的 `.env` 中 `MODEL_API_KEY` 提供，不能写入文档、日志或代码。
+
+## 本地运行
 
 ```bash
+cp .env.example .env
+# 填写 MODEL_API_KEY，按需调整 MODEL_BASE_URL 和 MODEL_NAME。
 pnpm install
+make dev-db
+make dev-server
 ```
 
-运行类型检查和测试：
+另开终端运行：
 
 ```bash
-pnpm check
-pnpm test
+make dev-web
 ```
 
-启动后端服务和基础 Web 控制台：
+浏览器打开 `http://127.0.0.1:5173`，API 默认监听 `http://127.0.0.1:4321`。
+
+首次打开会进入注册/登录页。注册成功后会自动进入与该账户默认 Personal Agent 绑定的工作区。
+
+如果通过 OneAPI 等 OpenAI-compatible 网关调用 DeepSeek：
+
+```dotenv
+MODEL_DRIVER=openai-compatible
+MODEL_BASE_URL=https://your-gateway.example/v1
+MODEL_NAME=your-deepseek-model
+```
+
+## 验证
 
 ```bash
-pnpm run dev:server
+make generate
+make check
+make test
+make build
 ```
 
-然后打开：
+设置 `TEST_DATABASE_URL` 后，`go test ./...` 会同时运行 PostgreSQL Repository 集成测试。
 
-```text
-http://127.0.0.1:4321
-```
+## API
 
-这里要使用 `pnpm run dev:server`，不要用 `pnpm server`：`server` 也是 pnpm 自带命令，`pnpm server` 可能不会执行本仓库里的脚本。
+- `POST /api/v1/auth/register`、`POST /api/v1/auth/login`、`POST /api/v1/auth/logout`
+- `GET /api/v1/auth/session`
+- `GET /api/v1/bootstrap`、`GET /api/v1/agents`
+- `POST /api/v1/ag-ui`
+- Conversation、Message、Run 与 SSE Event 接口详见 `contracts/http/v1/openapi.yaml`
 
-如果要换端口：
+## 当前边界
 
-```bash
-PORT=4322 pnpm run dev:server
-```
-
-健康检查：
-
-```bash
-curl -sS http://127.0.0.1:4321/healthz
-```
-
-查看内存中的服务端状态：
-
-```bash
-curl -sS http://127.0.0.1:4321/api/snapshot
-```
-
-运行本地 CLI demo：
-
-```bash
-pnpm cli ask "What does my agent remember?"
-```
-
-## 后端 API
-
-当前后端刻意使用内存状态，先验证核心设计，再接 PostgreSQL。
-
-当前 REST endpoints：
-
-- `GET /healthz`
-- `GET /api/snapshot`
-- `GET /api/agents`
-- `POST /api/agents`
-- `PATCH /api/agents/:agentId/status`
-- `GET /api/capabilities`
-- `POST /api/capabilities`
-- `POST /api/capabilities/:capabilityId/revoke`
-- `GET /api/messages`
-- `POST /api/messages/route`
-- `GET /api/audit`
-
-## 项目进展
-
-Phase 1 已完成本地 agent scaffold：本地记忆、CLI、RAG 基础能力、向量适配器、协议类型和加密身份都已实现并有测试覆盖。
-
-Phase 2 已开始。当前后端 MVP 已覆盖 docs 中的主要服务端概念：registry、permission capability 检查、签名 envelope 验证、routing 和 audit。前端当前只做基础功能，用来跑通后端流程，不追求美术设计。
-
-后端下一步优先级：
-
-1. 使用 `packages/database/schema.sql` 把服务端状态从内存迁移到 PostgreSQL。
-2. 增加组织成员关系和基于角色的策略评估。
-3. 给 client SDK 增加请求签名 helpers，让浏览器/CLI 能端到端构造合法签名 envelope。
-4. 增加 WebSocket 消息投递。
-5. 扩展服务端测试，覆盖过期、撤销、禁用 agent、重复 nonce 和审计查询。
-
-## 目录
-
-```text
-apps/agent-cli          本地 CLI demo
-apps/server             后端 MVP 和基础 Web 控制台
-packages/agent-client   本地 agent SDK
-packages/storage-core   存储接口
-packages/storage-local  本地 soul.md 和 JSONL stores
-packages/rag-core       分块、embedding、检索
-packages/vector-chroma  兼容 Chroma 的向量适配器
-packages/crypto-identity Ed25519 身份和签名 helpers
-packages/permission-core Capability evaluator
-packages/protocol       Message、event 和 capability 类型
-docs                    设计与运维文档
-data/agents/local-agent 本地 demo agent 数据
-```
+当前版本已实现邮箱密码登录、服务端 Session、Principal 拥有 Personal Agent，以及现有聊天链路的所有权隔离。邮箱验证、密码重置、MFA、登录限流、委托访问、Ed25519 Agent Identity、Capability、跨 Agent 通信、RAG、MCP/外部 Tools、Tool/Approval UI、Redis、WebSocket 和沙箱 Runner 尚未实现。`docs` 中保留了旧原型的研究文档，但当前实现以本 README、ADR 0004、ADR 0005 和 ADR 0006 为准。

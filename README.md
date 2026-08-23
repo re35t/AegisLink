@@ -1,137 +1,99 @@
 # AegisLink
 
-AegisLink is a privacy-preserving personal agent communication platform. Each user owns a personal agent with local memory, RAG retrieval, and an Ed25519 crypto identity. The server side provides agent registry, capability policy, signed message routing, and audit logs so agents can collaborate with least-privilege permissions.
+AegisLink is a local-first personal Agent Web application. The current release is a readable Go modular monolith with an `assistant-ui` React chat interface, an AG-UI execution protocol, an in-process Eino ReAct Agent Runtime, an extensible model-provider registry, cookie-based account sessions, and PostgreSQL-backed conversations and replayable run events. DeepSeek is the active default provider.
 
-The repository is currently an early TypeScript monorepo implementation. It is usable for local development and backend workflow verification, but it is not production-ready yet.
+## Stack
 
-## Current Status
+- Go 1.26, Gin, Eino ADK
+- PostgreSQL, pgx, Goose migrations
+- React 19, Vite, assistant-ui, AG-UI, TanStack Router, TanStack Query
+- OpenAPI-generated frontend types
 
-Implemented:
+## Agent Runtime
 
-- TypeScript pnpm monorepo skeleton.
-- Local `agent-client` SDK with `ask`, `getMemory`, and a remote-agent request placeholder.
-- Local `soul.md` memory and JSONL conversation persistence.
-- RAG chunking, hash embeddings, and a Chroma-compatible vector adapter.
-- Ed25519 identity generation, canonical JSON signing, and signature verification.
-- CLI demo for local agent questions.
-- In-memory backend server MVP:
-  - agent registration and lookup;
-  - agent status updates;
-  - capability issue, list, and revoke;
-  - signed message envelope validation;
-  - capability-based message routing;
-  - allow/deny audit logs;
-  - JSON snapshot API for debugging.
-- Basic browser console for registering agents, issuing capabilities, and inspecting server state.
-- Architecture, storage, server, security, API, data model, integration, and ops docs scaffold.
+- `ModelRegistry` resolves `MODEL_DRIVER` to a model provider. `deepseek` and `openai-compatible` are registered without exposing model SDK types to the conversation layer.
+- Eino `ChatModelAgent` runs up to `AGENT_MAX_ITERATIONS` model/tool cycles; the default is 8.
+- A read-only `get_current_time` tool proves the base ReAct loop. External MCP tools are not connected yet.
+- `MODEL_ID` is a stable model-profile identifier so multiple configured models can be added later without changing the conversation contract.
 
-Not implemented yet:
+## Web and AG-UI
 
-- PostgreSQL persistence for authoritative metadata.
-- Real organization tree and role policy evaluation.
-- WebSocket/gRPC streaming.
-- Integration gateway and IM adapters.
-- Production authentication, rate limiting, deployment manifests, and observability pipeline.
-- Polished frontend product UI.
+- REST continues to manage conversations, history, and run controls. `POST /api/v1/ag-ui` accepts a standard `RunAgentInput` and streams AG-UI SSE events.
+- assistant-ui now owns the Thread, Message, Composer, cancellation, and auto-scroll experience; `@assistant-ui/react-ag-ui` provides the protocol runtime.
+- PostgreSQL history remains authoritative. Historical messages supplied by an AG-UI client do not replace server-side conversation history.
+- The current AG-UI slice covers run lifecycle, text streaming, and cancellation. Structured Tool UI, approvals, attachments, and native AG-UI stream resumption remain future work.
 
-## Quick Start
+## Account and Personal Agent
 
-Install dependencies:
+- Registration creates a login Account, its Human Principal (`User` in the API), and one default Personal Agent in a single PostgreSQL transaction.
+- Login returns the current User and Personal Agent and creates an opaque server-side session. The browser receives only an `HttpOnly`, `SameSite=Strict` cookie; the database stores only the session-token hash.
+- Passwords are hashed with Argon2id. Existing agent, conversation, message, run, and event operations are scoped by the authenticated Principal.
+- `AUTH_COOKIE_SECURE=false` supports local HTTP development. Set it to `true` behind production HTTPS.
+
+Current DeepSeek configuration:
+
+```dotenv
+MODEL_ID=deepseek-primary
+MODEL_DRIVER=deepseek
+MODEL_BASE_URL=https://api.deepseek.com
+MODEL_NAME=deepseek-v4-flash
+AGENT_MAX_ITERATIONS=8
+```
+
+Provide the API key only through `MODEL_API_KEY` in an uncommitted `.env`; never place it in source, documentation, or logs.
+
+## Run locally
 
 ```bash
+cp .env.example .env
+# Set MODEL_API_KEY and adjust MODEL_BASE_URL / MODEL_NAME when needed.
 pnpm install
+make dev-db
+make dev-server
 ```
 
-Run type checks and tests:
+In another terminal:
 
 ```bash
-pnpm check
-pnpm test
+make dev-web
 ```
 
-Start the backend server and basic web console:
+Open `http://127.0.0.1:5173`. The API listens on `http://127.0.0.1:4321`.
+
+For an OpenAI-compatible gateway, set:
+
+```dotenv
+MODEL_DRIVER=openai-compatible
+MODEL_BASE_URL=https://your-gateway.example/v1
+MODEL_NAME=your-deepseek-model
+```
+
+## API
+
+- `GET /healthz`, `GET /readyz`
+- `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `POST /api/v1/auth/logout`
+- `GET /api/v1/auth/session`
+- `GET /api/v1/bootstrap`, `GET /api/v1/agents`
+- `POST /api/v1/ag-ui`
+- `GET|POST /api/v1/conversations`
+- `GET /api/v1/conversations/:conversationId`
+- `POST /api/v1/conversations/:conversationId/messages`
+- `GET /api/v1/runs/:runId/events`
+- `POST /api/v1/runs/:runId/cancel`
+
+The event endpoint is SSE and supports replay with `Last-Event-ID`. Public shapes are defined in `contracts/http/v1/openapi.yaml`.
+
+## Validate
 
 ```bash
-pnpm run dev:server
+make generate
+make check
+make test
+make build
 ```
 
-Then open:
+Set `TEST_DATABASE_URL` to include the PostgreSQL repository integration test.
 
-```text
-http://127.0.0.1:4321
-```
+## Current boundary
 
-Use `pnpm run dev:server` instead of `pnpm server`: `server` is also a pnpm built-in command, so `pnpm server` may not execute this repository's script.
-
-To use another port:
-
-```bash
-PORT=4322 pnpm run dev:server
-```
-
-Health check:
-
-```bash
-curl -sS http://127.0.0.1:4321/healthz
-```
-
-Inspect the in-memory server state:
-
-```bash
-curl -sS http://127.0.0.1:4321/api/snapshot
-```
-
-Run the local CLI demo:
-
-```bash
-pnpm cli ask "What does my agent remember?"
-```
-
-## Backend API
-
-The current backend is intentionally in-memory so the core design can be tested before wiring PostgreSQL.
-
-Available REST endpoints:
-
-- `GET /healthz`
-- `GET /api/snapshot`
-- `GET /api/agents`
-- `POST /api/agents`
-- `PATCH /api/agents/:agentId/status`
-- `GET /api/capabilities`
-- `POST /api/capabilities`
-- `POST /api/capabilities/:capabilityId/revoke`
-- `GET /api/messages`
-- `POST /api/messages/route`
-- `GET /api/audit`
-
-## Development Progress
-
-Phase 1 is complete as a local-agent scaffold: local memory, CLI, RAG primitives, vector adapter, protocol types, and crypto identity are implemented and covered by tests.
-
-Phase 2 has started. The backend MVP now covers the main server concepts from the docs: registry, permission capability checks, signed envelope verification, routing, and audit. The frontend is deliberately minimal and exists only to exercise backend flows.
-
-Next backend priorities:
-
-1. Move server state from memory into PostgreSQL using `packages/database/schema.sql`.
-2. Add organization membership and role-aware policy evaluation.
-3. Add request signing helpers to the client SDK so the browser/CLI can build valid signed envelopes end to end.
-4. Add WebSocket delivery for routed messages.
-5. Expand server tests around expiry, revocation, disabled agents, duplicate nonces, and audit queries.
-
-## Layout
-
-```text
-apps/agent-cli          Local CLI demo
-apps/server             Backend MVP and basic web console
-packages/agent-client   Local agent SDK
-packages/storage-core   Storage interfaces
-packages/storage-local  Local soul.md and JSONL stores
-packages/rag-core       Chunking, embeddings, retrieval
-packages/vector-chroma  Chroma-compatible vector adapter
-packages/crypto-identity Ed25519 identity and signing helpers
-packages/permission-core Capability evaluator
-packages/protocol       Message, event, and capability types
-docs                    Design and operations documentation
-data/agents/local-agent Local demo agent data
-```
+This release implements email/password authentication, server-side sessions, Principal-owned Personal Agents, and owner isolation for the existing chat path. It does not yet include email verification, password reset, MFA, login rate limiting, delegated access, Ed25519 Agent identity, capability routing, cross-agent communication, RAG, MCP/external tools, Tool/Approval UI, Redis, WebSocket, or sandboxed runners. Historical design documents are retained under `docs` and clearly separated from the current implementation baseline.

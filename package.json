@@ -1,32 +1,13 @@
 {
   "name": "aegislink",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Privacy-preserving personal agent communication platform.",
-  "type": "module",
+  "packageManager": "pnpm@10.4.0",
   "scripts": {
-    "build": "tsc -b",
-    "check": "tsc -b --pretty false",
-    "test": "vitest run",
-    "dev:server": "node --import tsx apps/server/src/main.ts",
-    "start:server": "node --import tsx apps/server/src/main.ts",
-    "cli": "node --import tsx apps/agent-cli/src/main.ts"
-  },
-  "dependencies": {
-    "@aegislink/agent-client": "workspace:*",
-    "@aegislink/crypto-identity": "workspace:*",
-    "@aegislink/permission-core": "workspace:*",
-    "@aegislink/protocol": "workspace:*",
-    "@aegislink/rag-core": "workspace:*",
-    "@aegislink/storage-core": "workspace:*",
-    "@aegislink/storage-local": "workspace:*",
-    "@aegislink/vector-chroma": "workspace:*"
-  },
-  "devDependencies": {
-    "@types/node": "^22.15.29",
-    "tsx": "^4.19.4",
-    "typescript": "^5.8.3",
-    "vitest": "^3.1.4"
-  },
-  "packageManager": "pnpm@10.4.0"
+    "dev:web": "pnpm --filter @aegislink/web dev",
+    "build:web": "pnpm --filter @aegislink/web build",
+    "check:web": "pnpm --filter @aegislink/web check",
+    "test:web": "pnpm --filter @aegislink/web test",
+    "generate:api": "pnpm --filter @aegislink/web generate:api"
+  }
 }

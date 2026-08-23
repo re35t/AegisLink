@@ -1,0 +1,43 @@
+{
+  "name": "@aegislink/web",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "check": "tsc -b --noEmit && oxlint src && prettier --check .",
+    "test": "vitest run",
+    "generate:api": "openapi-typescript ../contracts/http/v1/openapi.yaml -o src/api/schema.ts && prettier --write src/api/schema.ts"
+  },
+  "dependencies": {
+    "@ag-ui/client": "^0.0.58",
+    "@assistant-ui/react": "^0.15.16",
+    "@assistant-ui/react-ag-ui": "^0.0.56",
+    "@assistant-ui/react-markdown": "^0.14.12",
+    "@tanstack/react-query": "5.101.2",
+    "@tanstack/react-router": "1.170.18",
+    "lucide-react": "0.575.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "remark-gfm": "^4.0.1"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.2",
+    "@types/node": "22.19.15",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.3",
+    "jsdom": "29.0.0",
+    "openapi-typescript": "7.13.0",
+    "oxlint": "1.71.0",
+    "prettier": "3.8.3",
+    "typescript": "5.9.3",
+    "vite": "8.1.4",
+    "vitest": "4.0.18"
+  }
+}

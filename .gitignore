@@ -1,7 +1,15 @@
 node_modules/
 dist/
+web/dist/
+/aegislink-server
 .nx/
 coverage/
+output/
+.playwright-cli/
 *.log
+.env
+.env.local
+.cache/
+*.tsbuildinfo
 data/agents/*/conversations.jsonl
 !data/agents/local-agent/conversations.jsonl

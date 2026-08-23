@@ -1,0 +1,4 @@
+interface:
+  display_name: "AegisLink Frontend Engineering"
+  short_description: "Production-focused AegisLink frontend workflow"
+  default_prompt: "Use $frontend-engineering to implement and visually verify this AegisLink frontend task."
