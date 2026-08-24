@@ -14,6 +14,9 @@ import (
 	"github.com/re35t/AegisLink/internal/account"
 	"github.com/re35t/AegisLink/internal/agent"
 	"github.com/re35t/AegisLink/internal/conversation"
+	"github.com/re35t/AegisLink/internal/mcp"
+	"github.com/re35t/AegisLink/internal/memory"
+	"github.com/re35t/AegisLink/internal/skills"
 )
 
 func TestErrorResponseIncludesStableCodeAndRequestID(t *testing.T) {
@@ -225,13 +228,61 @@ func (fake *fakeService) ListRunEvents(context.Context, string, string, int64) (
 }
 func (fake *fakeService) CancelRun(context.Context, string, string) error { return nil }
 
+type fakeMemoryService struct{}
+
+func (*fakeMemoryService) List(context.Context, string, string) ([]memory.Memory, error) {
+	return nil, nil
+}
+func (*fakeMemoryService) Create(context.Context, string, string, memory.Kind, string, string, float64) (memory.Memory, error) {
+	return memory.Memory{}, nil
+}
+func (*fakeMemoryService) Update(context.Context, string, string, string, memory.Update) (memory.Memory, error) {
+	return memory.Memory{}, nil
+}
+func (*fakeMemoryService) Forget(context.Context, string, string, string) error { return nil }
+
+type fakeSkillService struct{}
+
+func (*fakeSkillService) List(context.Context, string, string) ([]skills.Skill, error) {
+	return nil, nil
+}
+func (*fakeSkillService) Install(context.Context, string, string, string, string) (skills.Skill, error) {
+	return skills.Skill{}, nil
+}
+func (*fakeSkillService) SetEnabled(context.Context, string, string, string, bool) (skills.Skill, error) {
+	return skills.Skill{}, nil
+}
+func (*fakeSkillService) Uninstall(context.Context, string, string, string) error { return nil }
+
+type fakeMCPService struct{}
+
+func (*fakeMCPService) List(context.Context, string, string) ([]mcp.Server, error) {
+	return nil, nil
+}
+func (*fakeMCPService) Create(context.Context, string, string, string, string) (mcp.Server, error) {
+	return mcp.Server{}, nil
+}
+func (*fakeMCPService) SetEnabled(context.Context, string, string, string, bool) (mcp.Server, error) {
+	return mcp.Server{}, nil
+}
+func (*fakeMCPService) Delete(context.Context, string, string, string) error { return nil }
+func (*fakeMCPService) Refresh(context.Context, string, string, string) (mcp.Server, error) {
+	return mcp.Server{}, nil
+}
+func (*fakeMCPService) UpdateTool(context.Context, string, string, string, string, bool, mcp.RiskLevel) (mcp.Server, error) {
+	return mcp.Server{}, nil
+}
+
 func discardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
 func newTestRouter(service *fakeService, model ModelInfo) http.Handler {
 	return NewRouter(
-		Dependencies{Accounts: service, Agents: service, Conversations: service},
+		Dependencies{
+			Accounts: service, Agents: service, Conversations: service,
+			Memories: &fakeMemoryService{}, Skills: &fakeSkillService{}, MCP: &fakeMCPService{},
+		},
 		"http://127.0.0.1:5173",
 		AuthConfig{CookieName: "aegislink_session"},
 		model,

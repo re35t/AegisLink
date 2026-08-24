@@ -18,6 +18,7 @@ type Config struct {
 	Auth     Auth
 	Model    Model
 	Runtime  AgentRuntime
+	MCP      MCP
 	Web      Web
 }
 
@@ -47,6 +48,11 @@ type Model struct {
 
 type AgentRuntime struct {
 	MaxIterations int
+}
+
+type MCP struct {
+	Timeout              time.Duration
+	AllowPrivateNetworks bool
 }
 
 type Web struct {
@@ -79,6 +85,14 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	mcpTimeout, err := durationEnv("MCP_TIMEOUT", 15*time.Second)
+	if err != nil {
+		return Config{}, err
+	}
+	mcpAllowPrivateNetworks, err := boolEnv("MCP_ALLOW_PRIVATE_NETWORKS", false)
+	if err != nil {
+		return Config{}, err
+	}
 
 	driver := strings.TrimSpace(env("MODEL_DRIVER", "deepseek"))
 	cfg := Config{
@@ -98,7 +112,10 @@ func Load() (Config, error) {
 			MaxTokens: maxTokens,
 		},
 		Runtime: AgentRuntime{MaxIterations: maxIterations},
-		Web:     Web{Origin: strings.TrimSpace(env("WEB_ORIGIN", "http://127.0.0.1:5173"))},
+		MCP: MCP{
+			Timeout: mcpTimeout, AllowPrivateNetworks: mcpAllowPrivateNetworks,
+		},
+		Web: Web{Origin: strings.TrimSpace(env("WEB_ORIGIN", "http://127.0.0.1:5173"))},
 	}
 	if err := cfg.Validate(); err != nil {
 		return Config{}, err
@@ -137,6 +154,9 @@ func (cfg Config) Validate() error {
 	}
 	if cfg.Runtime.MaxIterations < 1 {
 		problems = append(problems, errors.New("AGENT_MAX_ITERATIONS must be positive"))
+	}
+	if cfg.MCP.Timeout <= 0 {
+		problems = append(problems, errors.New("MCP_TIMEOUT must be positive"))
 	}
 	if err := validateURL("MODEL_BASE_URL", cfg.Model.BaseURL); err != nil {
 		problems = append(problems, err)

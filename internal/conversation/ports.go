@@ -2,6 +2,7 @@ package conversation
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/re35t/AegisLink/internal/agent"
 )
@@ -19,6 +20,33 @@ type RunRequest struct {
 type RuntimeInput struct {
 	Agent    agent.Agent
 	Messages []Message
+	Context  AgentContext
+}
+
+type AgentContext struct {
+	Memories []RuntimeMemory
+	Skills   []RuntimeSkill
+	Tools    []RuntimeTool
+}
+
+type RuntimeMemory struct {
+	ID      string
+	Kind    string
+	Content string
+	Source  string
+}
+
+type RuntimeSkill struct {
+	Name        string
+	Description string
+	Content     string
+}
+
+type RuntimeTool struct {
+	Name        string
+	Description string
+	InputSchema json.RawMessage
+	Invoke      func(context.Context, string) (string, error)
 }
 
 type RuntimeOutput struct {
@@ -48,6 +76,10 @@ type RuntimeToolEvent struct {
 
 type Runtime interface {
 	Stream(context.Context, RuntimeInput) <-chan RuntimeOutput
+}
+
+type ContextProvider interface {
+	Resolve(context.Context, string, string) (AgentContext, error)
 }
 
 type AgentReader interface {

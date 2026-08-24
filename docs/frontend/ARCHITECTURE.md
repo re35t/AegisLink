@@ -22,10 +22,15 @@ web/src/
 │   ├── ConversationSidebar.tsx  searchable Conversation navigation
 │   ├── ConversationWorkspace.tsx Conversation page states and composition
 │   └── RunRecovery.tsx          persisted active-Run recovery view
+├── features/capabilities/
+│   ├── CapabilityShell.tsx      shared Agent-scoped management shell
+│   ├── MemoryPage.tsx           inspect/edit/confirm/forget Memory
+│   ├── SkillsPage.tsx           install and enable SKILL.md
+│   └── McpPage.tsx              server discovery and tool permissions
 └── styles.css              current global styles and component classes
 ```
 
-The implemented product slice is Conversation. Memory, Skills, MCP management, Agent profile, and Runs/Traces are planned but do not yet have feature modules or routes.
+Conversation, Memory, Skills, and MCP management now have real routes. Agent profile and Runs/Traces remain planned. Capability management is grouped because it shares Agent bootstrap/scope and compact CRUD patterns; backend domain ownership remains split across Memory, Skills, and MCP.
 
 ## Ownership rules
 
@@ -37,7 +42,7 @@ Routes select the product object and compose a shell plus feature entry points. 
 
 The application shell owns primary navigation, responsive region behavior, and outlet placement. It must not own Memory extraction, MCP connection, Skill validation, or Runtime decisions.
 
-`Workspace.tsx` owns query/mutation coordination and composes `AppShell`, `ConversationSidebar`, `ConversationWorkspace`, and `RunRecovery`. Keep product navigation and Conversation presentation inside their owning components. When Memory, Skills, or MCP becomes real, add its feature/route and compose it into the existing shell rather than adding presentation branches back into `Workspace.tsx`.
+`Workspace.tsx` owns Conversation query/mutation coordination and composes `AppShell`, `ConversationSidebar`, `ConversationWorkspace`, and `RunRecovery`. `CapabilityShell` provides the shared Agent scope and layout for Memory, Skills, and MCP pages. Keep product navigation and feature presentation inside their owning components rather than adding capability branches back into `Workspace.tsx`.
 
 ### Feature modules
 
@@ -52,12 +57,10 @@ web/src/
 └── features/
     ├── conversation/
     ├── agent/
-    ├── memory/
-    ├── skills/
-    └── mcp/
+    └── capabilities/       split further only when each object gains enough code
 ```
 
-`features/conversation` and `components/layout` now exist because real implementation owns those boundaries. Create the remaining feature directories only as implementation moves into them.
+`features/conversation`, `features/capabilities`, and `components/layout` now exist because real implementation owns those boundaries. Split capability pages into separate directories only when they gain multiple private components/hooks; avoid directory depth that does not clarify ownership.
 
 ### Presentation and behavior
 

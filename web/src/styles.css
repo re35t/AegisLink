@@ -364,6 +364,7 @@ textarea:focus-visible {
   background: transparent;
   font-size: 10px;
   line-height: 1;
+  text-decoration: none;
 }
 
 .rail-destination:hover:not(:disabled) {
@@ -654,6 +655,494 @@ textarea:focus-visible {
   min-height: 0;
   overflow: hidden;
   background: var(--color-surface);
+}
+
+.capability-page {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--color-surface);
+}
+
+.capability-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 104px;
+  padding: 20px 32px;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.capability-header > div:nth-child(2) {
+  min-width: 0;
+}
+
+.capability-header h1,
+.capability-sidebar h1 {
+  margin: 4px 0 0;
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+}
+
+.capability-header p {
+  max-width: 680px;
+  margin: 6px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.capability-agent-badge {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 7px 10px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 999px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-subtle);
+  font-size: 12px;
+}
+
+.capability-scroll {
+  min-width: 0;
+  min-height: 0;
+  padding: 28px 32px 64px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.capability-stack {
+  display: grid;
+  gap: 18px;
+  width: min(920px, 100%);
+  margin: 0 auto;
+}
+
+.capability-sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding: 24px 18px 18px;
+}
+
+.capability-sidebar h1 {
+  font-size: 18px;
+}
+
+.capability-sidebar p {
+  margin: 14px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.capability-scope {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 8px;
+  margin-top: 28px;
+  padding: 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 9px;
+  color: #476253;
+  background: var(--color-surface);
+}
+
+.capability-scope span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.capability-scope strong {
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.capability-scope small {
+  overflow: hidden;
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+  text-overflow: ellipsis;
+}
+
+.capability-logout {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+  padding: 10px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--color-text-secondary);
+  background: transparent;
+}
+
+.capability-logout:hover {
+  color: var(--color-text);
+  background: var(--color-surface-muted);
+}
+
+.capability-composer,
+.capability-card,
+.capability-empty,
+.safety-note {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 12px;
+  background: var(--color-surface);
+}
+
+.capability-composer {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  box-shadow: 0 5px 20px rgba(22, 30, 26, 0.04);
+}
+
+.composer-heading,
+.card-title-row,
+.server-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.composer-heading h2,
+.card-title-row h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.composer-heading p,
+.card-title-row p {
+  margin: 5px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.capability-composer textarea,
+.capability-card textarea,
+.capability-composer input,
+.capability-composer select,
+.tool-row select {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  outline: 0;
+  color: var(--color-text);
+  background: var(--color-surface);
+  font-size: 13px;
+  font-weight: 400;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.capability-composer textarea,
+.capability-card textarea {
+  min-height: 82px;
+  padding: 11px 12px;
+  resize: vertical;
+  line-height: 1.55;
+}
+
+.capability-composer input,
+.capability-composer select,
+.tool-row select {
+  min-height: 40px;
+  padding: 0 10px;
+}
+
+.composer-heading select {
+  width: auto;
+  min-width: 110px;
+}
+
+.capability-composer textarea:focus,
+.capability-card textarea:focus,
+.capability-composer input:focus,
+.capability-composer select:focus,
+.tool-row select:focus {
+  border-color: #60776a;
+  box-shadow: 0 0 0 3px var(--color-focus);
+}
+
+.code-input {
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  font-size: 12px !important;
+  tab-size: 2;
+}
+
+.composer-actions,
+.card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.composer-actions > button,
+.secondary-button,
+.danger-button,
+.capability-error button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.composer-actions > button {
+  border-color: #252b29;
+  color: #fff;
+  background: #252b29;
+}
+
+.danger-button {
+  color: #8b403a;
+  border-color: #ecd6d3;
+  background: #fffafa;
+}
+
+.capability-list {
+  display: grid;
+  gap: 12px;
+}
+
+.capability-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px 20px;
+}
+
+.card-title-row > div:first-child {
+  min-width: 0;
+}
+
+.card-meta {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.kind-badge,
+.status-badge {
+  padding: 4px 7px;
+  border-radius: 999px;
+  color: #3e654c;
+  background: #eaf4ec;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.kind-badge.episodic,
+.status-badge.unchecked {
+  color: #74591f;
+  background: #fff3d9;
+}
+
+.status-badge.error {
+  color: #8b403a;
+  background: #fcecea;
+}
+
+.card-source {
+  min-width: 0;
+  margin-right: auto;
+  overflow: hidden;
+  color: var(--color-text-tertiary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.switch-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.switch-control input {
+  width: 16px;
+  height: 16px;
+  accent-color: #476655;
+}
+
+.capability-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 42px 24px;
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+  text-align: center;
+}
+
+.capability-empty strong {
+  color: var(--color-text);
+  font-size: 14px;
+}
+
+.capability-error button {
+  margin-top: 8px;
+}
+
+.inline-error {
+  color: var(--color-danger);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.composer-actions .inline-error {
+  margin-right: auto;
+}
+
+.mcp-fields {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.45fr) minmax(260px, 1fr);
+  gap: 12px;
+}
+
+.mcp-fields label {
+  display: grid;
+  gap: 6px;
+}
+
+.mcp-fields label span {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.skill-version-field {
+  display: grid;
+  gap: 6px;
+}
+
+.skill-version-field > span {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.skill-version-field small,
+.skill-identifiers {
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.skill-identifiers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-border-subtle);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.safety-note {
+  padding: 11px 13px;
+  border-left: 3px solid #c2a34b;
+  color: #715a24;
+  background: #fffaf0;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.server-heading {
+  justify-content: flex-start;
+  align-items: center;
+  gap: 8px;
+}
+
+.endpoint-copy {
+  overflow: hidden;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-list {
+  overflow: hidden;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 9px;
+}
+
+.tool-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 132px 62px;
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  padding: 9px 11px;
+}
+
+.tool-row + .tool-row {
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.tool-row > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.tool-row strong {
+  overflow: hidden;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-row > div span {
+  overflow: hidden;
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-row select {
+  min-height: 32px;
+  font-size: 10px;
+}
+
+.compact-switch {
+  justify-content: flex-end;
 }
 
 .conversation-workspace {
@@ -1611,6 +2100,15 @@ textarea:focus-visible {
     inset: 0 0 0 auto;
     width: min(88vw, 340px);
   }
+
+  .capability-header {
+    min-height: 92px;
+    padding: 16px 22px;
+  }
+
+  .capability-scroll {
+    padding: 22px 22px 56px;
+  }
 }
 
 @media (max-width: 520px) {
@@ -1745,6 +2243,51 @@ textarea:focus-visible {
   .message,
   .recovery-banner {
     width: calc(100% - 28px);
+  }
+
+  .capability-header {
+    min-height: 82px;
+    padding: 12px 14px;
+  }
+
+  .capability-header h1 {
+    font-size: 18px;
+  }
+
+  .capability-header p,
+  .capability-agent-badge {
+    display: none;
+  }
+
+  .capability-scroll {
+    padding: 16px 12px 42px;
+    scrollbar-gutter: auto;
+  }
+
+  .capability-composer,
+  .capability-card {
+    padding: 15px;
+  }
+
+  .mcp-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .tool-row {
+    grid-template-columns: minmax(0, 1fr) 112px;
+  }
+
+  .tool-row .compact-switch {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+
+  .card-actions {
+    flex-wrap: wrap;
+  }
+
+  .card-source {
+    flex-basis: 100%;
   }
 }
 

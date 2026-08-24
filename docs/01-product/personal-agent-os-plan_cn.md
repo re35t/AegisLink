@@ -47,11 +47,18 @@ Tracing、Approval 和 Permission 不是独立卖点，但属于上述四项能�
 
 上述技术栈已经进入实现。当前 AG-UI/assistant-ui 第一切片覆盖文本 Run、流式消息、终态和取消；Tool、Approval、State、附件与原生协议续流仍按小切片补齐。
 
-以下均是本文件中的目标能力，不代表已经实现：
+以下能力已完成 V0 基础切片：
 
-- Memory Provider 与记忆管理页面。
-- Skill Registry 与技能安装、启停、加载。
-- MCP Manager、MCP Server 配置和工具调用。
+- 按 Principal + Agent 隔离的 Memory CRUD、确认、遗忘和运行时上下文注入。
+- 兼容 `SKILL.md` frontmatter 的安装、启停、hash 审计和按需完整内容加载。
+- 服务端 MCP Streamable HTTP Client、Server/Tool 管理、发现缓存和只读工具动态调用。
+- Chat、Memory、Skills、MCP 的统一产品导航和管理页面。
+
+以下仍是目标能力，不代表已经实现：
+
+- 自动 Memory 候选提取、向量检索、命中原因和 Trace。
+- Skill 目录 bundle、scripts/references/assets、安全沙箱和升级来源。
+- MCP OAuth/secret reference、资源/Prompt、并发配额、写操作审批和完整回放。
 - 完整的工具权限、审批和 Run Trace 页面。
 - AG-UI Tool、Approval、State、附件和原生协议续流。
 - 基于 `assistant-ui` 的 Tool、Approval 和 MCP 界面。
@@ -135,7 +142,7 @@ V0 关系与基数固定为：
 - 一个 Human Principal 可以拥有多个 Personal Agent。产品初期可以默认创建一个 Agent，但数据库和服务接口不能写死“一人只能有一个 Agent”。
 - 一个 Personal Agent 只有一个 owner Principal。未来的 delegate 通过独立授权关系表达，不能通过覆盖 owner 或共享账户实现；V0 暂不提供共享委托能力。
 - 一个 Personal Agent 有一个稳定的 Agent Identity 和一个 Agent Profile；Agent Key 允许因轮换产生多个历史版本，但同一用途只能有一个当前有效版本。
-- Memory、Skill 安装/启用关系和 Capability grant 都必须能关联到 `agent_id`。可复用的 Skill 定义可以共享，但某个 Agent 是否启用它属于该 Agent 自己的状态。
+- Memory、Skill 安装/启用关系和 Capability grant 都必须能关联到 `agent_id`。Skill Package 与 immutable Version 可在同一 Principal 内复用，但某个 Agent 选择哪个 Version、是否启用属于该 Agent 自己的状态。
 - 一个 Personal Agent 可以随时间或并发需要由多个 Agent Runtime 表示。Runtime 重启、迁移或扩缩容不能改变 Agent Identity、owner、Profile 或持久化 Memory。
 
 认证和授权调用链统一为：
@@ -456,18 +463,19 @@ conversations
 messages
 runs
 run_events
+memories
+skill_packages
+skill_versions
+agent_skills
+mcp_servers
+mcp_tools
 ```
 
 后续按阶段通过独立 Goose migration 增加，而不是一次性预建所有表：
 
 ```text
-memories
 memory_sources
-skills
-agent_skills
-mcp_servers
 mcp_credentials        # 只存 secret reference 或密文及其元数据
-mcp_tools
 tool_permissions
 approval_requests
 trace_spans
@@ -500,25 +508,29 @@ trace_spans
 
 ### Phase 2：Memory V0
 
-- 实现 MemoryProvider、候选提取、写入、检索和来源追踪。
-- 完成 Memory 列表、编辑、确认和遗忘页面。
+- 已完成：Memory domain/repository/service、显式写入、固定预算上下文加载和来源字段。
+- 已完成：Memory 列表、编辑、确认和遗忘页面。
+- 下一切片：候选提取、向量/相关性检索和消息来源回链。
 - 在 Trace 中展示检索 ID 与命中原因。
 
 验收：用户声明的稳定偏好可在新对话中被正确检索；episodic 与 semantic 不混写；删除后不再被检索；来源可回到原消息。
 
 ### Phase 3：Skills V0
 
-- 实现本地 `SKILL.md` bundle 校验、安装、启停和按任务加载。
-- 完成 Skills 页面和 Skill 使用 Trace。
+- 已完成：inline `SKILL.md` frontmatter 校验、安装、启停、内容 hash 与渐进式 `load_skill` 加载。
+- 已完成：Principal 级 `skill_packages`、immutable `skill_versions` 与 Agent 级 binding 分离；不同 Agent 可选择同名 Package 的不同 Version。
+- 已完成：Skills 管理页面。
+- 下一切片：目录 bundle、来源升级、scripts/references/assets 的安全边界和 Skill 使用 Trace。
 - 用无外部依赖的示例 Skill 覆盖端到端测试。
 
 验收：无效或越界 bundle 被拒绝；disabled Skill 不进入 Runtime；版本/hash 可审计；脚本不会绕过工具权限。
 
 ### Phase 4：MCP V0
 
-- 实现服务端 MCP Client 和 MCP Manager。
-- 支持至少一个只读测试 Server 与一个需要审批的写操作 fake Server。
-- 完成 Server、Tools、Permission、Health UI。
+- 已完成：基于官方 Go SDK 的服务端 Streamable HTTP Client 与 MCP Manager。
+- 已完成：Server、Tool 风险、启停、发现、状态和错误 UI；未受信任的 Server annotation 不会自动授权工具。
+- 已完成：只有显式启用且标为 `read-only` 的工具进入单次 Agent Runtime。
+- 下一切片：OAuth/secret reference、写/破坏性工具的逐调用 Approval 和可回放 fake Server 验收。
 
 验收：凭据不出服务端；工具目录按 Agent/用户权限过滤；断线、超时、取消、审批和错误均可回放；自动化测试使用 fake MCP Server。
 
@@ -554,9 +566,9 @@ trace_spans
 
 | 项目                    | 状态                        | 资料                                                                                                                                                                                        |
 | ----------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| AG-UI                   | 已选型，待实现              | [AG-UI Overview](https://docs.ag-ui.com/introduction)                                                                                                                                       |
-| `assistant-ui`          | 已选型，待接入              | [文档](https://www.assistant-ui.com/docs)、[AG-UI runtime](https://www.assistant-ui.com/docs/runtimes/ag-ui/overview)、[MCP Config Dialog](https://www.assistant-ui.com/docs/ui/mcp-config) |
-| MCP                     | 已选型，待实现 Manager      | [Model Context Protocol](https://modelcontextprotocol.io/)                                                                                                                                  |
+| AG-UI                   | 文本 Run 第一切片已实现     | [AG-UI Overview](https://docs.ag-ui.com/introduction)                                                                                                                                       |
+| `assistant-ui`          | Chat/Tool 第一切片已实现    | [文档](https://www.assistant-ui.com/docs)、[AG-UI runtime](https://www.assistant-ui.com/docs/runtimes/ag-ui/overview)、[MCP Config Dialog](https://www.assistant-ui.com/docs/ui/mcp-config) |
+| MCP                     | Streamable HTTP V0 已实现   | [Model Context Protocol](https://modelcontextprotocol.io/)、[官方 Go SDK](https://github.com/modelcontextprotocol/go-sdk)                                                                    |
 | OpenAI Agents SDK       | 仅作 Runtime 设计参考       | [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/)                                                                                                                         |
-| Agent Skills            | `SKILL.md` 兼容方向已选型   | [OpenAI API Skills](https://developers.openai.com/api/reference/go/resources/skills)                                                                                                        |
+| Agent Skills            | inline `SKILL.md` V0 已实现 | [Agent Skills 规范](https://github.com/agentskills/agentskills/blob/main/docs/specification.mdx)                                                                                            |
 | Letta / Graphiti / Mem0 | Memory 后续研究或 benchmark | [Letta](https://docs.letta.com/tutorials/attaching-detaching-blocks/)、[Graphiti](https://help.getzep.com/graphiti/getting-started/welcome)、[Mem0](https://docs.mem0.ai/platform/overview) |

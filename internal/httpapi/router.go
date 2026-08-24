@@ -11,6 +11,9 @@ import (
 	"github.com/re35t/AegisLink/internal/account"
 	"github.com/re35t/AegisLink/internal/agent"
 	"github.com/re35t/AegisLink/internal/conversation"
+	"github.com/re35t/AegisLink/internal/mcp"
+	"github.com/re35t/AegisLink/internal/memory"
+	"github.com/re35t/AegisLink/internal/skills"
 )
 
 const requestIDKey = "requestId"
@@ -39,10 +42,36 @@ type ConversationService interface {
 	CancelRun(context.Context, string, string) error
 }
 
+type MemoryService interface {
+	List(context.Context, string, string) ([]memory.Memory, error)
+	Create(context.Context, string, string, memory.Kind, string, string, float64) (memory.Memory, error)
+	Update(context.Context, string, string, string, memory.Update) (memory.Memory, error)
+	Forget(context.Context, string, string, string) error
+}
+
+type SkillService interface {
+	List(context.Context, string, string) ([]skills.Skill, error)
+	Install(context.Context, string, string, string, string) (skills.Skill, error)
+	SetEnabled(context.Context, string, string, string, bool) (skills.Skill, error)
+	Uninstall(context.Context, string, string, string) error
+}
+
+type MCPService interface {
+	List(context.Context, string, string) ([]mcp.Server, error)
+	Create(context.Context, string, string, string, string) (mcp.Server, error)
+	SetEnabled(context.Context, string, string, string, bool) (mcp.Server, error)
+	Delete(context.Context, string, string, string) error
+	Refresh(context.Context, string, string, string) (mcp.Server, error)
+	UpdateTool(context.Context, string, string, string, string, bool, mcp.RiskLevel) (mcp.Server, error)
+}
+
 type Dependencies struct {
 	Accounts      AccountService
 	Agents        AgentService
 	Conversations ConversationService
+	Memories      MemoryService
+	Skills        SkillService
+	MCP           MCPService
 }
 
 type AuthConfig struct {
@@ -68,6 +97,9 @@ func NewRouter(dependencies Dependencies, webOrigin string, auth AuthConfig, mod
 		accounts:      dependencies.Accounts,
 		agents:        dependencies.Agents,
 		conversations: dependencies.Conversations,
+		memories:      dependencies.Memories,
+		skills:        dependencies.Skills,
+		mcp:           dependencies.MCP,
 		auth:          auth,
 		model:         model,
 		logger:        logger,
@@ -86,6 +118,20 @@ func NewRouter(dependencies Dependencies, webOrigin string, auth AuthConfig, mod
 	protected.GET("/bootstrap", handler.bootstrap)
 	protected.POST("/ag-ui", handler.runAgent)
 	protected.GET("/agents", handler.listAgents)
+	protected.GET("/agents/:agentId/memories", handler.listMemories)
+	protected.POST("/agents/:agentId/memories", handler.createMemory)
+	protected.PATCH("/agents/:agentId/memories/:memoryId", handler.updateMemory)
+	protected.DELETE("/agents/:agentId/memories/:memoryId", handler.forgetMemory)
+	protected.GET("/agents/:agentId/skills", handler.listSkills)
+	protected.POST("/agents/:agentId/skills", handler.installSkill)
+	protected.PATCH("/agents/:agentId/skills/:skillId", handler.updateSkill)
+	protected.DELETE("/agents/:agentId/skills/:skillId", handler.uninstallSkill)
+	protected.GET("/agents/:agentId/mcp-servers", handler.listMCPServers)
+	protected.POST("/agents/:agentId/mcp-servers", handler.createMCPServer)
+	protected.PATCH("/agents/:agentId/mcp-servers/:serverId", handler.updateMCPServer)
+	protected.DELETE("/agents/:agentId/mcp-servers/:serverId", handler.deleteMCPServer)
+	protected.POST("/agents/:agentId/mcp-servers/:serverId/refresh", handler.refreshMCPServer)
+	protected.PATCH("/agents/:agentId/mcp-servers/:serverId/tools/:toolName", handler.updateMCPTool)
 	protected.GET("/conversations", handler.listConversations)
 	protected.POST("/conversations", handler.createConversation)
 	protected.GET("/conversations/:conversationId", handler.getConversation)

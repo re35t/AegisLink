@@ -145,6 +145,275 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/Agent"
+  /api/v1/agents/{agentId}/memories:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+    get:
+      operationId: listAgentMemories
+      responses:
+        "200":
+          description: Active long-term memories scoped to this Personal Agent
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [memories]
+                properties:
+                  memories:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Memory"
+        "404":
+          $ref: "#/components/responses/Error"
+    post:
+      operationId: createAgentMemory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMemoryRequest"
+      responses:
+        "201":
+          description: Agent-scoped memory created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Memory"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/v1/agents/{agentId}/memories/{memoryId}:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+      - $ref: "#/components/parameters/MemoryId"
+    patch:
+      operationId: updateAgentMemory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMemoryRequest"
+      responses:
+        "200":
+          description: Memory updated or confirmed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Memory"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+    delete:
+      operationId: forgetAgentMemory
+      responses:
+        "204":
+          description: Memory forgotten and excluded from future retrieval
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/v1/agents/{agentId}/skills:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+    get:
+      operationId: listAgentSkills
+      responses:
+        "200":
+          description: Skills installed for this Personal Agent
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [skills]
+                properties:
+                  skills:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Skill"
+        "404":
+          $ref: "#/components/responses/Error"
+    post:
+      operationId: installAgentSkill
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InstallSkillRequest"
+      responses:
+        "201":
+          description: SKILL.md validated, installed, and bound to this Agent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Skill"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /api/v1/agents/{agentId}/skills/{skillId}:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+      - $ref: "#/components/parameters/SkillId"
+    patch:
+      operationId: updateAgentSkill
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled:
+                  type: boolean
+      responses:
+        "200":
+          description: Per-Agent Skill enablement updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Skill"
+        "404":
+          $ref: "#/components/responses/Error"
+    delete:
+      operationId: uninstallAgentSkill
+      responses:
+        "204":
+          description: Skill unbound from this Agent
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/v1/agents/{agentId}/mcp-servers:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+    get:
+      operationId: listAgentMcpServers
+      responses:
+        "200":
+          description: MCP Servers configured for this Personal Agent
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [servers]
+                properties:
+                  servers:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/McpServer"
+        "404":
+          $ref: "#/components/responses/Error"
+    post:
+      operationId: createAgentMcpServer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMcpServerRequest"
+      responses:
+        "201":
+          description: Agent-scoped MCP Server configuration created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/McpServer"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /api/v1/agents/{agentId}/mcp-servers/{serverId}:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+      - $ref: "#/components/parameters/McpServerId"
+    patch:
+      operationId: updateAgentMcpServer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled:
+                  type: boolean
+      responses:
+        "200":
+          description: MCP Server enablement updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/McpServer"
+        "404":
+          $ref: "#/components/responses/Error"
+    delete:
+      operationId: deleteAgentMcpServer
+      responses:
+        "204":
+          description: MCP Server and cached tool catalog removed from this Agent
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/v1/agents/{agentId}/mcp-servers/{serverId}/refresh:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+      - $ref: "#/components/parameters/McpServerId"
+    post:
+      operationId: refreshAgentMcpServer
+      responses:
+        "200":
+          description: MCP connection checked and tool catalog refreshed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/McpServer"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "502":
+          $ref: "#/components/responses/Error"
+  /api/v1/agents/{agentId}/mcp-servers/{serverId}/tools/{toolName}:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+      - $ref: "#/components/parameters/McpServerId"
+      - name: toolName
+        in: path
+        required: true
+        schema:
+          type: string
+    patch:
+      operationId: updateAgentMcpTool
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled, riskLevel]
+              properties:
+                enabled:
+                  type: boolean
+                riskLevel:
+                  type: string
+                  enum: [read-only, external-write, destructive]
+      responses:
+        "200":
+          description: Per-Agent MCP Tool permission updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/McpServer"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
   /api/v1/conversations:
     get:
       operationId: listConversations
@@ -279,6 +548,30 @@ components:
       in: cookie
       name: aegislink_session
   parameters:
+    AgentId:
+      name: agentId
+      in: path
+      required: true
+      schema:
+        type: string
+    MemoryId:
+      name: memoryId
+      in: path
+      required: true
+      schema:
+        type: string
+    SkillId:
+      name: skillId
+      in: path
+      required: true
+      schema:
+        type: string
+    McpServerId:
+      name: serverId
+      in: path
+      required: true
+      schema:
+        type: string
     ConversationId:
       name: conversationId
       in: path
@@ -375,6 +668,186 @@ components:
         updatedAt:
           type: string
           format: date-time
+    Memory:
+      type: object
+      required: [id, agentId, kind, content, confidence, sourceUri, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        agentId:
+          type: string
+        kind:
+          type: string
+          enum: [semantic, episodic]
+        content:
+          type: string
+        confidence:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        sourceUri:
+          type: string
+        status:
+          type: string
+          enum: [active, forgotten]
+        lastConfirmedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CreateMemoryRequest:
+      type: object
+      required: [kind, content, sourceUri]
+      properties:
+        kind:
+          type: string
+          enum: [semantic, episodic]
+        content:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        sourceUri:
+          type: string
+          maxLength: 1000
+        confidence:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+          default: 1
+    UpdateMemoryRequest:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [semantic, episodic]
+        content:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        confidence:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        confirmed:
+          type: boolean
+    Skill:
+      type: object
+      required: [id, versionId, agentId, name, description, version, sourceType, content, contentHash, enabled, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          description: Stable Skill package identifier used by Agent binding routes
+        versionId:
+          type: string
+          description: Immutable selected Skill version identifier for this Agent
+        agentId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        version:
+          type: string
+        sourceType:
+          type: string
+          enum: [inline, local, git]
+        content:
+          type: string
+        contentHash:
+          type: string
+        enabled:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    InstallSkillRequest:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 131072
+        version:
+          type: string
+          maxLength: 80
+          description: Optional immutable version label; omitted inline installs use a content-derived local label
+    McpTool:
+      type: object
+      required: [name, description, inputSchema, enabled, riskLevel]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        inputSchema:
+          type: object
+          additionalProperties: true
+        enabled:
+          type: boolean
+        riskLevel:
+          type: string
+          enum: [read-only, external-write, destructive]
+    McpServer:
+      type: object
+      required: [id, agentId, name, endpoint, transport, enabled, status, tools, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        agentId:
+          type: string
+        name:
+          type: string
+        endpoint:
+          type: string
+          format: uri
+        transport:
+          type: string
+          enum: [streamable-http]
+        enabled:
+          type: boolean
+        status:
+          type: string
+          enum: [unchecked, connected, error]
+        protocolVersion:
+          type: string
+        lastError:
+          type: string
+        lastCheckedAt:
+          type: string
+          format: date-time
+        tools:
+          type: array
+          items:
+            $ref: "#/components/schemas/McpTool"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CreateMcpServerRequest:
+      type: object
+      required: [name, endpoint]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        endpoint:
+          type: string
+          format: uri
+          maxLength: 2048
     Conversation:
       type: object
       required: [id, agentId, title, createdAt, updatedAt]

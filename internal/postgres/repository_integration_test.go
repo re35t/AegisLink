@@ -1,14 +1,20 @@
 package postgres
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/pressly/goose/v3"
 	"github.com/re35t/AegisLink/internal/account"
 	"github.com/re35t/AegisLink/internal/agent"
 	"github.com/re35t/AegisLink/internal/conversation"
+	"github.com/re35t/AegisLink/internal/mcp"
+	"github.com/re35t/AegisLink/internal/memory"
+	"github.com/re35t/AegisLink/internal/skills"
+	"github.com/re35t/AegisLink/migrations"
 )
 
 func TestRepositoryConversationRunLifecycle(t *testing.T) {
@@ -88,6 +94,166 @@ func TestRepositoryConversationRunLifecycle(t *testing.T) {
 	}
 }
 
+func TestAgentCapabilitiesRemainIsolated(t *testing.T) {
+	const (
+		principalOne = "principal-capability-one"
+		principalTwo = "principal-capability-two"
+		agentOne     = "agent-capability-one"
+		agentSibling = "agent-capability-sibling"
+		agentTwo     = "agent-capability-two"
+	)
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is not set")
+	}
+	database, err := Open(t.Context(), databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	if err := Migrate(database); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.ExecContext(t.Context(), `
+		TRUNCATE account_sessions, user_accounts, run_events, runs, messages, conversations,
+		         mcp_tools, mcp_servers, agent_skills, skill_versions, skill_packages,
+		         memories, agents, human_principals CASCADE`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.ExecContext(t.Context(), `
+		INSERT INTO human_principals (id, display_name) VALUES ($1, 'One'), ($2, 'Two')`,
+		principalOne, principalTwo); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.ExecContext(t.Context(), `
+		INSERT INTO agents (id, owner_principal_id, name, description, system_prompt)
+		VALUES ($3, $1, 'Agent one', '', 'prompt'),
+		       ($4, $1, 'Agent sibling', '', 'prompt'),
+		       ($5, $2, 'Agent two', '', 'prompt')`,
+		principalOne, principalTwo, agentOne, agentSibling, agentTwo); err != nil {
+		t.Fatal(err)
+	}
+
+	memoryRepository := NewMemoryRepository(database)
+	createdMemory, err := memoryRepository.Create(t.Context(), memory.Memory{
+		ID: "memory-one", OwnerPrincipalID: principalOne, AgentID: agentOne,
+		Kind: memory.Semantic, Content: "private preference", Confidence: 1, SourceURI: "manual://test", Status: "active",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if createdMemory.AgentID != agentOne {
+		t.Fatalf("memory agent = %q", createdMemory.AgentID)
+	}
+	otherMemories, err := memoryRepository.List(t.Context(), principalTwo, agentTwo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(otherMemories) != 0 {
+		t.Fatalf("agent two can see agent one's memory: %#v", otherMemories)
+	}
+
+	skillRepository := NewSkillRepository(database)
+	firstSkill, err := skillRepository.Install(t.Context(), skills.Skill{
+		ID: "skill-package-one", VersionID: "skill-version-one", OwnerPrincipalID: principalOne, AgentID: agentOne,
+		Name: "private-skill", Description: "private v1", Version: "1.0.0", SourceType: "inline",
+		Content: "---\nname: private-skill\ndescription: private v1\n---\n", ContentHash: "sha256:one", Enabled: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondSkill, err := skillRepository.Install(t.Context(), skills.Skill{
+		ID: "ignored-package-id", VersionID: "skill-version-two", OwnerPrincipalID: principalOne, AgentID: agentSibling,
+		Name: "private-skill", Description: "private v2", Version: "2.0.0", SourceType: "inline",
+		Content: "---\nname: private-skill\ndescription: private v2\n---\n", ContentHash: "sha256:two", Enabled: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if firstSkill.ID != secondSkill.ID || firstSkill.VersionID == secondSkill.VersionID {
+		t.Fatalf("expected shared package with distinct versions: first=%#v second=%#v", firstSkill, secondSkill)
+	}
+	firstAgentSkills, err := skillRepository.List(t.Context(), principalOne, agentOne)
+	if err != nil {
+		t.Fatal(err)
+	}
+	siblingSkills, err := skillRepository.List(t.Context(), principalOne, agentSibling)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(firstAgentSkills) != 1 || firstAgentSkills[0].Version != "1.0.0" ||
+		len(siblingSkills) != 1 || siblingSkills[0].Version != "2.0.0" {
+		t.Fatalf("Agent version bindings leaked: first=%#v sibling=%#v", firstAgentSkills, siblingSkills)
+	}
+	_, err = skillRepository.Install(t.Context(), skills.Skill{
+		ID: "another-package-id", VersionID: "conflicting-version", OwnerPrincipalID: principalOne, AgentID: agentSibling,
+		Name: "private-skill", Description: "conflict", Version: "2.0.0", SourceType: "inline",
+		Content: "different", ContentHash: "sha256:different", Enabled: true,
+	})
+	if !errors.Is(err, skills.ErrConflict) {
+		t.Fatalf("expected immutable version conflict, got %v", err)
+	}
+	otherSkills, err := skillRepository.List(t.Context(), principalTwo, agentTwo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(otherSkills) != 0 {
+		t.Fatalf("agent two can see agent one's skill: %#v", otherSkills)
+	}
+	if err := skillRepository.Uninstall(t.Context(), principalOne, agentOne, firstSkill.ID); err != nil {
+		t.Fatal(err)
+	}
+	firstAgentSkills, err = skillRepository.List(t.Context(), principalOne, agentOne)
+	if err != nil {
+		t.Fatal(err)
+	}
+	siblingSkills, err = skillRepository.List(t.Context(), principalOne, agentSibling)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(firstAgentSkills) != 0 || len(siblingSkills) != 1 || siblingSkills[0].Version != "2.0.0" {
+		t.Fatalf("uninstall should remove only one Agent binding: first=%#v sibling=%#v", firstAgentSkills, siblingSkills)
+	}
+	var retainedVersions int
+	if err := database.QueryRowContext(t.Context(), `
+		SELECT count(*) FROM skill_versions WHERE package_id=$1`, firstSkill.ID,
+	).Scan(&retainedVersions); err != nil {
+		t.Fatal(err)
+	}
+	if retainedVersions != 2 {
+		t.Fatalf("uninstall removed immutable Skill history: versions=%d", retainedVersions)
+	}
+
+	mcpRepository := NewMCPRepository(database)
+	server, err := mcpRepository.Create(t.Context(), mcp.Server{
+		ID: "server-one", OwnerPrincipalID: principalOne, AgentID: agentOne,
+		Name: "private-mcp", Endpoint: "https://example.com/mcp",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err = mcpRepository.ReplaceTools(t.Context(), principalOne, agentOne, server.ID, []mcp.Tool{{
+		Name: "read", Description: "read data", InputSchema: json.RawMessage(`{"type":"object"}`),
+		Enabled: true, RiskLevel: mcp.ReadOnly,
+	}}, "2025-11-25")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(server.Tools) != 1 {
+		t.Fatalf("server tools = %#v", server.Tools)
+	}
+	otherTools, err := mcpRepository.RuntimeTools(t.Context(), principalTwo, agentTwo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(otherTools) != 0 {
+		t.Fatalf("agent two can execute agent one's MCP tool: %#v", otherTools)
+	}
+	if _, err := mcpRepository.Get(t.Context(), principalTwo, agentTwo, server.ID); !errors.Is(err, mcp.ErrNotFound) {
+		t.Fatalf("cross-agent MCP lookup should be hidden, got %v", err)
+	}
+}
+
 func TestAccountRegistrationBindsPrincipalAgentAndSession(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
 	if databaseURL == "" {
@@ -135,5 +301,69 @@ func TestAccountRegistrationBindsPrincipalAgentAndSession(t *testing.T) {
 	}
 	if actor.User.ID != registration.User.ID || actor.AccountID != registration.Account.ID {
 		t.Fatalf("unexpected actor: %#v", actor)
+	}
+}
+
+func TestSkillPackageMigrationPreservesInstalledSkill(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is not set")
+	}
+	database, err := Open(t.Context(), databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	goose.SetBaseFS(migrations.FS)
+	if err := goose.SetDialect("postgres"); err != nil {
+		t.Fatal(err)
+	}
+	if err := goose.DownTo(database, ".", 0); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := goose.Up(database, "."); err != nil {
+			t.Errorf("restore latest schema: %v", err)
+		}
+	}()
+	if err := goose.UpTo(database, ".", 3); err != nil {
+		t.Fatal(err)
+	}
+	legacyStatements := []string{
+		`INSERT INTO human_principals (id, display_name) VALUES ('migration-principal', 'Migration user')`,
+		`INSERT INTO agents (id, owner_principal_id, name, description, system_prompt)
+		 VALUES ('migration-agent', 'migration-principal', 'Migration agent', '', 'prompt')`,
+		`INSERT INTO skills (
+			id, owner_principal_id, name, description, version,
+			manifest_content, content_hash, source_type
+		 ) VALUES (
+			'migration-skill', 'migration-principal', 'migrated-skill', 'Migrated skill', '1.0.0',
+			'---\nname: migrated-skill\ndescription: Migrated skill\n---\n', 'sha256:migrated', 'inline'
+		 )`,
+		`INSERT INTO agent_skills (owner_principal_id, agent_id, skill_id, enabled)
+		 VALUES ('migration-principal', 'migration-agent', 'migration-skill', true)`,
+	}
+	for _, statement := range legacyStatements {
+		if _, err := database.ExecContext(t.Context(), statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := goose.UpTo(database, ".", 4); err != nil {
+		t.Fatal(err)
+	}
+	var packageID, versionID, version, contentHash string
+	var enabled bool
+	err = database.QueryRowContext(t.Context(), `
+		SELECT packages.id, versions.id, versions.version, versions.content_hash, bindings.enabled
+		FROM agent_skills bindings
+		JOIN skill_packages packages ON packages.id=bindings.package_id
+		JOIN skill_versions versions ON versions.id=bindings.version_id
+		WHERE bindings.agent_id='migration-agent'`,
+	).Scan(&packageID, &versionID, &version, &contentHash, &enabled)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if packageID != "migration-skill" || versionID != "migration-skill" || version != "1.0.0" || contentHash != "sha256:migrated" || !enabled {
+		t.Fatalf("legacy Skill was not preserved: package=%q versionID=%q version=%q hash=%q enabled=%v", packageID, versionID, version, contentHash, enabled)
 	}
 }

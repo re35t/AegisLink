@@ -27,9 +27,15 @@ func (service *Service) execute(ctx context.Context, principalID string, run Run
 		service.finishFailed(principalID, run.ID, "agent_load_failed", false)
 		return
 	}
+	agentContext, err := service.context.Resolve(ctx, principalID, agentRecord.ID)
+	if err != nil {
+		service.logger.Error("resolve agent context", "runId", run.ID, "error", err)
+		service.finishFailed(principalID, run.ID, "agent_context_load_failed", false)
+		return
+	}
 
 	var answer strings.Builder
-	for output := range service.runtime.Stream(ctx, RuntimeInput{Agent: agentRecord, Messages: detail.Messages}) {
+	for output := range service.runtime.Stream(ctx, RuntimeInput{Agent: agentRecord, Messages: detail.Messages, Context: agentContext}) {
 		if output.Err != nil {
 			if errors.Is(output.Err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
 				service.finishFailed(principalID, run.ID, "cancelled_by_user", true)

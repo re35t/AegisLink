@@ -154,6 +154,156 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/agents/{agentId}/memories": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    get: operations["listAgentMemories"];
+    put?: never;
+    post: operations["createAgentMemory"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/agents/{agentId}/memories/{memoryId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+        memoryId: components["parameters"]["MemoryId"];
+      };
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete: operations["forgetAgentMemory"];
+    options?: never;
+    head?: never;
+    patch: operations["updateAgentMemory"];
+    trace?: never;
+  };
+  "/api/v1/agents/{agentId}/skills": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    get: operations["listAgentSkills"];
+    put?: never;
+    post: operations["installAgentSkill"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/agents/{agentId}/skills/{skillId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+        skillId: components["parameters"]["SkillId"];
+      };
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete: operations["uninstallAgentSkill"];
+    options?: never;
+    head?: never;
+    patch: operations["updateAgentSkill"];
+    trace?: never;
+  };
+  "/api/v1/agents/{agentId}/mcp-servers": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    get: operations["listAgentMcpServers"];
+    put?: never;
+    post: operations["createAgentMcpServer"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/agents/{agentId}/mcp-servers/{serverId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+        serverId: components["parameters"]["McpServerId"];
+      };
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete: operations["deleteAgentMcpServer"];
+    options?: never;
+    head?: never;
+    patch: operations["updateAgentMcpServer"];
+    trace?: never;
+  };
+  "/api/v1/agents/{agentId}/mcp-servers/{serverId}/refresh": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+        serverId: components["parameters"]["McpServerId"];
+      };
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["refreshAgentMcpServer"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/agents/{agentId}/mcp-servers/{serverId}/tools/{toolName}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+        serverId: components["parameters"]["McpServerId"];
+        toolName: string;
+      };
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch: operations["updateAgentMcpTool"];
+    trace?: never;
+  };
   "/api/v1/conversations": {
     parameters: {
       query?: never;
@@ -282,6 +432,103 @@ export interface components {
       /** Format: date-time */
       updatedAt: string;
     };
+    Memory: {
+      id: string;
+      agentId: string;
+      /** @enum {string} */
+      kind: "semantic" | "episodic";
+      content: string;
+      /** Format: double */
+      confidence: number;
+      sourceUri: string;
+      /** @enum {string} */
+      status: "active" | "forgotten";
+      /** Format: date-time */
+      lastConfirmedAt?: string;
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: date-time */
+      updatedAt: string;
+    };
+    CreateMemoryRequest: {
+      /** @enum {string} */
+      kind: "semantic" | "episodic";
+      content: string;
+      sourceUri: string;
+      /**
+       * Format: double
+       * @default 1
+       */
+      confidence: number;
+    };
+    UpdateMemoryRequest: {
+      /** @enum {string} */
+      kind?: "semantic" | "episodic";
+      content?: string;
+      /** Format: double */
+      confidence?: number;
+      confirmed?: boolean;
+    };
+    Skill: {
+      /** @description Stable Skill package identifier used by Agent binding routes */
+      id: string;
+      /** @description Immutable selected Skill version identifier for this Agent */
+      versionId: string;
+      agentId: string;
+      name: string;
+      description: string;
+      version: string;
+      /** @enum {string} */
+      sourceType: "inline" | "local" | "git";
+      content: string;
+      contentHash: string;
+      enabled: boolean;
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: date-time */
+      updatedAt: string;
+    };
+    InstallSkillRequest: {
+      content: string;
+      /** @description Optional immutable version label; omitted inline installs use a content-derived local label */
+      version?: string;
+    };
+    McpTool: {
+      name: string;
+      description: string;
+      inputSchema: {
+        [key: string]: unknown;
+      };
+      enabled: boolean;
+      /** @enum {string} */
+      riskLevel: "read-only" | "external-write" | "destructive";
+    };
+    McpServer: {
+      id: string;
+      agentId: string;
+      name: string;
+      /** Format: uri */
+      endpoint: string;
+      /** @enum {string} */
+      transport: "streamable-http";
+      enabled: boolean;
+      /** @enum {string} */
+      status: "unchecked" | "connected" | "error";
+      protocolVersion?: string;
+      lastError?: string;
+      /** Format: date-time */
+      lastCheckedAt?: string;
+      tools: components["schemas"]["McpTool"][];
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: date-time */
+      updatedAt: string;
+    };
+    CreateMcpServerRequest: {
+      name: string;
+      /** Format: uri */
+      endpoint: string;
+    };
     Conversation: {
       id: string;
       agentId: string;
@@ -405,6 +652,10 @@ export interface components {
     };
   };
   parameters: {
+    AgentId: string;
+    MemoryId: string;
+    SkillId: string;
+    McpServerId: string;
     ConversationId: string;
     RunId: string;
   };
@@ -613,6 +864,382 @@ export interface operations {
           };
         };
       };
+    };
+  };
+  listAgentMemories: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Active long-term memories scoped to this Personal Agent */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            memories: components["schemas"]["Memory"][];
+          };
+        };
+      };
+      404: components["responses"]["Error"];
+    };
+  };
+  createAgentMemory: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateMemoryRequest"];
+      };
+    };
+    responses: {
+      /** @description Agent-scoped memory created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Memory"];
+        };
+      };
+      400: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+    };
+  };
+  forgetAgentMemory: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+        memoryId: components["parameters"]["MemoryId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Memory forgotten and excluded from future retrieval */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      404: components["responses"]["Error"];
+    };
+  };
+  updateAgentMemory: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+        memoryId: components["parameters"]["MemoryId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["UpdateMemoryRequest"];
+      };
+    };
+    responses: {
+      /** @description Memory updated or confirmed */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Memory"];
+        };
+      };
+      400: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+    };
+  };
+  listAgentSkills: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Skills installed for this Personal Agent */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            skills: components["schemas"]["Skill"][];
+          };
+        };
+      };
+      404: components["responses"]["Error"];
+    };
+  };
+  installAgentSkill: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["InstallSkillRequest"];
+      };
+    };
+    responses: {
+      /** @description SKILL.md validated, installed, and bound to this Agent */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Skill"];
+        };
+      };
+      400: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+    };
+  };
+  uninstallAgentSkill: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+        skillId: components["parameters"]["SkillId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Skill unbound from this Agent */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      404: components["responses"]["Error"];
+    };
+  };
+  updateAgentSkill: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+        skillId: components["parameters"]["SkillId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          enabled: boolean;
+        };
+      };
+    };
+    responses: {
+      /** @description Per-Agent Skill enablement updated */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Skill"];
+        };
+      };
+      404: components["responses"]["Error"];
+    };
+  };
+  listAgentMcpServers: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description MCP Servers configured for this Personal Agent */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            servers: components["schemas"]["McpServer"][];
+          };
+        };
+      };
+      404: components["responses"]["Error"];
+    };
+  };
+  createAgentMcpServer: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateMcpServerRequest"];
+      };
+    };
+    responses: {
+      /** @description Agent-scoped MCP Server configuration created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["McpServer"];
+        };
+      };
+      400: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+    };
+  };
+  deleteAgentMcpServer: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+        serverId: components["parameters"]["McpServerId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description MCP Server and cached tool catalog removed from this Agent */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      404: components["responses"]["Error"];
+    };
+  };
+  updateAgentMcpServer: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+        serverId: components["parameters"]["McpServerId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          enabled: boolean;
+        };
+      };
+    };
+    responses: {
+      /** @description MCP Server enablement updated */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["McpServer"];
+        };
+      };
+      404: components["responses"]["Error"];
+    };
+  };
+  refreshAgentMcpServer: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+        serverId: components["parameters"]["McpServerId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description MCP connection checked and tool catalog refreshed */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["McpServer"];
+        };
+      };
+      400: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      502: components["responses"]["Error"];
+    };
+  };
+  updateAgentMcpTool: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+        serverId: components["parameters"]["McpServerId"];
+        toolName: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          enabled: boolean;
+          /** @enum {string} */
+          riskLevel: "read-only" | "external-write" | "destructive";
+        };
+      };
+    };
+    responses: {
+      /** @description Per-Agent MCP Tool permission updated */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["McpServer"];
+        };
+      };
+      400: components["responses"]["Error"];
+      404: components["responses"]["Error"];
     };
   };
   listConversations: {

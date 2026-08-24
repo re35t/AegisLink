@@ -16,6 +16,7 @@ type Service struct {
 	repository Repository
 	agents     AgentReader
 	runtime    Runtime
+	context    ContextProvider
 	logger     *slog.Logger
 	root       context.Context
 
@@ -28,12 +29,14 @@ func NewService(
 	repository Repository,
 	agents AgentReader,
 	runtime Runtime,
+	contextProvider ContextProvider,
 	logger *slog.Logger,
 ) *Service {
 	return &Service{
 		repository: repository,
 		agents:     agents,
 		runtime:    runtime,
+		context:    contextProvider,
 		logger:     logger,
 		root:       root,
 		active:     make(map[string]context.CancelFunc),

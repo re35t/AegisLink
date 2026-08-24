@@ -124,6 +124,7 @@ export function Workspace({ conversationId }: WorkspaceProps) {
 
   return (
     <AppShell
+      activeArea="chat"
       navigationOpen={navigationOpen}
       onCloseNavigation={() => setNavigationOpen(false)}
       navigation={

@@ -44,6 +44,7 @@ func validConfig() Config {
 			ID: "deepseek-primary", Driver: "deepseek", BaseURL: "https://api.deepseek.com", APIKey: "secret", Name: "deepseek-v4-flash", Timeout: time.Minute, MaxTokens: 1024,
 		},
 		Runtime: AgentRuntime{MaxIterations: 8},
+		MCP:     MCP{Timeout: 15 * time.Second},
 		Web:     Web{Origin: "http://127.0.0.1:5173"},
 	}
 }

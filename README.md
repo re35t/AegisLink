@@ -13,7 +13,8 @@ AegisLink is a local-first personal Agent Web application. The current release i
 
 - `ModelRegistry` resolves `MODEL_DRIVER` to a model provider. `deepseek` and `openai-compatible` are registered without exposing model SDK types to the conversation layer.
 - Eino `ChatModelAgent` runs up to `AGENT_MAX_ITERATIONS` model/tool cycles; the default is 8.
-- A read-only `get_current_time` tool proves the base ReAct loop. External MCP tools are not connected yet.
+- A read-only `get_current_time` tool proves the base ReAct loop. Enabled Agent Skills and approved read-only MCP tools are resolved per run and registered dynamically.
+- Long-term semantic/episodic memories are loaded from the authenticated Principal + Agent scope and added as user-controlled context.
 - `MODEL_ID` is a stable model-profile identifier so multiple configured models can be added later without changing the conversation contract.
 
 ## Web and AG-UI
@@ -22,6 +23,14 @@ AegisLink is a local-first personal Agent Web application. The current release i
 - assistant-ui now owns the Thread, Message, Composer, cancellation, and auto-scroll experience; `@assistant-ui/react-ag-ui` provides the protocol runtime.
 - PostgreSQL history remains authoritative. Historical messages supplied by an AG-UI client do not replace server-side conversation history.
 - The current AG-UI slice covers run lifecycle, text streaming, and cancellation. Structured Tool UI, approvals, attachments, and native AG-UI stream resumption remain future work.
+
+## Memory, Skills, and MCP
+
+- Memory is explicit and reviewable: create, edit, confirm, and forget semantic or episodic entries. PostgreSQL is authoritative and forgotten entries stop entering new runs.
+- Skills accept an inline Agent Skills-compatible `SKILL.md`. A Principal-owned package contains immutable versions, while each Agent independently selects and enables one version. The runtime initially sees only name and description; it can load the selected full file on demand through `load_skill`.
+- MCP V0 uses the official Go SDK and Streamable HTTP. Server discovery caches tool schemas and protocol metadata. Newly discovered tools are disabled because server annotations are untrusted hints.
+- Only enabled `read-only` MCP tools enter the runtime. `external-write` and `destructive` tools remain blocked until per-call Approval is implemented.
+- Every resource query is scoped by both authenticated `principal_id` and `agent_id`. This preserves isolation when one account can create multiple Personal Agents later.
 
 ## Account and Personal Agent
 
@@ -74,6 +83,14 @@ MODEL_NAME=your-deepseek-model
 - `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `POST /api/v1/auth/logout`
 - `GET /api/v1/auth/session`
 - `GET /api/v1/bootstrap`, `GET /api/v1/agents`
+- `GET|POST /api/v1/agents/:agentId/memories`
+- `PATCH|DELETE /api/v1/agents/:agentId/memories/:memoryId`
+- `GET|POST /api/v1/agents/:agentId/skills`
+- `PATCH|DELETE /api/v1/agents/:agentId/skills/:skillId`
+- `GET|POST /api/v1/agents/:agentId/mcp-servers`
+- `PATCH|DELETE /api/v1/agents/:agentId/mcp-servers/:serverId`
+- `POST /api/v1/agents/:agentId/mcp-servers/:serverId/refresh`
+- `PATCH /api/v1/agents/:agentId/mcp-servers/:serverId/tools/:toolName`
 - `POST /api/v1/ag-ui`
 - `GET|POST /api/v1/conversations`
 - `GET /api/v1/conversations/:conversationId`
@@ -96,4 +113,4 @@ Set `TEST_DATABASE_URL` to include the PostgreSQL repository integration test.
 
 ## Current boundary
 
-This release implements email/password authentication, server-side sessions, Principal-owned Personal Agents, and owner isolation for the existing chat path. It does not yet include email verification, password reset, MFA, login rate limiting, delegated access, Ed25519 Agent identity, capability routing, cross-agent communication, RAG, MCP/external tools, Tool/Approval UI, Redis, WebSocket, or sandboxed runners. Historical design documents are retained under `docs` and clearly separated from the current implementation baseline.
+This release implements email/password authentication, server-side sessions, Principal-owned Personal Agents, agent-scoped Memory/Skills/MCP V0, read-only dynamic MCP execution, and owner isolation. It does not yet include email verification, password reset, MFA, login rate limiting, delegated access, Ed25519 Agent identity, multiple-Agent creation UI, automatic memory extraction/vector retrieval, Skill bundles with scripts/assets, MCP OAuth/secret storage, write/destructive Tool Approval, cross-agent communication, Redis, WebSocket, or sandboxed runners. Historical design documents are retained under `docs` and clearly separated from the current implementation baseline.

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Link } from "@tanstack/react-router";
 import {
   Brain,
   MessageCircle,
@@ -10,6 +11,7 @@ import {
 } from "lucide-react";
 
 interface AppShellProps {
+  activeArea: "chat" | "memory" | "skills" | "mcp";
   navigationOpen: boolean;
   navigation: ReactNode;
   children: ReactNode;
@@ -17,13 +19,14 @@ interface AppShellProps {
 }
 
 const productDestinations = [
-  { label: "Chat", icon: MessageCircle, current: true },
-  { label: "Memory", icon: Brain, current: false },
-  { label: "Skills", icon: Wrench, current: false },
-  { label: "MCP", icon: PlugZap, current: false },
+  { id: "chat", label: "Chat", icon: MessageCircle, to: "/" },
+  { id: "memory", label: "Memory", icon: Brain, to: "/memory" },
+  { id: "skills", label: "Skills", icon: Wrench, to: "/skills" },
+  { id: "mcp", label: "MCP", icon: PlugZap, to: "/mcp" },
 ] as const;
 
 export function AppShell({
+  activeArea,
   navigationOpen,
   navigation,
   children,
@@ -41,19 +44,18 @@ export function AppShell({
           </div>
 
           <div className="rail-destinations">
-            {productDestinations.map(({ label, icon: Icon, current }) => (
-              <button
+            {productDestinations.map(({ id, label, icon: Icon, to }) => (
+              <Link
                 key={label}
-                type="button"
-                className={`rail-destination ${current ? "active" : ""}`}
-                aria-current={current ? "page" : undefined}
-                aria-label={current ? label : `${label} — coming soon`}
-                title={current ? label : `${label} — coming soon`}
-                disabled={!current}
+                to={to}
+                className={`rail-destination ${activeArea === id ? "active" : ""}`}
+                aria-current={activeArea === id ? "page" : undefined}
+                aria-label={label}
+                title={label}
               >
                 <Icon size={19} />
                 <span>{label}</span>
-              </button>
+              </Link>
             ))}
           </div>
 

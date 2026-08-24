@@ -9,12 +9,18 @@ import (
 	"github.com/re35t/AegisLink/internal/account"
 	"github.com/re35t/AegisLink/internal/agent"
 	"github.com/re35t/AegisLink/internal/conversation"
+	"github.com/re35t/AegisLink/internal/mcp"
+	"github.com/re35t/AegisLink/internal/memory"
+	"github.com/re35t/AegisLink/internal/skills"
 )
 
 type handler struct {
 	accounts      AccountService
 	agents        AgentService
 	conversations ConversationService
+	memories      MemoryService
+	skills        SkillService
+	mcp           MCPService
 	auth          AuthConfig
 	model         ModelInfo
 	logger        *slog.Logger
@@ -42,6 +48,26 @@ func (handler *handler) handleError(c *gin.Context, err error) {
 		writeError(c, http.StatusConflict, "run_not_active", "the run is no longer active")
 	case errors.Is(err, conversation.ErrInvalidMessage):
 		writeError(c, http.StatusBadRequest, "invalid_message", "the message is empty or too long")
+	case errors.Is(err, memory.ErrInvalid):
+		writeError(c, http.StatusBadRequest, "invalid_memory", "memory kind, content, source, or confidence is invalid")
+	case errors.Is(err, memory.ErrNotFound):
+		writeError(c, http.StatusNotFound, "memory_not_found", "the requested memory was not found")
+	case errors.Is(err, skills.ErrInvalid):
+		writeError(c, http.StatusBadRequest, "invalid_skill", "SKILL.md frontmatter or content is invalid")
+	case errors.Is(err, skills.ErrConflict):
+		writeError(c, http.StatusConflict, "skill_version_conflict", "this Skill version label already refers to different content")
+	case errors.Is(err, skills.ErrNotFound):
+		writeError(c, http.StatusNotFound, "skill_not_found", "the requested Skill was not found")
+	case errors.Is(err, mcp.ErrInvalid):
+		writeError(c, http.StatusBadRequest, "invalid_mcp_server", "MCP name, endpoint, or tool permission is invalid")
+	case errors.Is(err, mcp.ErrConflict):
+		writeError(c, http.StatusConflict, "mcp_server_exists", "this Agent already has an MCP Server with that name")
+	case errors.Is(err, mcp.ErrNotFound):
+		writeError(c, http.StatusNotFound, "mcp_resource_not_found", "the requested MCP Server or Tool was not found")
+	case errors.Is(err, mcp.ErrConnection):
+		writeError(c, http.StatusBadGateway, "mcp_connection_failed", "the MCP Server could not be reached or did not return a valid tool catalog")
+	case errors.Is(err, mcp.ErrForbidden):
+		writeError(c, http.StatusForbidden, "mcp_approval_required", "this MCP Tool is not approved for automatic execution")
 	default:
 		handler.logger.Error("request failed", "requestId", requestIDFrom(c), "error", err)
 		writeError(c, http.StatusInternalServerError, "internal_error", "the server could not complete the request")

@@ -65,4 +65,4 @@ AegisLink should adopt:
 
 ## Implemented foundation
 
-The 2026-08-23 frontend foundation adopts the reference selectively: a compact product rail establishes Agent-object navigation, a separate searchable Conversation panel handles history, and the assistant-ui workspace remains content-first. Memory, Skills, and MCP are visible as disabled future destinations rather than fake working pages. AegisLink keeps its own neutral/lime identity, React/Vite stack, assistant-ui primitives, AG-UI transport, and PostgreSQL history model.
+The 2026-08-23 frontend foundation adopts the reference selectively: a compact product rail establishes Agent-object navigation, a separate searchable Conversation panel handles history, and the assistant-ui workspace remains content-first. Memory, Skills, and MCP now route to real Agent-scoped management pages with explicit loading, empty, error, and mutation states. AegisLink keeps its own neutral/lime identity, React/Vite stack, assistant-ui primitives for chat, AG-UI transport, and PostgreSQL authority; the domain-specific management pages remain small AegisLink components rather than a copied marketplace UI.

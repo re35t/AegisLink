@@ -10,11 +10,15 @@ import (
 
 	"github.com/re35t/AegisLink/internal/account"
 	"github.com/re35t/AegisLink/internal/agent"
+	"github.com/re35t/AegisLink/internal/agentcontext"
 	"github.com/re35t/AegisLink/internal/config"
 	"github.com/re35t/AegisLink/internal/conversation"
 	"github.com/re35t/AegisLink/internal/httpapi"
+	"github.com/re35t/AegisLink/internal/mcp"
+	"github.com/re35t/AegisLink/internal/memory"
 	"github.com/re35t/AegisLink/internal/postgres"
 	agentruntime "github.com/re35t/AegisLink/internal/runtime"
+	"github.com/re35t/AegisLink/internal/skills"
 )
 
 const authCookieName = "aegislink_session"
@@ -44,6 +48,9 @@ func New(parent context.Context, cfg config.Config, logger *slog.Logger) (*Appli
 	accountRepository := postgres.NewAccountRepository(database)
 	agentRepository := postgres.NewAgentRepository(database)
 	conversationRepository := postgres.NewConversationRepository(database)
+	memoryRepository := postgres.NewMemoryRepository(database)
+	skillRepository := postgres.NewSkillRepository(database)
+	mcpRepository := postgres.NewMCPRepository(database)
 	if err := conversationRepository.RecoverInterruptedRuns(root); err != nil {
 		return closeOnError(err)
 	}
@@ -56,17 +63,26 @@ func New(parent context.Context, cfg config.Config, logger *slog.Logger) (*Appli
 		return closeOnError(err)
 	}
 	agentService := agent.NewService(agentRepository)
+	memoryService := memory.NewService(memoryRepository, agentService)
+	skillService := skills.NewService(skillRepository, agentService)
+	mcpClient := mcp.NewOfficialClient(cfg.MCP.Timeout, cfg.MCP.AllowPrivateNetworks)
+	mcpService := mcp.NewService(mcpRepository, agentService, mcpClient)
+	contextService := agentcontext.NewService(memoryService, skillService, mcpService)
 	conversationService := conversation.NewService(
 		root,
 		conversationRepository,
 		agentService,
 		runtime,
+		contextService,
 		logger,
 	)
 	router := httpapi.NewRouter(httpapi.Dependencies{
 		Accounts:      accountService,
 		Agents:        agentService,
 		Conversations: conversationService,
+		Memories:      memoryService,
+		Skills:        skillService,
+		MCP:           mcpService,
 	}, cfg.Web.Origin, httpapi.AuthConfig{
 		CookieName: authCookieName, CookieSecure: cfg.Auth.CookieSecure,
 	}, httpapi.ModelInfo{

@@ -6,8 +6,12 @@ export type Bootstrap = components["schemas"]["BootstrapResponse"];
 export type Conversation = components["schemas"]["Conversation"];
 export type ConversationDetail = components["schemas"]["ConversationDetail"];
 export type Message = components["schemas"]["Message"];
+export type Memory = components["schemas"]["Memory"];
+export type McpServer = components["schemas"]["McpServer"];
+export type McpTool = components["schemas"]["McpTool"];
 export type Run = components["schemas"]["Run"];
 export type RunEvent = components["schemas"]["RunEvent"];
+export type Skill = components["schemas"]["Skill"];
 export type User = components["schemas"]["User"];
 
 export class APIError extends Error {
@@ -35,6 +39,92 @@ export const api = {
     }),
   logout: () => request<void>("/api/v1/auth/logout", { method: "POST" }),
   bootstrap: () => request<Bootstrap>("/api/v1/bootstrap"),
+  listMemories: async (agentId: string) => {
+    const response = await request<{ memories: Memory[] }>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/memories`,
+    );
+    return response.memories;
+  },
+  createMemory: (
+    agentId: string,
+    input: components["schemas"]["CreateMemoryRequest"],
+  ) =>
+    request<Memory>(`/api/v1/agents/${encodeURIComponent(agentId)}/memories`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  updateMemory: (
+    agentId: string,
+    memoryId: string,
+    input: components["schemas"]["UpdateMemoryRequest"],
+  ) =>
+    request<Memory>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/memories/${encodeURIComponent(memoryId)}`,
+      { method: "PATCH", body: JSON.stringify(input) },
+    ),
+  forgetMemory: (agentId: string, memoryId: string) =>
+    request<void>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/memories/${encodeURIComponent(memoryId)}`,
+      { method: "DELETE" },
+    ),
+  listSkills: async (agentId: string) => {
+    const response = await request<{ skills: Skill[] }>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/skills`,
+    );
+    return response.skills;
+  },
+  installSkill: (agentId: string, content: string, version?: string) =>
+    request<Skill>(`/api/v1/agents/${encodeURIComponent(agentId)}/skills`, {
+      method: "POST",
+      body: JSON.stringify({ content, ...(version ? { version } : {}) }),
+    }),
+  updateSkill: (agentId: string, skillId: string, enabled: boolean) =>
+    request<Skill>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/skills/${encodeURIComponent(skillId)}`,
+      { method: "PATCH", body: JSON.stringify({ enabled }) },
+    ),
+  uninstallSkill: (agentId: string, skillId: string) =>
+    request<void>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/skills/${encodeURIComponent(skillId)}`,
+      { method: "DELETE" },
+    ),
+  listMcpServers: async (agentId: string) => {
+    const response = await request<{ servers: McpServer[] }>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/mcp-servers`,
+    );
+    return response.servers;
+  },
+  createMcpServer: (agentId: string, name: string, endpoint: string) =>
+    request<McpServer>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/mcp-servers`,
+      { method: "POST", body: JSON.stringify({ name, endpoint }) },
+    ),
+  updateMcpServer: (agentId: string, serverId: string, enabled: boolean) =>
+    request<McpServer>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/mcp-servers/${encodeURIComponent(serverId)}`,
+      { method: "PATCH", body: JSON.stringify({ enabled }) },
+    ),
+  deleteMcpServer: (agentId: string, serverId: string) =>
+    request<void>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/mcp-servers/${encodeURIComponent(serverId)}`,
+      { method: "DELETE" },
+    ),
+  refreshMcpServer: (agentId: string, serverId: string) =>
+    request<McpServer>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/mcp-servers/${encodeURIComponent(serverId)}/refresh`,
+      { method: "POST" },
+    ),
+  updateMcpTool: (
+    agentId: string,
+    serverId: string,
+    toolName: string,
+    enabled: boolean,
+    riskLevel: McpTool["riskLevel"],
+  ) =>
+    request<McpServer>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/mcp-servers/${encodeURIComponent(serverId)}/tools/${encodeURIComponent(toolName)}`,
+      { method: "PATCH", body: JSON.stringify({ enabled, riskLevel }) },
+    ),
   listConversations: async () => {
     const response = await request<{ conversations: Conversation[] }>(
       "/api/v1/conversations",
