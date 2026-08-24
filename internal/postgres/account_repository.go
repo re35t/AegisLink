@@ -46,6 +46,19 @@ func (repository *AccountRepository) CreateAccountWithAgent(ctx context.Context,
 		}
 		return account.Identity{}, fmt.Errorf("create user account: %w", err)
 	}
+	language := registration.Preferences.Language
+	if language == "" {
+		language = account.LanguageSystem
+	}
+	theme := registration.Preferences.Theme
+	if theme == "" {
+		theme = account.ThemeSystem
+	}
+	if _, err := transaction.ExecContext(ctx, `
+		INSERT INTO user_preferences (principal_id, language, theme)
+		VALUES ($1, $2, $3)`, registration.User.ID, language, theme); err != nil {
+		return account.Identity{}, fmt.Errorf("create user preferences: %w", err)
+	}
 	agentRecord := registration.Agent
 	err = transaction.QueryRowContext(ctx, `
 		INSERT INTO agents (id, owner_principal_id, name, description, system_prompt)
@@ -156,6 +169,126 @@ func (repository *AccountRepository) RevokeSession(ctx context.Context, tokenHas
 		UPDATE account_sessions SET revoked_at=COALESCE(revoked_at, now())
 		WHERE token_hash=$1`, tokenHash); err != nil {
 		return fmt.Errorf("revoke account session: %w", err)
+	}
+	return nil
+}
+
+func (repository *AccountRepository) GetSettings(ctx context.Context, accountID string) (account.Settings, error) {
+	var settings account.Settings
+	err := repository.database.QueryRowContext(ctx, `
+		SELECT accounts.email, accounts.status,
+		       principals.id, principals.display_name,
+		       preferences.language, preferences.theme
+		FROM user_accounts accounts
+		JOIN human_principals principals ON principals.id=accounts.principal_id
+		JOIN user_preferences preferences ON preferences.principal_id=principals.id
+		WHERE accounts.id=$1 AND accounts.status='active' AND principals.status='active'`, accountID).Scan(
+		&settings.Account.Email,
+		&settings.Account.Status,
+		&settings.User.ID,
+		&settings.User.DisplayName,
+		&settings.Preferences.Language,
+		&settings.Preferences.Theme,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return account.Settings{}, account.ErrUnauthenticated
+	}
+	if err != nil {
+		return account.Settings{}, fmt.Errorf("get account settings: %w", err)
+	}
+	return settings, nil
+}
+
+func (repository *AccountRepository) UpdateSettings(ctx context.Context, accountID, principalID string, update account.SettingsUpdate) (account.Settings, error) {
+	transaction, err := repository.database.BeginTx(ctx, nil)
+	if err != nil {
+		return account.Settings{}, fmt.Errorf("begin account settings update: %w", err)
+	}
+	defer transaction.Rollback()
+	var displayName any
+	if update.DisplayName != nil {
+		displayName = *update.DisplayName
+	}
+	result, err := transaction.ExecContext(ctx, `
+		UPDATE human_principals principals
+		SET display_name=COALESCE($3::text, principals.display_name), updated_at=now()
+		FROM user_accounts accounts
+		WHERE accounts.id=$1 AND accounts.principal_id=$2
+		  AND principals.id=accounts.principal_id
+		  AND accounts.status='active' AND principals.status='active'`, accountID, principalID, displayName)
+	if err != nil {
+		return account.Settings{}, fmt.Errorf("update account profile: %w", err)
+	}
+	updated, err := result.RowsAffected()
+	if err != nil {
+		return account.Settings{}, fmt.Errorf("count updated account profile: %w", err)
+	}
+	if updated != 1 {
+		return account.Settings{}, account.ErrUnauthenticated
+	}
+	var language, theme any
+	if update.Language != nil {
+		language = string(*update.Language)
+	}
+	if update.Theme != nil {
+		theme = string(*update.Theme)
+	}
+	if _, err := transaction.ExecContext(ctx, `
+		UPDATE user_preferences
+		SET language=COALESCE($2::text, language),
+		    theme=COALESCE($3::text, theme),
+		    updated_at=now()
+		WHERE principal_id=$1`, principalID, language, theme); err != nil {
+		return account.Settings{}, fmt.Errorf("update user preferences: %w", err)
+	}
+	if err := transaction.Commit(); err != nil {
+		return account.Settings{}, fmt.Errorf("commit account settings update: %w", err)
+	}
+	return repository.GetSettings(ctx, accountID)
+}
+
+func (repository *AccountRepository) PasswordHash(ctx context.Context, accountID string) (string, error) {
+	var passwordHash string
+	err := repository.database.QueryRowContext(ctx, `
+		SELECT password_hash FROM user_accounts
+		WHERE id=$1 AND status='active'`, accountID).Scan(&passwordHash)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", account.ErrUnauthenticated
+	}
+	if err != nil {
+		return "", fmt.Errorf("get account password hash: %w", err)
+	}
+	return passwordHash, nil
+}
+
+func (repository *AccountRepository) ChangePassword(ctx context.Context, accountID, currentSessionID, passwordHash string) error {
+	transaction, err := repository.database.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin password change: %w", err)
+	}
+	defer transaction.Rollback()
+	result, err := transaction.ExecContext(ctx, `
+		UPDATE user_accounts
+		SET password_hash=$2, updated_at=now()
+		WHERE id=$1 AND status='active'`, accountID, passwordHash)
+	if err != nil {
+		return fmt.Errorf("update account password: %w", err)
+	}
+	updated, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("count updated account password: %w", err)
+	}
+	if updated != 1 {
+		return account.ErrUnauthenticated
+	}
+	if _, err := transaction.ExecContext(ctx, `
+		UPDATE account_sessions
+		SET revoked_at=COALESCE(revoked_at, now())
+		WHERE account_id=$1 AND id<>$2 AND revoked_at IS NULL`, accountID, currentSessionID); err != nil {
+		return fmt.Errorf("revoke other account sessions: %w", err)
+	}
+	if err := transaction.Commit(); err != nil {
+		return fmt.Errorf("commit password change: %w", err)
 	}
 	return nil
 }

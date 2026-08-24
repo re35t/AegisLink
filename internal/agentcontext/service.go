@@ -20,7 +20,19 @@ type SkillReader interface {
 
 type MCPRuntime interface {
 	RuntimeTools(context.Context, string, string) ([]mcp.RuntimeTool, error)
+	ResolveMention(context.Context, string, string, string) (mcp.RuntimeTool, error)
 	Invoke(context.Context, string, string, string, string, string) (string, error)
+}
+
+func (service *Service) ResolveToolSelection(ctx context.Context, principalID, agentID, mentionID string) (conversation.ExecutionPolicy, error) {
+	tool, err := service.mcp.ResolveMention(ctx, principalID, agentID, mentionID)
+	if err != nil {
+		return conversation.ExecutionPolicy{}, err
+	}
+	return conversation.ExecutionPolicy{
+		Mode: "force-tool-once", MentionID: mentionID, ToolID: tool.ToolID,
+		ToolName: tool.Name, QualifiedToolName: tool.QualifiedName,
+	}, nil
 }
 
 type Service struct {

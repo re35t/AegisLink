@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { HttpAgent, type Message as AgUiMessage } from "@ag-ui/client";
+import {
+  HttpAgent,
+  type HttpAgentConfig,
+  type Message as AgUiMessage,
+  type RunAgentInput,
+  type RunAgentParameters,
+} from "@ag-ui/client";
 import {
   ActionBarPrimitive,
   AssistantRuntimeProvider,
@@ -29,6 +35,12 @@ import {
 
 import type { Message } from "../api/client";
 import { MarkdownText } from "./MarkdownText";
+import {
+  MentionCatalog,
+  MentionCatalogButton,
+  type SelectedMention,
+} from "./MentionCatalog";
+import { withAegisSelection } from "./aguiSelection";
 
 interface AssistantThreadProps {
   conversationId: string;
@@ -60,6 +72,23 @@ interface RunActivity {
   runId?: string;
   status: RunActivityStatus;
   tools: ToolActivity[];
+  requestedTool?: SelectedMention;
+}
+
+class AegisHttpAgent extends HttpAgent {
+  constructor(
+    config: HttpAgentConfig,
+    private readonly getSelection: () => SelectedMention | undefined,
+  ) {
+    super(config);
+  }
+
+  protected override prepareRunAgentInput(
+    parameters?: RunAgentParameters,
+  ): RunAgentInput {
+    const input = super.prepareRunAgentInput(parameters);
+    return withAegisSelection(input, this.getSelection());
+  }
 }
 
 export function AssistantThread({
@@ -74,6 +103,8 @@ export function AssistantThread({
 }: AssistantThreadProps) {
   const [runtimeError, setRuntimeError] = useState<string>();
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [selectedMention, setSelectedMention] = useState<SelectedMention>();
+  const selectionRef = useRef<SelectedMention | undefined>(undefined);
   const [activity, setActivity] = useState<RunActivity>({
     status: "idle",
     tools: [],
@@ -87,12 +118,15 @@ export function AssistantThread({
   );
   const agent = useMemo(
     () =>
-      new HttpAgent({
-        url: "/api/v1/ag-ui",
-        agentId,
-        threadId: conversationId,
-        description: agentName,
-      }),
+      new AegisHttpAgent(
+        {
+          url: "/api/v1/ag-ui",
+          agentId,
+          threadId: conversationId,
+          description: agentName,
+        },
+        () => selectionRef.current,
+      ),
     [agentId, agentName, conversationId],
   );
   const history = useMemo<ThreadHistoryAdapter>(
@@ -113,7 +147,14 @@ export function AssistantThread({
     const subscription = agent.subscribe({
       onRunStartedEvent: ({ event }) => {
         setRuntimeError(undefined);
-        setActivity({ runId: event.runId, status: "running", tools: [] });
+        setActivity({
+          runId: event.runId,
+          status: "running",
+          tools: [],
+          requestedTool: selectionRef.current,
+        });
+        selectionRef.current = undefined;
+        setSelectedMention(undefined);
       },
       onToolCallStartEvent: ({ event }) => {
         setActivity((current) => ({
@@ -231,6 +272,16 @@ export function AssistantThread({
           modelLabel={modelLabel}
           runtimeError={runtimeError}
           clearRuntimeError={() => setRuntimeError(undefined)}
+          agentId={agentId}
+          selectedMention={selectedMention}
+          onSelectMention={(item) => {
+            selectionRef.current = item;
+            setSelectedMention(item);
+          }}
+          onClearMention={() => {
+            selectionRef.current = undefined;
+            setSelectedMention(undefined);
+          }}
         />
         {inspectorOpen && (
           <RunInspector
@@ -272,12 +323,20 @@ function ThreadView({
   modelLabel,
   runtimeError,
   clearRuntimeError,
+  agentId,
+  selectedMention,
+  onSelectMention,
+  onClearMention,
 }: {
   agentName: string;
   agentDescription: string;
   modelLabel: string;
   runtimeError?: string;
   clearRuntimeError(): void;
+  agentId: string;
+  selectedMention?: SelectedMention;
+  onSelectMention(item: SelectedMention): void;
+  onClearMention(): void;
 }) {
   return (
     <ThreadPrimitive.Root className="aui-thread">
@@ -312,7 +371,14 @@ function ThreadView({
           >
             <ArrowDown size={17} />
           </ThreadPrimitive.ScrollToBottom>
-          <Composer agentName={agentName} modelLabel={modelLabel} />
+          <Composer
+            agentId={agentId}
+            agentName={agentName}
+            modelLabel={modelLabel}
+            selectedMention={selectedMention}
+            onSelectMention={onSelectMention}
+            onClearMention={onClearMention}
+          />
         </ThreadPrimitive.ViewportFooter>
       </ThreadPrimitive.Viewport>
     </ThreadPrimitive.Root>
@@ -486,6 +552,13 @@ function RunInspector({
           <span>Tool calls</span>
           <strong>{activity.tools.length}</strong>
         </div>
+        {activity.requestedTool && (
+          <div className="run-requested-tool">
+            <span>User specified</span>
+            <strong>{activity.requestedTool.label}</strong>
+            <small>{activity.requestedTool.groupLabel} · force once</small>
+          </div>
+        )}
         {activity.tools.length === 0 ? (
           <p className="run-inspector-empty">
             Tool calls from the current run will appear here.
@@ -539,21 +612,39 @@ function isCancellationError(value: unknown): boolean {
 }
 
 function Composer({
+  agentId,
   agentName,
   modelLabel,
+  selectedMention,
+  onSelectMention,
+  onClearMention,
 }: {
+  agentId: string;
   agentName: string;
   modelLabel: string;
+  selectedMention?: SelectedMention;
+  onSelectMention(item: SelectedMention): void;
+  onClearMention(): void;
 }) {
   return (
     <div className="aui-composer-wrap">
       <ComposerPrimitive.Root className="aui-composer">
-        <ComposerPrimitive.Input
-          className="aui-composer-input"
-          placeholder={`Message ${agentName}`}
-          rows={1}
-          aria-label="Message"
-        />
+        <MentionCatalog
+          agentId={agentId}
+          selected={selectedMention}
+          onSelect={onSelectMention}
+          onClear={onClearMention}
+        >
+          <div className="aui-composer-input-row">
+            <MentionCatalogButton />
+            <ComposerPrimitive.Input
+              className="aui-composer-input"
+              placeholder={`Message ${agentName}`}
+              rows={1}
+              aria-label="Message"
+            />
+          </div>
+        </MentionCatalog>
         <AuiIf condition={(state) => state.thread.isRunning}>
           <ComposerPrimitive.Cancel
             className="aui-composer-button stop"

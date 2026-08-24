@@ -10,6 +10,7 @@ import { AuthGate } from "../features/account/AuthGate";
 import { McpPage } from "../features/capabilities/McpPage";
 import { MemoryPage } from "../features/capabilities/MemoryPage";
 import { SkillsPage } from "../features/capabilities/SkillsPage";
+import { SettingsPage } from "../features/settings/SettingsPage";
 
 const rootRoute = createRootRoute({
   component: () => (
@@ -49,6 +50,12 @@ const mcpRoute = createRoute({
   component: McpPage,
 });
 
+const settingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings",
+  component: SettingsPage,
+});
+
 function ConversationRoute() {
   const { conversationId } = conversationRoute.useParams();
   return <Workspace conversationId={conversationId} />;
@@ -60,6 +67,7 @@ const routeTree = rootRoute.addChildren([
   memoryRoute,
   skillsRoute,
   mcpRoute,
+  settingsRoute,
 ]);
 
 export const router = createRouter({ routeTree });

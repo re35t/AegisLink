@@ -23,6 +23,9 @@ type AccountService interface {
 	Login(context.Context, string, string) (account.AuthResult, error)
 	Authenticate(context.Context, string) (account.Actor, error)
 	Logout(context.Context, string) error
+	GetSettings(context.Context, account.Actor) (account.Settings, error)
+	UpdateSettings(context.Context, account.Actor, account.SettingsUpdate) (account.Settings, error)
+	ChangePassword(context.Context, account.Actor, string, string) error
 }
 
 type AgentService interface {
@@ -58,12 +61,18 @@ type SkillService interface {
 }
 
 type MCPService interface {
+	ListLibrary(context.Context, string) ([]mcp.Server, error)
 	List(context.Context, string, string) ([]mcp.Server, error)
 	Create(context.Context, string, string, string, string) (mcp.Server, error)
-	SetEnabled(context.Context, string, string, string, bool) (mcp.Server, error)
-	Delete(context.Context, string, string, string) error
-	Refresh(context.Context, string, string, string) (mcp.Server, error)
-	UpdateTool(context.Context, string, string, string, string, bool, mcp.RiskLevel) (mcp.Server, error)
+	Update(context.Context, string, string, string, string) (mcp.Server, error)
+	BindServer(context.Context, string, string, string) (mcp.Server, error)
+	UnbindServer(context.Context, string, string, string) error
+	Delete(context.Context, string, string) error
+	Refresh(context.Context, string, string) (mcp.Server, error)
+	UpdateToolRisk(context.Context, string, string, string, mcp.RiskLevel) (mcp.Server, error)
+	BindTool(context.Context, string, string, string) (mcp.Tool, error)
+	UnbindTool(context.Context, string, string, string) error
+	Mentions(context.Context, string, string, mcp.MentionQuery) (mcp.MentionPage, error)
 }
 
 type Dependencies struct {
@@ -116,6 +125,9 @@ func NewRouter(dependencies Dependencies, webOrigin string, auth AuthConfig, mod
 	protected := api.Group("")
 	protected.Use(authenticate(dependencies.Accounts, auth.CookieName, logger))
 	protected.GET("/auth/session", handler.session)
+	protected.GET("/account/settings", handler.getAccountSettings)
+	protected.PATCH("/account/settings", handler.updateAccountSettings)
+	protected.POST("/account/password", handler.changeAccountPassword)
 	protected.GET("/bootstrap", handler.bootstrap)
 	protected.POST("/ag-ui", handler.runAgent)
 	protected.GET("/agents", handler.listAgents)
@@ -129,11 +141,17 @@ func NewRouter(dependencies Dependencies, webOrigin string, auth AuthConfig, mod
 	protected.PATCH("/agents/:agentId/skills/:skillId", handler.updateSkill)
 	protected.DELETE("/agents/:agentId/skills/:skillId", handler.uninstallSkill)
 	protected.GET("/agents/:agentId/mcp-servers", handler.listMCPServers)
-	protected.POST("/agents/:agentId/mcp-servers", handler.createMCPServer)
-	protected.PATCH("/agents/:agentId/mcp-servers/:serverId", handler.updateMCPServer)
-	protected.DELETE("/agents/:agentId/mcp-servers/:serverId", handler.deleteMCPServer)
-	protected.POST("/agents/:agentId/mcp-servers/:serverId/refresh", handler.refreshMCPServer)
-	protected.PATCH("/agents/:agentId/mcp-servers/:serverId/tools/:toolName", handler.updateMCPTool)
+	protected.GET("/agents/:agentId/mentions", handler.listMentions)
+	protected.PUT("/agents/:agentId/mcp-servers/:serverId", handler.bindMCPServer)
+	protected.DELETE("/agents/:agentId/mcp-servers/:serverId", handler.unbindMCPServer)
+	protected.PUT("/agents/:agentId/mcp-tools/:toolId", handler.bindMCPTool)
+	protected.DELETE("/agents/:agentId/mcp-tools/:toolId", handler.unbindMCPTool)
+	protected.GET("/mcp-servers", handler.listMCPLibrary)
+	protected.POST("/mcp-servers", handler.createMCPServer)
+	protected.PATCH("/mcp-servers/:serverId", handler.updateMCPServer)
+	protected.DELETE("/mcp-servers/:serverId", handler.deleteMCPServer)
+	protected.POST("/mcp-servers/:serverId/refresh", handler.refreshMCPServer)
+	protected.PATCH("/mcp-servers/:serverId/tools/:toolId", handler.updateMCPToolRisk)
 	protected.GET("/conversations", handler.listConversations)
 	protected.POST("/conversations", handler.createConversation)
 	protected.GET("/conversations/:conversationId", handler.getConversation)
@@ -177,7 +195,7 @@ func cors(origin string) gin.HandlerFunc {
 			c.Header("Access-Control-Allow-Credentials", "true")
 			c.Header("Vary", "Origin")
 			c.Header("Access-Control-Allow-Headers", "Content-Type, Last-Event-ID, X-Request-ID")
-			c.Header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		}
 		if c.Request.Method == http.MethodOptions {
 			if requestOrigin != origin {

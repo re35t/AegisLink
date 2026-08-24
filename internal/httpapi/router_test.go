@@ -54,6 +54,34 @@ func TestProtectedRouteRequiresSessionCookie(t *testing.T) {
 	}
 }
 
+func TestAccountSettingsAndPasswordEndpoints(t *testing.T) {
+	t.Parallel()
+	service := &fakeService{}
+	router := newTestRouter(service, ModelInfo{})
+
+	settingsRequest := httptest.NewRequest(http.MethodPatch, "/api/v1/account/settings", strings.NewReader(`{
+		"displayName":"Updated user","language":"zh-CN","theme":"dark"
+	}`))
+	settingsRequest.Header.Set("Content-Type", "application/json")
+	authorize(settingsRequest)
+	settingsResponse := httptest.NewRecorder()
+	router.ServeHTTP(settingsResponse, settingsRequest)
+	if settingsResponse.Code != http.StatusOK || service.settingsUpdate == nil || service.settingsUpdate.Language == nil || *service.settingsUpdate.Language != account.LanguageChinese {
+		t.Fatalf("unexpected settings response: status=%d body=%q update=%#v", settingsResponse.Code, settingsResponse.Body.String(), service.settingsUpdate)
+	}
+
+	passwordRequest := httptest.NewRequest(http.MethodPost, "/api/v1/account/password", strings.NewReader(`{
+		"currentPassword":"current-password","newPassword":"different-password"
+	}`))
+	passwordRequest.Header.Set("Content-Type", "application/json")
+	authorize(passwordRequest)
+	passwordResponse := httptest.NewRecorder()
+	router.ServeHTTP(passwordResponse, passwordRequest)
+	if passwordResponse.Code != http.StatusNoContent || service.currentPassword != "current-password" || service.newPassword != "different-password" {
+		t.Fatalf("unexpected password response: status=%d body=%q", passwordResponse.Code, passwordResponse.Body.String())
+	}
+}
+
 func TestRegisterSetsProtectedSessionCookie(t *testing.T) {
 	t.Parallel()
 	router := newTestRouter(&fakeService{}, ModelInfo{})
@@ -170,7 +198,7 @@ func TestAGUIRunStreamsProtocolLifecycleAndTextEvents(t *testing.T) {
 		"messages":[{"id":"message-client","role":"user","content":"hi"}],
 		"tools":[],
 		"context":[],
-		"forwardedProps":{}
+		"forwardedProps":{"aegislink":{"selection":{"mentionId":"opaque-mention","action":"force-tool-once"}}}
 	}`))
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Accept", "text/event-stream")
@@ -181,7 +209,9 @@ func TestAGUIRunStreamsProtocolLifecycleAndTextEvents(t *testing.T) {
 	if response.Code != http.StatusOK || response.Header().Get("Content-Type") != "text/event-stream" {
 		t.Fatalf("unexpected AG-UI response: status=%d content-type=%q", response.Code, response.Header().Get("Content-Type"))
 	}
-	if service.startRequest == nil || service.startRequest.MessageID != "message-client" || service.startRequest.Content != "hi" {
+	if service.startRequest == nil || service.startRequest.MessageID != "message-client" || service.startRequest.Content != "hi" ||
+		service.startRequest.Selection == nil || service.startRequest.Selection.MentionID != "opaque-mention" ||
+		service.startRequest.Selection.Action != "force-tool-once" {
 		t.Fatalf("unexpected start request: %#v", service.startRequest)
 	}
 	body := response.Body.String()
@@ -214,6 +244,9 @@ type fakeService struct {
 	run               conversation.Run
 	events            []conversation.RunEvent
 	startRequest      *conversation.RunRequest
+	settingsUpdate    *account.SettingsUpdate
+	currentPassword   string
+	newPassword       string
 }
 
 func (fake *fakeService) Register(context.Context, string, string, string) (account.AuthResult, error) {
@@ -228,10 +261,36 @@ func (fake *fakeService) Authenticate(_ context.Context, token string) (account.
 	if token != "session-token" {
 		return account.Actor{}, account.ErrUnauthenticated
 	}
-	return account.Actor{AccountID: "account-1", User: account.User{ID: "user-1", DisplayName: "Test user"}}, nil
+	return account.Actor{AccountID: "account-1", SessionID: "session-1", User: account.User{ID: "user-1", DisplayName: "Test user"}}, nil
 }
 func (fake *fakeService) Logout(context.Context, string) error { return nil }
-func (fake *fakeService) Ready(context.Context) error          { return nil }
+func (fake *fakeService) GetSettings(context.Context, account.Actor) (account.Settings, error) {
+	return account.Settings{
+		Account:     account.AccountSummary{Email: "test@example.com", Status: "active"},
+		User:        account.User{ID: "user-1", DisplayName: "Test user"},
+		Preferences: account.Preferences{Language: account.LanguageSystem, Theme: account.ThemeSystem},
+	}, nil
+}
+func (fake *fakeService) UpdateSettings(_ context.Context, _ account.Actor, update account.SettingsUpdate) (account.Settings, error) {
+	fake.settingsUpdate = &update
+	settings, _ := fake.GetSettings(context.Background(), account.Actor{})
+	if update.DisplayName != nil {
+		settings.User.DisplayName = *update.DisplayName
+	}
+	if update.Language != nil {
+		settings.Preferences.Language = *update.Language
+	}
+	if update.Theme != nil {
+		settings.Preferences.Theme = *update.Theme
+	}
+	return settings, nil
+}
+func (fake *fakeService) ChangePassword(_ context.Context, _ account.Actor, currentPassword, newPassword string) error {
+	fake.currentPassword = currentPassword
+	fake.newPassword = newPassword
+	return nil
+}
+func (fake *fakeService) Ready(context.Context) error { return nil }
 func (fake *fakeService) Bootstrap(context.Context, string) (agent.Agent, error) {
 	return agent.Agent{}, nil
 }
@@ -297,21 +356,35 @@ func (*fakeSkillService) Uninstall(context.Context, string, string, string) erro
 
 type fakeMCPService struct{}
 
+func (*fakeMCPService) ListLibrary(context.Context, string) ([]mcp.Server, error) {
+	return nil, nil
+}
 func (*fakeMCPService) List(context.Context, string, string) ([]mcp.Server, error) {
 	return nil, nil
 }
 func (*fakeMCPService) Create(context.Context, string, string, string, string) (mcp.Server, error) {
 	return mcp.Server{}, nil
 }
-func (*fakeMCPService) SetEnabled(context.Context, string, string, string, bool) (mcp.Server, error) {
+func (*fakeMCPService) Update(context.Context, string, string, string, string) (mcp.Server, error) {
 	return mcp.Server{}, nil
 }
-func (*fakeMCPService) Delete(context.Context, string, string, string) error { return nil }
-func (*fakeMCPService) Refresh(context.Context, string, string, string) (mcp.Server, error) {
+func (*fakeMCPService) BindServer(context.Context, string, string, string) (mcp.Server, error) {
 	return mcp.Server{}, nil
 }
-func (*fakeMCPService) UpdateTool(context.Context, string, string, string, string, bool, mcp.RiskLevel) (mcp.Server, error) {
+func (*fakeMCPService) UnbindServer(context.Context, string, string, string) error { return nil }
+func (*fakeMCPService) Delete(context.Context, string, string) error               { return nil }
+func (*fakeMCPService) Refresh(context.Context, string, string) (mcp.Server, error) {
 	return mcp.Server{}, nil
+}
+func (*fakeMCPService) UpdateToolRisk(context.Context, string, string, string, mcp.RiskLevel) (mcp.Server, error) {
+	return mcp.Server{}, nil
+}
+func (*fakeMCPService) BindTool(context.Context, string, string, string) (mcp.Tool, error) {
+	return mcp.Tool{}, nil
+}
+func (*fakeMCPService) UnbindTool(context.Context, string, string, string) error { return nil }
+func (*fakeMCPService) Mentions(context.Context, string, string, mcp.MentionQuery) (mcp.MentionPage, error) {
+	return mcp.MentionPage{}, nil
 }
 
 func discardLogger() *slog.Logger {

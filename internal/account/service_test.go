@@ -23,6 +23,9 @@ func TestRegisterCreatesAccountPrincipalAgentAndHashedSession(t *testing.T) {
 	if registration.Account.PrincipalID != registration.User.ID || registration.Agent.OwnerPrincipalID != registration.User.ID {
 		t.Fatalf("principal ownership was not preserved: %#v", registration)
 	}
+	if registration.Preferences.Language != LanguageSystem || registration.Preferences.Theme != ThemeSystem {
+		t.Fatalf("registration defaults were not set: %#v", registration.Preferences)
+	}
 	if registration.Account.PasswordHash == "long-enough-password" || !service.hasher.Verify("long-enough-password", registration.Account.PasswordHash) {
 		t.Fatal("password was not securely hashed")
 	}
@@ -73,11 +76,67 @@ func TestLoginVerifiesPasswordAndReturnsGenericCredentialError(t *testing.T) {
 	}
 }
 
+func TestUpdateSettingsNormalizesAndValidatesPreferences(t *testing.T) {
+	repository := &fakeRepository{settings: Settings{
+		Account:     AccountSummary{Email: "test@example.com", Status: "active"},
+		User:        User{ID: "principal-1", DisplayName: "Test user"},
+		Preferences: Preferences{Language: LanguageSystem, Theme: ThemeSystem},
+	}}
+	service, err := NewService(repository, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	displayName := "  Updated user  "
+	language := LanguageChinese
+	theme := ThemeDark
+	updated, err := service.UpdateSettings(t.Context(), Actor{AccountID: "account-1", User: User{ID: "principal-1"}}, SettingsUpdate{
+		DisplayName: &displayName, Language: &language, Theme: &theme,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.User.DisplayName != "Updated user" || updated.Preferences.Language != LanguageChinese || updated.Preferences.Theme != ThemeDark {
+		t.Fatalf("unexpected settings: %#v", updated)
+	}
+	invalidLanguage := Language("unsupported")
+	if _, err := service.UpdateSettings(t.Context(), Actor{}, SettingsUpdate{Language: &invalidLanguage}); err != ErrInvalidSettings {
+		t.Fatalf("expected invalid settings, got %v", err)
+	}
+}
+
+func TestChangePasswordVerifiesCurrentPasswordAndRevokesOtherSessions(t *testing.T) {
+	repository := &fakeRepository{}
+	service, err := NewService(repository, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository.passwordHash, err = service.hasher.Hash("current-password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	actor := Actor{AccountID: "account-1", SessionID: "session-current"}
+	if err := service.ChangePassword(t.Context(), actor, "wrong-password", "different-password"); err != ErrCurrentPassword {
+		t.Fatalf("expected current password error, got %v", err)
+	}
+	if err := service.ChangePassword(t.Context(), actor, "current-password", "different-password"); err != nil {
+		t.Fatal(err)
+	}
+	if repository.changedAccountID != actor.AccountID || repository.keptSessionID != actor.SessionID || !service.hasher.Verify("different-password", repository.changedPasswordHash) {
+		t.Fatalf("password change was not persisted safely: %#v", repository)
+	}
+}
+
 type fakeRepository struct {
-	registration Registration
-	identity     Identity
-	session      Session
-	actor        Actor
+	registration        Registration
+	identity            Identity
+	session             Session
+	actor               Actor
+	settings            Settings
+	settingsUpdate      SettingsUpdate
+	passwordHash        string
+	changedAccountID    string
+	keptSessionID       string
+	changedPasswordHash string
 }
 
 func (repository *fakeRepository) CreateAccountWithAgent(_ context.Context, registration Registration) (Identity, error) {
@@ -105,3 +164,32 @@ func (repository *fakeRepository) AuthenticateSession(context.Context, []byte, t
 }
 
 func (repository *fakeRepository) RevokeSession(context.Context, []byte) error { return nil }
+
+func (repository *fakeRepository) GetSettings(context.Context, string) (Settings, error) {
+	return repository.settings, nil
+}
+
+func (repository *fakeRepository) UpdateSettings(_ context.Context, _, _ string, update SettingsUpdate) (Settings, error) {
+	repository.settingsUpdate = update
+	if update.DisplayName != nil {
+		repository.settings.User.DisplayName = *update.DisplayName
+	}
+	if update.Language != nil {
+		repository.settings.Preferences.Language = *update.Language
+	}
+	if update.Theme != nil {
+		repository.settings.Preferences.Theme = *update.Theme
+	}
+	return repository.settings, nil
+}
+
+func (repository *fakeRepository) PasswordHash(context.Context, string) (string, error) {
+	return repository.passwordHash, nil
+}
+
+func (repository *fakeRepository) ChangePassword(_ context.Context, accountID, currentSessionID, passwordHash string) error {
+	repository.changedAccountID = accountID
+	repository.keptSessionID = currentSessionID
+	repository.changedPasswordHash = passwordHash
+	return nil
+}

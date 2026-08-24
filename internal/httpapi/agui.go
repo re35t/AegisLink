@@ -15,10 +15,17 @@ import (
 const agUIEventPollInterval = 100 * time.Millisecond
 
 type agUIRunAgentInput struct {
-	ThreadID string          `json:"threadId"`
-	RunID    string          `json:"runId"`
-	Messages []agUIMessage   `json:"messages"`
-	State    json.RawMessage `json:"state"`
+	ThreadID       string             `json:"threadId"`
+	RunID          string             `json:"runId"`
+	Messages       []agUIMessage      `json:"messages"`
+	State          json.RawMessage    `json:"state"`
+	ForwardedProps agUIForwardedProps `json:"forwardedProps"`
+}
+
+type agUIForwardedProps struct {
+	AegisLink *struct {
+		Selection *conversation.RunSelection `json:"selection"`
+	} `json:"aegislink"`
 }
 
 type agUIMessage struct {
@@ -44,11 +51,16 @@ func (handler *handler) runAgent(c *gin.Context) {
 		return
 	}
 	principalID := actorFrom(c).User.ID
+	var selection *conversation.RunSelection
+	if input.ForwardedProps.AegisLink != nil {
+		selection = input.ForwardedProps.AegisLink.Selection
+	}
 	_, run, err := handler.conversations.StartRun(c.Request.Context(), principalID, conversation.RunRequest{
 		ConversationID: input.ThreadID,
 		MessageID:      messageID,
 		RunID:          input.RunID,
 		Content:        content,
+		Selection:      selection,
 	})
 	if err != nil {
 		handler.handleError(c, err)

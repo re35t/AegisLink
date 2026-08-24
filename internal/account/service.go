@@ -68,6 +68,7 @@ func (service *Service) Register(ctx context.Context, displayName, email, passwo
 			Description:      "A private, focused personal agent.",
 			SystemPrompt:     "You are Aegis, a concise and reliable personal assistant. Answer in the language used by the user.",
 		},
+		Preferences: Preferences{Language: LanguageSystem, Theme: ThemeSystem},
 	}
 	identity, err := service.repository.CreateAccountWithAgent(ctx, registration)
 	if err != nil {
@@ -109,6 +110,48 @@ func (service *Service) Logout(ctx context.Context, token string) error {
 	return service.repository.RevokeSession(ctx, sessionTokenHash(token))
 }
 
+func (service *Service) GetSettings(ctx context.Context, actor Actor) (Settings, error) {
+	return service.repository.GetSettings(ctx, actor.AccountID)
+}
+
+func (service *Service) UpdateSettings(ctx context.Context, actor Actor, update SettingsUpdate) (Settings, error) {
+	if update.DisplayName == nil && update.Language == nil && update.Theme == nil {
+		return Settings{}, ErrInvalidSettings
+	}
+	if update.DisplayName != nil {
+		displayName := strings.TrimSpace(*update.DisplayName)
+		if displayName == "" || utf8.RuneCountInString(displayName) > maximumDisplayName {
+			return Settings{}, ErrInvalidSettings
+		}
+		update.DisplayName = &displayName
+	}
+	if update.Language != nil && !validLanguage(*update.Language) {
+		return Settings{}, ErrInvalidSettings
+	}
+	if update.Theme != nil && !validTheme(*update.Theme) {
+		return Settings{}, ErrInvalidSettings
+	}
+	return service.repository.UpdateSettings(ctx, actor.AccountID, actor.User.ID, update)
+}
+
+func (service *Service) ChangePassword(ctx context.Context, actor Actor, currentPassword, newPassword string) error {
+	if currentPassword == "" || len(currentPassword) > maximumPasswordLength || !validNewPassword(newPassword) || currentPassword == newPassword {
+		return ErrInvalidPassword
+	}
+	passwordHash, err := service.repository.PasswordHash(ctx, actor.AccountID)
+	if err != nil {
+		return err
+	}
+	if !service.hasher.Verify(currentPassword, passwordHash) {
+		return ErrCurrentPassword
+	}
+	newHash, err := service.hasher.Hash(newPassword)
+	if err != nil {
+		return err
+	}
+	return service.repository.ChangePassword(ctx, actor.AccountID, actor.SessionID, newHash)
+}
+
 func (service *Service) issueSession(ctx context.Context, identity Identity) (AuthResult, error) {
 	token, tokenHash, err := newSessionToken()
 	if err != nil {
@@ -134,4 +177,12 @@ func normalizeEmail(value string) (string, bool) {
 
 func validNewPassword(password string) bool {
 	return len(password) >= minimumPasswordLength && len(password) <= maximumPasswordLength && utf8.ValidString(password)
+}
+
+func validLanguage(language Language) bool {
+	return language == LanguageSystem || language == LanguageEnglish || language == LanguageChinese
+}
+
+func validTheme(theme Theme) bool {
+	return theme == ThemeSystem || theme == ThemeLight || theme == ThemeDark
 }

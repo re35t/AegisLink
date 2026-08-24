@@ -12,7 +12,7 @@ func (service *Service) execute(ctx context.Context, principalID string, run Run
 		service.logger.Error("mark run running", "runId", run.ID, "error", err)
 		return
 	}
-	if _, err := service.repository.AppendRunEvent(ctx, principalID, run.ID, "run.started", map[string]any{}); err != nil {
+	if _, err := service.repository.AppendRunEvent(ctx, principalID, run.ID, "run.started", map[string]any{"executionPolicy": run.ExecutionPolicy}); err != nil {
 		service.finishFailed(principalID, run.ID, "event_persistence_failed", false)
 		return
 	}
@@ -35,10 +35,14 @@ func (service *Service) execute(ctx context.Context, principalID string, run Run
 	}
 
 	var answer strings.Builder
-	for output := range service.runtime.Stream(ctx, RuntimeInput{Agent: agentRecord, Messages: detail.Messages, Context: agentContext}) {
+	for output := range service.runtime.Stream(ctx, RuntimeInput{Agent: agentRecord, Messages: detail.Messages, Context: agentContext, Policy: run.ExecutionPolicy}) {
 		if output.Err != nil {
 			if errors.Is(output.Err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
 				service.finishFailed(principalID, run.ID, "cancelled_by_user", true)
+			} else if errors.Is(output.Err, ErrForcedToolNotCalled) {
+				service.finishFailed(principalID, run.ID, "forced_tool_not_called", false)
+			} else if errors.Is(output.Err, ErrForcedToolMismatch) {
+				service.finishFailed(principalID, run.ID, "forced_tool_mismatch", false)
 			} else {
 				service.logger.Error("agent runtime failed", "runId", run.ID, "error", output.Err)
 				service.finishFailed(principalID, run.ID, "runtime_error", false)

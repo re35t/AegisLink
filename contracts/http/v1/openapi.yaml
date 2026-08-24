@@ -92,6 +92,53 @@ paths:
                 $ref: "#/components/schemas/AuthResponse"
         "401":
           $ref: "#/components/responses/Error"
+  /api/v1/account/settings:
+    get:
+      operationId: getAccountSettings
+      responses:
+        "200":
+          description: Account profile and durable interface preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountSettingsResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+    patch:
+      operationId: updateAccountSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAccountSettingsRequest"
+      responses:
+        "200":
+          description: Updated account profile and interface preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountSettingsResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+  /api/v1/account/password:
+    post:
+      operationId: changeAccountPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "204":
+          description: Password changed and other sessions revoked
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
   /api/v1/bootstrap:
     get:
       operationId: bootstrap
@@ -343,8 +390,24 @@ paths:
                       $ref: "#/components/schemas/McpServer"
         "404":
           $ref: "#/components/responses/Error"
+  /api/v1/mcp-servers:
+    get:
+      operationId: listMcpServers
+      responses:
+        "200":
+          description: MCP Servers installed in the authenticated user's plugin library
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [servers]
+                properties:
+                  servers:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/McpServer"
     post:
-      operationId: createAgentMcpServer
+      operationId: createMcpServer
       requestBody:
         required: true
         content:
@@ -353,36 +416,29 @@ paths:
               $ref: "#/components/schemas/CreateMcpServerRequest"
       responses:
         "201":
-          description: Agent-scoped MCP Server configuration created
+          description: User-owned MCP Server installed
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/McpServer"
         "400":
           $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
         "409":
           $ref: "#/components/responses/Error"
-  /api/v1/agents/{agentId}/mcp-servers/{serverId}:
+  /api/v1/mcp-servers/{serverId}:
     parameters:
-      - $ref: "#/components/parameters/AgentId"
       - $ref: "#/components/parameters/McpServerId"
     patch:
-      operationId: updateAgentMcpServer
+      operationId: updateMcpServer
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [enabled]
-              properties:
-                enabled:
-                  type: boolean
+              $ref: "#/components/schemas/UpdateMcpServerRequest"
       responses:
         "200":
-          description: MCP Server enablement updated
+          description: User-owned MCP Server metadata updated
           content:
             application/json:
               schema:
@@ -390,18 +446,17 @@ paths:
         "404":
           $ref: "#/components/responses/Error"
     delete:
-      operationId: deleteAgentMcpServer
+      operationId: deleteMcpServer
       responses:
         "204":
-          description: MCP Server and cached tool catalog removed from this Agent
+          description: MCP Server, cached tools, and all Agent bindings removed from the user's library
         "404":
           $ref: "#/components/responses/Error"
-  /api/v1/agents/{agentId}/mcp-servers/{serverId}/refresh:
+  /api/v1/mcp-servers/{serverId}/refresh:
     parameters:
-      - $ref: "#/components/parameters/AgentId"
       - $ref: "#/components/parameters/McpServerId"
     post:
-      operationId: refreshAgentMcpServer
+      operationId: refreshMcpServer
       responses:
         "200":
           description: MCP connection checked and tool catalog refreshed
@@ -415,37 +470,121 @@ paths:
           $ref: "#/components/responses/Error"
         "502":
           $ref: "#/components/responses/Error"
-  /api/v1/agents/{agentId}/mcp-servers/{serverId}/tools/{toolName}:
+  /api/v1/mcp-servers/{serverId}/tools/{toolId}:
     parameters:
-      - $ref: "#/components/parameters/AgentId"
       - $ref: "#/components/parameters/McpServerId"
-      - name: toolName
+      - name: toolId
         in: path
         required: true
         schema:
           type: string
     patch:
-      operationId: updateAgentMcpTool
+      operationId: updateMcpToolRisk
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [enabled, riskLevel]
+              required: [riskLevel]
               properties:
-                enabled:
-                  type: boolean
                 riskLevel:
                   type: string
                   enum: [read-only, external-write, destructive]
       responses:
         "200":
-          description: Per-Agent MCP Tool permission updated
+          description: User-level MCP Tool risk classification updated
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/McpServer"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/v1/agents/{agentId}/mcp-servers/{serverId}:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+      - $ref: "#/components/parameters/McpServerId"
+    put:
+      operationId: bindAgentMcpServer
+      responses:
+        "200":
+          description: MCP Server enabled for this Agent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/McpServer"
+        "404":
+          $ref: "#/components/responses/Error"
+    delete:
+      operationId: unbindAgentMcpServer
+      responses:
+        "204":
+          description: MCP Server disabled for this Agent without removing it from the user library
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/v1/agents/{agentId}/mcp-tools/{toolId}:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+      - name: toolId
+        in: path
+        required: true
+        schema:
+          type: string
+    put:
+      operationId: bindAgentMcpTool
+      responses:
+        "200":
+          description: Read-only MCP Tool enabled for this Agent; its Server binding is created when needed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/McpTool"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+    delete:
+      operationId: unbindAgentMcpTool
+      responses:
+        "204":
+          description: MCP Tool disabled for this Agent
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/v1/agents/{agentId}/mentions:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+      - name: query
+        in: query
+        schema:
+          type: string
+          maxLength: 200
+      - name: kinds
+        in: query
+        schema:
+          type: string
+          enum: [mcp-tool]
+      - name: cursor
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+    get:
+      operationId: listAgentMentions
+      responses:
+        "200":
+          description: Extensible composer mention catalog projected from the user's library and current Agent bindings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MentionCatalogPage"
         "400":
           $ref: "#/components/responses/Error"
         "404":
@@ -680,6 +819,62 @@ components:
           type: string
         displayName:
           type: string
+    AccountSummary:
+      type: object
+      required: [email, status]
+      properties:
+        email:
+          type: string
+          format: email
+        status:
+          type: string
+          enum: [active, disabled]
+    UserPreferences:
+      type: object
+      required: [language, theme]
+      properties:
+        language:
+          type: string
+          enum: [system, en, zh-CN]
+        theme:
+          type: string
+          enum: [system, light, dark]
+    AccountSettingsResponse:
+      type: object
+      required: [account, user, preferences]
+      properties:
+        account:
+          $ref: "#/components/schemas/AccountSummary"
+        user:
+          $ref: "#/components/schemas/User"
+        preferences:
+          $ref: "#/components/schemas/UserPreferences"
+    UpdateAccountSettingsRequest:
+      type: object
+      minProperties: 1
+      properties:
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 80
+        language:
+          type: string
+          enum: [system, en, zh-CN]
+        theme:
+          type: string
+          enum: [system, light, dark]
+    ChangePasswordRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+          minLength: 1
+          maxLength: 128
+        newPassword:
+          type: string
+          minLength: 10
+          maxLength: 128
     AuthResponse:
       type: object
       required: [user, agent]
@@ -709,6 +904,7 @@ components:
       required:
         [
           id,
+          bound,
           agentId,
           kind,
           content,
@@ -869,8 +1065,12 @@ components:
           description: Optional immutable version label; omitted inline installs use a content-derived local label
     McpTool:
       type: object
-      required: [name, description, inputSchema, enabled, riskLevel]
+      required: [id, serverId, name, description, inputSchema, enabled, riskLevel]
       properties:
+        id:
+          type: string
+        serverId:
+          type: string
         name:
           type: string
         description:
@@ -888,7 +1088,6 @@ components:
       required:
         [
           id,
-          agentId,
           name,
           endpoint,
           transport,
@@ -901,8 +1100,9 @@ components:
       properties:
         id:
           type: string
-        agentId:
-          type: string
+        bound:
+          type: boolean
+          description: Whether this user-owned Server is enabled for the requested Agent projection
         name:
           type: string
         endpoint:
@@ -935,6 +1135,20 @@ components:
           format: date-time
     CreateMcpServerRequest:
       type: object
+      required: [agentId, name, endpoint]
+      properties:
+        agentId:
+          type: string
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        endpoint:
+          type: string
+          format: uri
+          maxLength: 2048
+    UpdateMcpServerRequest:
+      type: object
       required: [name, endpoint]
       properties:
         name:
@@ -945,6 +1159,68 @@ components:
           type: string
           format: uri
           maxLength: 2048
+    MentionGroup:
+      type: object
+      required: [id, kind, label]
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum: [mcp-plugin]
+        label:
+          type: string
+    MentionItem:
+      type: object
+      required: [id, kind, category, group, label, description, action, availability, toolId]
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum: [mcp-tool]
+        category:
+          type: string
+          enum: [tools]
+        group:
+          $ref: "#/components/schemas/MentionGroup"
+        label:
+          type: string
+        description:
+          type: string
+        action:
+          type: string
+          enum: [force-tool-once]
+        availability:
+          type: string
+          enum: [ready, needs-agent-enable, server-offline, tool-disabled, approval-required]
+        disabledReason:
+          type: string
+        toolId:
+          type: string
+    MentionCatalogPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/MentionItem"
+        nextCursor:
+          type: string
+    RunExecutionPolicy:
+      type: object
+      required: [mode]
+      properties:
+        mode:
+          type: string
+          enum: [auto, force-tool-once]
+        mentionId:
+          type: string
+        toolId:
+          type: string
+        toolName:
+          type: string
     Conversation:
       type: object
       required: [id, agentId, title, createdAt, updatedAt]
@@ -984,7 +1260,7 @@ components:
           format: date-time
     Run:
       type: object
-      required: [id, conversationId, status, createdAt]
+      required: [id, conversationId, status, executionPolicy, createdAt]
       properties:
         id:
           type: string
@@ -995,6 +1271,8 @@ components:
           enum: [queued, running, succeeded, failed, cancelled]
         failureCode:
           type: string
+        executionPolicy:
+          $ref: "#/components/schemas/RunExecutionPolicy"
         createdAt:
           type: string
           format: date-time
@@ -1061,8 +1339,23 @@ components:
             type: object
             additionalProperties: true
         forwardedProps:
+          $ref: "#/components/schemas/AgUiForwardedProps"
+    AgUiForwardedProps:
+      type: object
+      additionalProperties: true
+      properties:
+        aegislink:
           type: object
-          additionalProperties: true
+          properties:
+            selection:
+              type: object
+              required: [mentionId, action]
+              properties:
+                mentionId:
+                  type: string
+                action:
+                  type: string
+                  enum: [force-tool-once]
     AgUiMessage:
       type: object
       required: [id, role]

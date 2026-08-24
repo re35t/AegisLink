@@ -2,6 +2,8 @@
 
 Status: Accepted; V0 implemented.
 
+MCP ownership and binding details are revised by [ADR 0011](0011-user-mcp-library-agent-bindings-and-run-tool-selection.md).
+
 Date: 2026-08-23.
 
 ## Decision

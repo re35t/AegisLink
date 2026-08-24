@@ -159,11 +159,13 @@ func (repository *ConversationRepository) FailRun(ctx context.Context, principal
 func (repository *ConversationRepository) GetRun(ctx context.Context, principalID, runID string) (conversation.Run, error) {
 	var run conversation.Run
 	err := repository.database.QueryRowContext(ctx, `
-		SELECT runs.id, runs.conversation_id, runs.status, runs.failure_code, runs.created_at, runs.started_at, runs.finished_at
+		SELECT runs.id, runs.conversation_id, runs.status, runs.failure_code, runs.execution_policy,
+		       runs.created_at, runs.started_at, runs.finished_at
 		FROM runs
 		JOIN conversations ON conversations.id=runs.conversation_id
 		WHERE runs.id=$2 AND conversations.owner_principal_id=$1`, principalID, runID).Scan(
-		&run.ID, &run.ConversationID, &run.Status, &run.FailureCode, &run.CreatedAt, &run.StartedAt, &run.FinishedAt)
+		&run.ID, &run.ConversationID, &run.Status, &run.FailureCode, &run.ExecutionPolicy,
+		&run.CreatedAt, &run.StartedAt, &run.FinishedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return conversation.Run{}, conversation.ErrNotFound
 	}

@@ -2,6 +2,8 @@
 
 状态：已接受，V0 已实现。
 
+MCP 的所有权与绑定模型已由 [ADR 0011](0011-user-mcp-library-agent-bindings-and-run-tool-selection_cn.md) 修订。
+
 日期：2026-08-23。
 
 ## 背景

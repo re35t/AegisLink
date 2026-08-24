@@ -70,6 +70,45 @@ func (handler *handler) session(c *gin.Context) {
 	c.JSON(http.StatusOK, authResponse(actor.User, agentRecord))
 }
 
+func (handler *handler) getAccountSettings(c *gin.Context) {
+	settings, err := handler.accounts.GetSettings(c.Request.Context(), actorFrom(c))
+	if err != nil {
+		handler.handleError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, settings)
+}
+
+func (handler *handler) updateAccountSettings(c *gin.Context) {
+	var update account.SettingsUpdate
+	if err := c.ShouldBindJSON(&update); err != nil {
+		writeError(c, http.StatusBadRequest, "invalid_account_settings", "provide a display name, language, or theme to update")
+		return
+	}
+	settings, err := handler.accounts.UpdateSettings(c.Request.Context(), actorFrom(c), update)
+	if err != nil {
+		handler.handleError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, settings)
+}
+
+func (handler *handler) changeAccountPassword(c *gin.Context) {
+	var body struct {
+		CurrentPassword string `json:"currentPassword" binding:"required"`
+		NewPassword     string `json:"newPassword" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		writeError(c, http.StatusBadRequest, "invalid_new_password", "currentPassword and newPassword are required")
+		return
+	}
+	if err := handler.accounts.ChangePassword(c.Request.Context(), actorFrom(c), body.CurrentPassword, body.NewPassword); err != nil {
+		handler.handleError(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
 func (handler *handler) setSessionCookie(c *gin.Context, token string) {
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name: handler.auth.CookieName, Value: token, Path: "/", HttpOnly: true,

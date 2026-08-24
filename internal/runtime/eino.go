@@ -67,11 +67,23 @@ func (runtime *Eino) Stream(ctx context.Context, input conversation.RuntimeInput
 			send(ctx, output, conversation.RuntimeOutput{Err: fmt.Errorf("resolve runtime tools: %w", err)})
 			return
 		}
+		runModel := runtime.model
+		forcedToolName := ""
+		forcedDecisionPending := false
+		if input.Policy.Mode == "force-tool-once" {
+			forcedToolName = input.Policy.QualifiedToolName
+			if forcedToolName == "" {
+				send(ctx, output, conversation.RuntimeOutput{Err: conversation.ErrForcedToolNotCalled})
+				return
+			}
+			runModel = newForceOnceModel(runtime.model, forcedToolName)
+			forcedDecisionPending = true
+		}
 		agentRuntime, err := adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
 			Name:        input.Agent.Name,
 			Description: input.Agent.Description,
 			Instruction: agentInstruction(input.Agent.SystemPrompt, input.Context),
-			Model:       runtime.model,
+			Model:       runModel,
 			ToolsConfig: adk.ToolsConfig{ToolsNodeConfig: compose.ToolsNodeConfig{
 				Tools: runTools,
 			}},
@@ -86,6 +98,9 @@ func (runtime *Eino) Stream(ctx context.Context, input conversation.RuntimeInput
 		for {
 			event, ok := iterator.Next()
 			if !ok {
+				if forcedDecisionPending {
+					send(ctx, output, conversation.RuntimeOutput{Err: conversation.ErrForcedToolNotCalled})
+				}
 				return
 			}
 			if event.Err != nil {
@@ -99,7 +114,12 @@ func (runtime *Eino) Stream(ctx context.Context, input conversation.RuntimeInput
 			variant := event.Output.MessageOutput
 			var message *schema.Message
 			if variant.IsStreaming {
-				message, err = streamMessage(ctx, variant.MessageStream, output, variant.Role == schema.Assistant)
+				message, err = streamMessage(
+					ctx,
+					variant.MessageStream,
+					output,
+					variant.Role == schema.Assistant && !forcedDecisionPending,
+				)
 				if err != nil {
 					emitPendingToolFailures(ctx, output, pendingTools, err)
 					send(ctx, output, conversation.RuntimeOutput{Err: err})
@@ -107,7 +127,7 @@ func (runtime *Eino) Stream(ctx context.Context, input conversation.RuntimeInput
 				}
 			} else {
 				message = variant.Message
-				if message != nil && variant.Role == schema.Assistant && message.Content != "" && !send(ctx, output, conversation.RuntimeOutput{Delta: message.Content}) {
+				if message != nil && variant.Role == schema.Assistant && !forcedDecisionPending && message.Content != "" && !send(ctx, output, conversation.RuntimeOutput{Delta: message.Content}) {
 					return
 				}
 			}
@@ -116,6 +136,17 @@ func (runtime *Eino) Stream(ctx context.Context, input conversation.RuntimeInput
 			}
 			switch variant.Role {
 			case schema.Assistant:
+				if forcedDecisionPending {
+					forcedDecisionPending = false
+					if len(message.ToolCalls) == 0 {
+						send(ctx, output, conversation.RuntimeOutput{Err: conversation.ErrForcedToolNotCalled})
+						return
+					}
+					if len(message.ToolCalls) != 1 || message.ToolCalls[0].Function.Name != forcedToolName {
+						send(ctx, output, conversation.RuntimeOutput{Err: conversation.ErrForcedToolMismatch})
+						return
+					}
+				}
 				for _, call := range message.ToolCalls {
 					if call.ID == "" || call.Function.Name == "" {
 						err := errors.New("model returned a tool call without an id or name")

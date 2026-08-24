@@ -87,6 +87,20 @@ func (service *Service) StartRun(ctx context.Context, principalID string, reques
 	if !validRunIdentifier(request.ConversationID) || !validRunIdentifier(request.MessageID) || !validRunIdentifier(request.RunID) {
 		return Message{}, Run{}, ErrInvalidMessage
 	}
+	policy := ExecutionPolicy{Mode: "auto"}
+	if request.Selection != nil {
+		if request.Selection.Action != "force-tool-once" || !validRunIdentifier(request.Selection.MentionID) {
+			return Message{}, Run{}, ErrInvalidMessage
+		}
+		detail, err := service.repository.GetConversation(ctx, principalID, request.ConversationID)
+		if err != nil {
+			return Message{}, Run{}, err
+		}
+		policy, err = service.context.ResolveToolSelection(ctx, principalID, detail.Conversation.AgentID, request.Selection.MentionID)
+		if err != nil {
+			return Message{}, Run{}, err
+		}
+	}
 
 	message, run, err := service.repository.CreateMessageRun(
 		ctx,
@@ -95,6 +109,7 @@ func (service *Service) StartRun(ctx context.Context, principalID string, reques
 		request.MessageID,
 		request.RunID,
 		content,
+		policy,
 	)
 	if err != nil {
 		return Message{}, Run{}, err

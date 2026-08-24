@@ -2,22 +2,25 @@
 
 ## Current inventory
 
-| Responsibility                  | Existing implementation                                       | Preferred reuse path                                                                                          |
-| ------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| App shell                       | `components/layout/AppShell.tsx`                              | Reuse for product navigation, responsive navigation drawer, and workspace composition                         |
-| Query composition               | `Workspace.tsx`                                               | Keep remote coordination here until an owning feature query hook is justified                                 |
-| Conversation navigation         | `features/conversation/ConversationSidebar.tsx`               | Reuse its search, loading, empty, error, selection, and Agent-status patterns                                 |
-| Conversation workspace          | `features/conversation/ConversationWorkspace.tsx`             | Compose route-level Conversation states and assistant-ui; keep protocol details out                           |
-| Agent chat runtime              | `AssistantThread.tsx`                                         | Extend assistant-ui primitives and the AG-UI runtime options here or in a future Conversation feature adapter |
-| Thread/message/composer/actions | `@assistant-ui/react` primitives inside `AssistantThread.tsx` | Configure, compose, and style these primitives; do not create parallel chat controls                          |
-| Persisted history adapter       | assistant-ui `ThreadHistoryAdapter` in `AssistantThread.tsx`  | Keep PostgreSQL authoritative and translate API messages at this boundary                                     |
-| Markdown                        | `MarkdownText.tsx` using `@assistant-ui/react-markdown`       | Add safe render extensions here so all assistant messages behave consistently                                 |
-| REST API                        | `api/client.ts` + generated `api/schema.ts`                   | Add typed client operations after updating OpenAPI; never fetch ad hoc from a page                            |
-| Server cache                    | shared TanStack `queryClient`                                 | Add object-specific query hooks as features grow; do not introduce duplicate caches                           |
-| Skill management                | `features/capabilities/SkillsPage.tsx`                        | Reuse its custom editor, multipart import, version binding, bundle metadata, and Agent-scoped mutation states |
-| Run recovery                    | `useRunEvents.ts` + `features/conversation/RunRecovery.tsx`   | Preserve until native AG-UI replay/resume replaces it with equivalent acceptance coverage                     |
-| Icons                           | `lucide-react`                                                | Reuse existing icons and sizing conventions; do not add a second icon package                                 |
-| Global visual rules             | `styles.css`                                                  | Extract tokens and feature styles incrementally; do not add a styling framework for convenience               |
+| Responsibility                  | Existing implementation                                       | Preferred reuse path                                                                                            |
+| ------------------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| App shell                       | `components/layout/AppShell.tsx`                              | Reuse for product navigation, responsive navigation drawer, and workspace composition                           |
+| Query composition               | `Workspace.tsx`                                               | Keep remote coordination here until an owning feature query hook is justified                                   |
+| Conversation navigation         | `features/conversation/ConversationSidebar.tsx`               | Reuse its search, loading, empty, error, selection, and Agent-status patterns                                   |
+| Conversation workspace          | `features/conversation/ConversationWorkspace.tsx`             | Compose route-level Conversation states and assistant-ui; keep protocol details out                             |
+| Agent chat runtime              | `AssistantThread.tsx`                                         | Extend assistant-ui primitives and the AG-UI runtime options here or in a future Conversation feature adapter   |
+| Mention Catalog                 | `MentionCatalog.tsx` + assistant-ui unstable Trigger Popover  | Keep unstable API usage inside this wrapper; both `@` and Tools button must use the same catalog and selection  |
+| Thread/message/composer/actions | `@assistant-ui/react` primitives inside `AssistantThread.tsx` | Configure, compose, and style these primitives; do not create parallel chat controls                            |
+| Persisted history adapter       | assistant-ui `ThreadHistoryAdapter` in `AssistantThread.tsx`  | Keep PostgreSQL authoritative and translate API messages at this boundary                                       |
+| Markdown                        | `MarkdownText.tsx` using `@assistant-ui/react-markdown`       | Add safe render extensions here so all assistant messages behave consistently                                   |
+| REST API                        | `api/client.ts` + generated `api/schema.ts`                   | Add typed client operations after updating OpenAPI; never fetch ad hoc from a page                              |
+| Server cache                    | shared TanStack `queryClient`                                 | Add object-specific query hooks as features grow; do not introduce duplicate caches                             |
+| Skill management                | `features/capabilities/SkillsPage.tsx`                        | Reuse its custom editor, multipart import, version binding, bundle metadata, and Agent-scoped mutation states   |
+| Run recovery                    | `useRunEvents.ts` + `features/conversation/RunRecovery.tsx`   | Preserve until native AG-UI replay/resume replaces it with equivalent acceptance coverage                       |
+| Icons                           | `lucide-react`                                                | Reuse existing icons and sizing conventions; do not add a second icon package                                   |
+| Global visual rules             | `styles.css`                                                  | Extract tokens and feature styles incrementally; do not add a styling framework for convenience                 |
+| Account settings                | `features/settings/SettingsPage.tsx`                          | Reuse for profile, language/theme preferences, password change states, and responsive settings navigation       |
+| Interface preferences           | `features/settings/preferences.tsx`                           | Read the Query-backed server preference and derive document language/theme; do not mirror it into another store |
 
 ## Reuse decision
 
@@ -54,6 +57,8 @@ A new shared primitive is justified when it standardizes one or more of:
 - a product-specific wrapper around assistant-ui that protects AG-UI, permission, or persistence invariants.
 
 Keep primitives free of route-specific queries. Feature components may use query hooks; UI primitives receive data and callbacks.
+
+`MentionCatalog.tsx` is the deliberate exception at the assistant-ui boundary: it coordinates the Agent-scoped Mention query and explicit Tool enable mutation because these states are part of the picker workflow. Other Composer components consume only `SelectedMention` and do not depend on the unstable Trigger API.
 
 ## Component review questions
 

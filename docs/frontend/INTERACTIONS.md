@@ -43,6 +43,15 @@ Tool UI uses assistant-ui Tool UI rendering and AG-UI `TOOL_CALL_*` events. The 
 
 Do not render raw JSON as the primary successful result. Raw input/output may be available behind `View details` for diagnostics, with secrets redacted by the server.
 
+### User-specified Tool
+
+- Typing `@` and pressing the Composer `Tools` button open the same assistant-ui Mention Catalog.
+- The first catalog category is `Tools`; entries show Tool name, MCP Plugin, description, and availability.
+- Only one Tool can be selected. A later selection replaces the earlier selection and appears as a removable Composer chip; no hidden directive text is added to the user message.
+- `needs-agent-enable` and `tool-disabled` entries perform an explicit Agent binding mutation before selection. Offline and approval-required entries explain why they cannot run.
+- A failed enable action preserves the message draft and provides retry. A selected Tool is cleared only after `RUN_STARTED`, not when Send is pressed.
+- The Run Inspector distinguishes the user-specified Tool from actual `TOOL_CALL_*` results.
+
 ## Human-in-the-loop and approvals
 
 Meaningful external effects require an explicit approval state unless policy has already granted the exact scope. An approval surface names:

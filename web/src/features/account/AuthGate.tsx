@@ -4,6 +4,7 @@ import { Bot, RefreshCw } from "lucide-react";
 
 import { APIError, api, type AuthResponse } from "../../api/client";
 import { LoginPage } from "./LoginPage";
+import { InterfacePreferencesProvider } from "../settings/preferences";
 
 interface AuthGateProps {
   children: ReactNode;
@@ -46,7 +47,9 @@ export function AuthGate({ children }: AuthGateProps) {
     );
   }
 
-  return children;
+  return (
+    <InterfacePreferencesProvider>{children}</InterfacePreferencesProvider>
+  );
 }
 
 function sessionSuccess(refetch: () => Promise<unknown>) {

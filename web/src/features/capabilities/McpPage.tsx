@@ -11,8 +11,8 @@ export function McpPage() {
     <CapabilityShell
       area="mcp"
       eyebrow="Tools"
-      title="MCP connections"
-      description="Connect Streamable HTTP servers and explicitly control every tool exposed to this agent."
+      title="MCP plugin library"
+      description="Install MCP servers once, then choose which plugins and read-only tools this agent may use."
     >
       {(agentId) => <McpManager agentId={agentId} />}
     </CapabilityShell>
@@ -47,7 +47,7 @@ function McpManager({ agentId }: { agentId: string }) {
       >
         <div className="composer-heading">
           <div>
-            <h2>Add an MCP server</h2>
+            <h2>Install an MCP plugin</h2>
             <p>
               Production endpoints must use HTTPS. Local HTTP requires an
               explicit server setting.
@@ -81,7 +81,7 @@ function McpManager({ agentId }: { agentId: string }) {
             type="submit"
             disabled={!name.trim() || !endpoint.trim() || create.isPending}
           >
-            <Plus size={16} /> Add server
+            <Plus size={16} /> Install plugin
           </button>
         </div>
       </form>
@@ -107,8 +107,8 @@ function McpManager({ agentId }: { agentId: string }) {
         </div>
       ) : (
         <div className="capability-empty">
-          <strong>No MCP connections</strong>
-          <span>Add a server, then refresh it to discover tools.</span>
+          <strong>Your plugin library is empty</strong>
+          <span>Install a server, then discover and enable its tools.</span>
         </div>
       )}
     </div>
@@ -122,16 +122,19 @@ function McpServerCard({
   agentId: string;
   server: McpServer;
 }) {
-  const update = useMutation({
-    mutationFn: () => api.updateMcpServer(agentId, server.id, !server.enabled),
+  const binding = useMutation({
+    mutationFn: async () => {
+      if (server.bound) await api.unbindAgentMcpServer(agentId, server.id);
+      else await api.bindAgentMcpServer(agentId, server.id);
+    },
     onSuccess: () => invalidate(agentId),
   });
   const refresh = useMutation({
-    mutationFn: () => api.refreshMcpServer(agentId, server.id),
+    mutationFn: () => api.refreshMcpServer(server.id),
     onSuccess: () => invalidate(agentId),
   });
   const remove = useMutation({
-    mutationFn: () => api.deleteMcpServer(agentId, server.id),
+    mutationFn: () => api.deleteMcpServer(server.id),
     onSuccess: () => invalidate(agentId),
   });
 
@@ -150,10 +153,11 @@ function McpServerCard({
         <label className="switch-control">
           <input
             type="checkbox"
-            checked={server.enabled}
-            onChange={() => update.mutate()}
+            checked={server.bound && server.enabled}
+            disabled={binding.isPending}
+            onChange={() => binding.mutate()}
           />
-          <span>{server.enabled ? "Enabled" : "Disabled"}</span>
+          <span>{server.bound ? "Enabled for agent" : "In library"}</span>
         </label>
       </div>
 
@@ -164,7 +168,7 @@ function McpServerCard({
         <div className="tool-list">
           {server.tools.map((tool) => (
             <McpToolRow
-              key={tool.name}
+              key={tool.id}
               agentId={agentId}
               serverId={server.id}
               tool={tool}
@@ -190,14 +194,22 @@ function McpServerCard({
         <button
           type="button"
           className="danger-button"
-          onClick={() => remove.mutate()}
+          onClick={() => {
+            if (
+              window.confirm(
+                `Remove ${server.name} from your plugin library? This disables it for every Agent and removes its discovered tools.`,
+              )
+            ) {
+              remove.mutate();
+            }
+          }}
         >
-          <Trash2 size={15} /> Remove
+          <Trash2 size={15} /> Remove from library
         </button>
       </div>
-      {(update.isError || refresh.isError || remove.isError) && (
+      {(binding.isError || refresh.isError || remove.isError) && (
         <span className="inline-error">
-          {update.error?.message ??
+          {binding.error?.message ??
             refresh.error?.message ??
             remove.error?.message}
         </span>
@@ -216,8 +228,15 @@ function McpToolRow({
   tool: McpTool;
 }) {
   const update = useMutation({
-    mutationFn: (next: { enabled: boolean; risk: McpTool["riskLevel"] }) =>
-      api.updateMcpTool(agentId, serverId, tool.name, next.enabled, next.risk),
+    mutationFn: (risk: McpTool["riskLevel"]) =>
+      api.updateMcpToolRisk(serverId, tool.id, risk),
+    onSuccess: () => invalidate(agentId),
+  });
+  const binding = useMutation({
+    mutationFn: async () => {
+      if (tool.enabled) await api.unbindAgentMcpTool(agentId, tool.id);
+      else await api.bindAgentMcpTool(agentId, tool.id);
+    },
     onSuccess: () => invalidate(agentId),
   });
   const executable = tool.riskLevel === "read-only";
@@ -232,10 +251,7 @@ function McpToolRow({
         aria-label={`${tool.name} risk`}
         value={tool.riskLevel}
         onChange={(event) =>
-          update.mutate({
-            enabled: false,
-            risk: event.target.value as McpTool["riskLevel"],
-          })
+          update.mutate(event.target.value as McpTool["riskLevel"])
         }
       >
         <option value="read-only">Read only</option>
@@ -251,13 +267,16 @@ function McpToolRow({
         <input
           type="checkbox"
           checked={tool.enabled}
-          disabled={!executable || update.isPending}
-          onChange={() =>
-            update.mutate({ enabled: !tool.enabled, risk: tool.riskLevel })
-          }
+          disabled={!executable || update.isPending || binding.isPending}
+          onChange={() => binding.mutate()}
         />
         <span>{tool.enabled ? "On" : "Off"}</span>
       </label>
+      {(update.isError || binding.isError) && (
+        <span className="inline-error">
+          {update.error?.message ?? binding.error?.message}
+        </span>
+      )}
     </div>
   );
 }

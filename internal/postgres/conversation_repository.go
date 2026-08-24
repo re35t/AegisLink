@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -89,9 +90,10 @@ func (repository *ConversationRepository) GetConversation(ctx context.Context, o
 	}
 	var active conversation.Run
 	err = repository.database.QueryRowContext(ctx, `
-		SELECT id, conversation_id, status, failure_code, created_at, started_at, finished_at
+		SELECT id, conversation_id, status, failure_code, execution_policy, created_at, started_at, finished_at
 		FROM runs WHERE conversation_id=$1 AND status IN ('queued', 'running')`, id).Scan(
-		&active.ID, &active.ConversationID, &active.Status, &active.FailureCode, &active.CreatedAt, &active.StartedAt, &active.FinishedAt)
+		&active.ID, &active.ConversationID, &active.Status, &active.FailureCode, &active.ExecutionPolicy,
+		&active.CreatedAt, &active.StartedAt, &active.FinishedAt)
 	if err == nil {
 		detail.ActiveRun = &active
 	} else if !errors.Is(err, sql.ErrNoRows) {
@@ -100,7 +102,7 @@ func (repository *ConversationRepository) GetConversation(ctx context.Context, o
 	return detail, nil
 }
 
-func (repository *ConversationRepository) CreateMessageRun(ctx context.Context, ownerID, conversationID, messageID, runID, content string) (conversation.Message, conversation.Run, error) {
+func (repository *ConversationRepository) CreateMessageRun(ctx context.Context, ownerID, conversationID, messageID, runID, content string, policy conversation.ExecutionPolicy) (conversation.Message, conversation.Run, error) {
 	transaction, err := repository.database.BeginTx(ctx, nil)
 	if err != nil {
 		return conversation.Message{}, conversation.Run{}, fmt.Errorf("begin message run: %w", err)
@@ -124,10 +126,14 @@ func (repository *ConversationRepository) CreateMessageRun(ctx context.Context, 
 		return conversation.Message{}, conversation.Run{}, fmt.Errorf("insert user message: %w", err)
 	}
 
-	run := conversation.Run{ID: runID, ConversationID: conversationID, Status: "queued"}
+	policyJSON, err := json.Marshal(policy)
+	if err != nil {
+		return conversation.Message{}, conversation.Run{}, fmt.Errorf("encode run execution policy: %w", err)
+	}
+	run := conversation.Run{ID: runID, ConversationID: conversationID, Status: "queued", ExecutionPolicy: policy}
 	err = transaction.QueryRowContext(ctx, `
-		INSERT INTO runs (id, conversation_id, input_message_id, status) VALUES ($1, $2, $3, 'queued')
-		RETURNING created_at`, runID, conversationID, messageID).Scan(&run.CreatedAt)
+		INSERT INTO runs (id, conversation_id, input_message_id, status, execution_policy) VALUES ($1, $2, $3, 'queued', $4)
+		RETURNING created_at`, runID, conversationID, messageID, policyJSON).Scan(&run.CreatedAt)
 	if err != nil {
 		var postgresError *pgconn.PgError
 		if errors.As(err, &postgresError) && postgresError.ConstraintName == "runs_one_active_per_conversation" {

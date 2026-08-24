@@ -93,6 +93,66 @@ func TestEinoRunsReActToolLoop(t *testing.T) {
 	}
 }
 
+func TestEinoForcesOnlyTheFirstModelDecision(t *testing.T) {
+	t.Parallel()
+	echoTool, err := toolutils.InferTool(
+		"echo", "Echo text", func(_ context.Context, input *echoInput) (*echoOutput, error) {
+			return &echoOutput{Text: input.Text}, nil
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake := &reactModel{}
+	runtime := NewWithModel(fake, Options{Tools: []tool.BaseTool{echoTool}, MaxIterations: 4})
+	for output := range runtime.Stream(t.Context(), conversation.RuntimeInput{
+		Agent: agent.Agent{Name: "Aegis"}, Messages: []conversation.Message{{Role: "user", Content: "echo"}},
+		Policy: conversation.ExecutionPolicy{Mode: "force-tool-once", QualifiedToolName: "echo"},
+	}) {
+		if output.Err != nil {
+			t.Fatalf("unexpected runtime error: %v", output.Err)
+		}
+	}
+	if len(fake.options) != 2 {
+		t.Fatalf("model calls = %d", len(fake.options))
+	}
+	if fake.options[0].ToolChoice == nil || *fake.options[0].ToolChoice != schema.ToolChoiceForced ||
+		len(fake.options[0].AllowedToolNames) != 1 || fake.options[0].AllowedToolNames[0] != "echo" {
+		t.Fatalf("first call was not precisely forced: %#v", fake.options[0])
+	}
+	if fake.options[1].ToolChoice != nil || len(fake.options[1].AllowedToolNames) != 0 {
+		t.Fatalf("second call did not return to auto mode: %#v", fake.options[1])
+	}
+}
+
+func TestEinoRejectsIgnoredAndMismatchedForcedTool(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name     string
+		model    model.ToolCallingChatModel
+		expected error
+	}{
+		{name: "ignored", model: &fakeModel{}, expected: conversation.ErrForcedToolNotCalled},
+		{name: "mismatch", model: &wrongToolModel{}, expected: conversation.ErrForcedToolMismatch},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			runtime := NewWithModel(test.model)
+			var runtimeErr error
+			for output := range runtime.Stream(t.Context(), conversation.RuntimeInput{
+				Agent: agent.Agent{Name: "Aegis"}, Messages: []conversation.Message{{Role: "user", Content: "use it"}},
+				Policy: conversation.ExecutionPolicy{Mode: "force-tool-once", QualifiedToolName: "expected"},
+			}) {
+				if output.Err != nil {
+					runtimeErr = output.Err
+				}
+			}
+			if !errors.Is(runtimeErr, test.expected) {
+				t.Fatalf("error = %v, expected %v", runtimeErr, test.expected)
+			}
+		})
+	}
+}
+
 type fakeModel struct {
 	input []*schema.Message
 	tools []*schema.ToolInfo
@@ -126,6 +186,7 @@ type echoOutput struct {
 type reactModel struct {
 	calls         int
 	tools         []*schema.ToolInfo
+	options       []*model.Options
 	sawToolResult bool
 }
 
@@ -135,7 +196,9 @@ func (fake *reactModel) Generate(context.Context, []*schema.Message, ...model.Op
 
 func (fake *reactModel) Stream(_ context.Context, input []*schema.Message, options ...model.Option) (*schema.StreamReader[*schema.Message], error) {
 	fake.calls++
-	fake.tools = model.GetCommonOptions(&model.Options{}, options...).Tools
+	resolved := model.GetCommonOptions(&model.Options{}, options...)
+	fake.options = append(fake.options, resolved)
+	fake.tools = resolved.Tools
 	if fake.calls == 1 {
 		index := 0
 		return schema.StreamReaderFromArray([]*schema.Message{schema.AssistantMessage("", []schema.ToolCall{{
@@ -154,6 +217,24 @@ func (fake *reactModel) Stream(_ context.Context, input []*schema.Message, optio
 		}
 	}
 	return schema.StreamReaderFromArray([]*schema.Message{schema.AssistantMessage("tool result observed", nil)}), nil
+}
+
+type wrongToolModel struct{}
+
+func (*wrongToolModel) Generate(context.Context, []*schema.Message, ...model.Option) (*schema.Message, error) {
+	return nil, errors.New("unexpected Generate")
+}
+
+func (*wrongToolModel) Stream(context.Context, []*schema.Message, ...model.Option) (*schema.StreamReader[*schema.Message], error) {
+	index := 0
+	return schema.StreamReaderFromArray([]*schema.Message{schema.AssistantMessage("", []schema.ToolCall{{
+		Index: &index, ID: "wrong-call", Type: "function",
+		Function: schema.FunctionCall{Name: "wrong", Arguments: `{}`},
+	}})}), nil
+}
+
+func (fake *wrongToolModel) WithTools([]*schema.ToolInfo) (model.ToolCallingChatModel, error) {
+	return fake, nil
 }
 
 func (fake *reactModel) WithTools(tools []*schema.ToolInfo) (model.ToolCallingChatModel, error) {

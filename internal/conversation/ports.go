@@ -15,12 +15,19 @@ type RunRequest struct {
 	MessageID      string
 	RunID          string
 	Content        string
+	Selection      *RunSelection
+}
+
+type RunSelection struct {
+	MentionID string
+	Action    string
 }
 
 type RuntimeInput struct {
 	Agent    agent.Agent
 	Messages []Message
 	Context  AgentContext
+	Policy   ExecutionPolicy
 }
 
 type AgentContext struct {
@@ -95,6 +102,7 @@ type Runtime interface {
 
 type ContextProvider interface {
 	Resolve(context.Context, string, string) (AgentContext, error)
+	ResolveToolSelection(context.Context, string, string, string) (ExecutionPolicy, error)
 }
 
 type AgentReader interface {
@@ -108,7 +116,7 @@ type Repository interface {
 	ListConversations(context.Context, string) ([]Conversation, error)
 	CreateConversation(context.Context, string, string, string) (Conversation, error)
 	GetConversation(context.Context, string, string) (Detail, error)
-	CreateMessageRun(context.Context, string, string, string, string, string) (Message, Run, error)
+	CreateMessageRun(context.Context, string, string, string, string, string, ExecutionPolicy) (Message, Run, error)
 	MarkRunRunning(context.Context, string, string) error
 	AppendRunEvent(context.Context, string, string, string, any) (RunEvent, error)
 	CompleteRun(context.Context, string, string, string, string, string) (Message, error)

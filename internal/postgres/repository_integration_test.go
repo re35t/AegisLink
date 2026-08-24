@@ -52,14 +52,18 @@ func TestRepositoryConversationRunLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	message, run, err := repository.CreateMessageRun(t.Context(), ownerID, created.ID, "message-1", "run-1", "hello")
+	policy := conversation.ExecutionPolicy{
+		Mode: "force-tool-once", MentionID: "opaque-mention", ToolID: "tool-one",
+		ToolName: "read", QualifiedToolName: "mcp__plugin__read__deadbeef",
+	}
+	message, run, err := repository.CreateMessageRun(t.Context(), ownerID, created.ID, "message-1", "run-1", "hello", policy)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if message.Sequence != 1 || run.Status != "queued" {
+	if message.Sequence != 1 || run.Status != "queued" || run.ExecutionPolicy.MentionID != "opaque-mention" {
 		t.Fatalf("unexpected initial state: message=%#v run=%#v", message, run)
 	}
-	_, _, err = repository.CreateMessageRun(t.Context(), ownerID, created.ID, "message-2", "run-2", "duplicate")
+	_, _, err = repository.CreateMessageRun(t.Context(), ownerID, created.ID, "message-2", "run-2", "duplicate", conversation.ExecutionPolicy{Mode: "auto"})
 	if !errors.Is(err, conversation.ErrActiveRun) {
 		t.Fatalf("expected active run conflict, got %v", err)
 	}
@@ -75,6 +79,14 @@ func TestRepositoryConversationRunLifecycle(t *testing.T) {
 	}
 	if assistant.Sequence != 2 {
 		t.Fatalf("assistant sequence = %d", assistant.Sequence)
+	}
+	storedRun, err := repository.GetRun(t.Context(), ownerID, run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if storedRun.ExecutionPolicy.Mode != "force-tool-once" || storedRun.ExecutionPolicy.ToolID != "tool-one" ||
+		storedRun.ExecutionPolicy.ToolName != "read" || storedRun.ExecutionPolicy.QualifiedToolName != "" {
+		t.Fatalf("execution policy snapshot was not restored safely: %#v", storedRun.ExecutionPolicy)
 	}
 	events, err := repository.ListRunEvents(t.Context(), ownerID, run.ID, 0)
 	if err != nil {
@@ -245,21 +257,24 @@ func TestAgentCapabilitiesRemainIsolated(t *testing.T) {
 
 	mcpRepository := NewMCPRepository(database)
 	server, err := mcpRepository.Create(t.Context(), mcp.Server{
-		ID: "server-one", OwnerPrincipalID: principalOne, AgentID: agentOne,
+		ID: "server-one", OwnerPrincipalID: principalOne,
 		Name: "private-mcp", Endpoint: "https://example.com/mcp",
-	})
+	}, agentOne)
 	if err != nil {
 		t.Fatal(err)
 	}
-	server, err = mcpRepository.ReplaceTools(t.Context(), principalOne, agentOne, server.ID, []mcp.Tool{{
+	server, err = mcpRepository.ReplaceTools(t.Context(), principalOne, server.ID, []mcp.Tool{{
 		Name: "read", Description: "read data", InputSchema: json.RawMessage(`{"type":"object"}`),
-		Enabled: true, RiskLevel: mcp.ReadOnly,
+		RiskLevel: mcp.ReadOnly,
 	}}, "2025-11-25")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(server.Tools) != 1 {
 		t.Fatalf("server tools = %#v", server.Tools)
+	}
+	if _, err := mcpRepository.BindTool(t.Context(), principalOne, agentOne, server.Tools[0].ID); err != nil {
+		t.Fatal(err)
 	}
 	otherTools, err := mcpRepository.RuntimeTools(t.Context(), principalTwo, agentTwo)
 	if err != nil {
@@ -268,7 +283,7 @@ func TestAgentCapabilitiesRemainIsolated(t *testing.T) {
 	if len(otherTools) != 0 {
 		t.Fatalf("agent two can execute agent one's MCP tool: %#v", otherTools)
 	}
-	if _, err := mcpRepository.Get(t.Context(), principalTwo, agentTwo, server.ID); !errors.Is(err, mcp.ErrNotFound) {
+	if _, err := mcpRepository.Get(t.Context(), principalTwo, server.ID); !errors.Is(err, mcp.ErrNotFound) {
 		t.Fatalf("cross-agent MCP lookup should be hidden, got %v", err)
 	}
 }
@@ -320,6 +335,44 @@ func TestAccountRegistrationBindsPrincipalAgentAndSession(t *testing.T) {
 	}
 	if actor.User.ID != registration.User.ID || actor.AccountID != registration.Account.ID {
 		t.Fatalf("unexpected actor: %#v", actor)
+	}
+	settings, err := repository.GetSettings(t.Context(), registration.Account.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.Preferences.Language != account.LanguageSystem || settings.Preferences.Theme != account.ThemeSystem {
+		t.Fatalf("unexpected default preferences: %#v", settings.Preferences)
+	}
+	displayName := "Updated user"
+	language := account.LanguageChinese
+	theme := account.ThemeDark
+	settings, err = repository.UpdateSettings(t.Context(), registration.Account.ID, registration.User.ID, account.SettingsUpdate{
+		DisplayName: &displayName, Language: &language, Theme: &theme,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.User.DisplayName != displayName || settings.Preferences.Language != language || settings.Preferences.Theme != theme {
+		t.Fatalf("settings update was not persisted: %#v", settings)
+	}
+	otherTokenHash := []byte("another-session-token-hash-00001")
+	if err := repository.CreateSession(t.Context(), account.Session{
+		ID: "session-2", AccountID: registration.Account.ID, TokenHash: otherTokenHash, ExpiresAt: expiresAt,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.ChangePassword(t.Context(), registration.Account.ID, "session-1", "new-encoded-password"); err != nil {
+		t.Fatal(err)
+	}
+	passwordHash, err := repository.PasswordHash(t.Context(), registration.Account.ID)
+	if err != nil || passwordHash != "new-encoded-password" {
+		t.Fatalf("password was not updated: hash=%q err=%v", passwordHash, err)
+	}
+	if _, err := repository.AuthenticateSession(t.Context(), otherTokenHash, time.Now()); !errors.Is(err, account.ErrUnauthenticated) {
+		t.Fatalf("other session should be revoked, got %v", err)
+	}
+	if _, err := repository.AuthenticateSession(t.Context(), tokenHash, time.Now()); err != nil {
+		t.Fatalf("current session should remain active: %v", err)
 	}
 }
 
@@ -400,5 +453,113 @@ func TestSkillPackageAndBundleMigrationsPreserveInstalledSkill(t *testing.T) {
 	}
 	if filePath != "SKILL.md" || fileHash != "sha256:migrated" || !strings.Contains(string(fileContent), "migrated-skill") {
 		t.Fatalf("legacy Skill manifest was not migrated into bundle files: path=%q hash=%q content=%q", filePath, fileHash, fileContent)
+	}
+}
+
+func TestMCPLibraryMigrationPreservesBindingsAndRefreshIdentity(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is not set")
+	}
+	database, err := Open(t.Context(), databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	goose.SetBaseFS(migrations.FS)
+	if err := goose.SetDialect("postgres"); err != nil {
+		t.Fatal(err)
+	}
+	if err := goose.DownTo(database, ".", 0); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := goose.Up(database, "."); err != nil {
+			t.Errorf("restore latest schema: %v", err)
+		}
+	}()
+	if err := goose.UpTo(database, ".", 6); err != nil {
+		t.Fatal(err)
+	}
+	statements := []string{
+		`INSERT INTO human_principals (id, display_name) VALUES ('mcp-migration-principal', 'MCP Migration')`,
+		`INSERT INTO agents (id, owner_principal_id, name, description, system_prompt)
+		 VALUES ('mcp-migration-agent', 'mcp-migration-principal', 'Agent', '', 'prompt'),
+		        ('mcp-migration-sibling', 'mcp-migration-principal', 'Sibling', '', 'prompt')`,
+		`INSERT INTO mcp_servers (
+			id, owner_principal_id, agent_id, name, endpoint, enabled, status, protocol_version
+		 ) VALUES (
+			'mcp-migration-server', 'mcp-migration-principal', 'mcp-migration-agent',
+			'legacy-plugin', 'https://example.com/mcp', true, 'connected', '2025-11-25'
+		 )`,
+		`INSERT INTO mcp_tools (server_id, name, description, input_schema, enabled, risk_level)
+		 VALUES ('mcp-migration-server', 'read', 'legacy read', '{"type":"object"}', true, 'read-only')`,
+	}
+	for _, statement := range statements {
+		if _, err := database.ExecContext(t.Context(), statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := goose.UpTo(database, ".", 7); err != nil {
+		t.Fatal(err)
+	}
+
+	var toolID string
+	var serverEnabled, toolEnabled bool
+	err = database.QueryRowContext(t.Context(), `
+		SELECT tools.id, server_bindings.enabled, tool_bindings.enabled
+		FROM mcp_tools tools
+		JOIN agent_mcp_servers server_bindings
+		  ON server_bindings.server_id=tools.server_id AND server_bindings.agent_id='mcp-migration-agent'
+		JOIN agent_mcp_tools tool_bindings
+		  ON tool_bindings.tool_id=tools.id AND tool_bindings.agent_id='mcp-migration-agent'
+		WHERE tools.server_id='mcp-migration-server' AND tools.name='read'`,
+	).Scan(&toolID, &serverEnabled, &toolEnabled)
+	if err != nil || toolID == "" || !serverEnabled || !toolEnabled {
+		t.Fatalf("legacy MCP binding was not preserved: tool=%q server=%v toolEnabled=%v err=%v", toolID, serverEnabled, toolEnabled, err)
+	}
+
+	repository := NewMCPRepository(database)
+	server, err := repository.ReplaceTools(t.Context(), "mcp-migration-principal", "mcp-migration-server", []mcp.Tool{
+		{Name: "read", Description: "refreshed", InputSchema: json.RawMessage(`{"type":"object"}`), RiskLevel: mcp.ReadOnly},
+		{Name: "new-tool", Description: "new", InputSchema: json.RawMessage(`{"type":"object"}`), RiskLevel: mcp.ReadOnly},
+	}, "2025-11-25")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(server.Tools) != 2 {
+		t.Fatalf("refreshed tools = %#v", server.Tools)
+	}
+	projected, err := repository.GetForAgent(t.Context(), "mcp-migration-principal", "mcp-migration-agent", server.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var refreshed, discovered mcp.Tool
+	for _, tool := range projected.Tools {
+		switch tool.Name {
+		case "read":
+			refreshed = tool
+		case "new-tool":
+			discovered = tool
+		}
+	}
+	if refreshed.ID != toolID || !refreshed.Enabled || discovered.ID == "" || discovered.Enabled {
+		t.Fatalf("refresh identity/default enablement is wrong: old=%#v new=%#v", refreshed, discovered)
+	}
+	if _, err := repository.BindTool(t.Context(), "mcp-migration-principal", "mcp-migration-sibling", toolID); err != nil {
+		t.Fatal(err)
+	}
+	siblingTools, err := repository.RuntimeTools(t.Context(), "mcp-migration-principal", "mcp-migration-sibling")
+	if err != nil || len(siblingTools) != 1 {
+		t.Fatalf("sibling binding was not independently enabled: tools=%#v err=%v", siblingTools, err)
+	}
+	if _, err := repository.UpdateToolRisk(t.Context(), "mcp-migration-principal", server.ID, toolID, mcp.ExternalWrite); err != nil {
+		t.Fatal(err)
+	}
+	for _, agentID := range []string{"mcp-migration-agent", "mcp-migration-sibling"} {
+		tools, err := repository.RuntimeTools(t.Context(), "mcp-migration-principal", agentID)
+		if err != nil || len(tools) != 0 {
+			t.Fatalf("risk change did not revoke %s: tools=%#v err=%v", agentID, tools, err)
+		}
 	}
 }
