@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -116,7 +117,7 @@ func TestAgentCapabilitiesRemainIsolated(t *testing.T) {
 	}
 	if _, err := database.ExecContext(t.Context(), `
 		TRUNCATE account_sessions, user_accounts, run_events, runs, messages, conversations,
-		         mcp_tools, mcp_servers, agent_skills, skill_versions, skill_packages,
+		         mcp_tools, mcp_servers, agent_skills, skill_version_files, skill_versions, skill_packages,
 		         memories, agents, human_principals CASCADE`); err != nil {
 		t.Fatal(err)
 	}
@@ -154,18 +155,29 @@ func TestAgentCapabilitiesRemainIsolated(t *testing.T) {
 	}
 
 	skillRepository := NewSkillRepository(database)
+	firstContent := "---\nname: private-skill\ndescription: private v1\n---\n"
 	firstSkill, err := skillRepository.Install(t.Context(), skills.Skill{
 		ID: "skill-package-one", VersionID: "skill-version-one", OwnerPrincipalID: principalOne, AgentID: agentOne,
 		Name: "private-skill", Description: "private v1", Version: "1.0.0", SourceType: "inline",
-		Content: "---\nname: private-skill\ndescription: private v1\n---\n", ContentHash: "sha256:one", Enabled: true,
+		Content: firstContent, ContentHash: "sha256:one", Enabled: true,
+		Files: []skills.File{{
+			Path: "SKILL.md", MediaType: "text/markdown", SizeBytes: int64(len(firstContent)),
+			ContentHash: "sha256:manifest-one", TextReadable: true, Content: []byte(firstContent),
+		}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	secondContent := "---\nname: private-skill\ndescription: private v2\n---\n"
+	resourceContent := "private reference"
 	secondSkill, err := skillRepository.Install(t.Context(), skills.Skill{
 		ID: "ignored-package-id", VersionID: "skill-version-two", OwnerPrincipalID: principalOne, AgentID: agentSibling,
 		Name: "private-skill", Description: "private v2", Version: "2.0.0", SourceType: "inline",
-		Content: "---\nname: private-skill\ndescription: private v2\n---\n", ContentHash: "sha256:two", Enabled: true,
+		Content: secondContent, ContentHash: "sha256:two", Enabled: true,
+		Files: []skills.File{
+			{Path: "SKILL.md", MediaType: "text/markdown", SizeBytes: int64(len(secondContent)), ContentHash: "sha256:manifest-two", TextReadable: true, Content: []byte(secondContent)},
+			{Path: "references/private.md", MediaType: "text/markdown", SizeBytes: int64(len(resourceContent)), ContentHash: "sha256:reference", TextReadable: true, Content: []byte(resourceContent)},
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -181,9 +193,16 @@ func TestAgentCapabilitiesRemainIsolated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(firstAgentSkills) != 1 || firstAgentSkills[0].Version != "1.0.0" ||
-		len(siblingSkills) != 1 || siblingSkills[0].Version != "2.0.0" {
+	if len(firstAgentSkills) != 1 || firstAgentSkills[0].Version != "1.0.0" || len(firstAgentSkills[0].Files) != 1 ||
+		len(siblingSkills) != 1 || siblingSkills[0].Version != "2.0.0" || len(siblingSkills[0].Files) != 2 {
 		t.Fatalf("Agent version bindings leaked: first=%#v sibling=%#v", firstAgentSkills, siblingSkills)
+	}
+	resource, err := skillRepository.ReadFile(t.Context(), principalOne, agentSibling, secondSkill.ID, "references/private.md")
+	if err != nil || string(resource.Content) != "private reference" {
+		t.Fatalf("Skill resource was not readable by selected Agent: file=%#v err=%v", resource, err)
+	}
+	if _, err := skillRepository.ReadFile(t.Context(), principalOne, agentOne, firstSkill.ID, "references/private.md"); !errors.Is(err, skills.ErrNotFound) {
+		t.Fatalf("Agent should not read a resource from another selected version, got %v", err)
 	}
 	_, err = skillRepository.Install(t.Context(), skills.Skill{
 		ID: "another-package-id", VersionID: "conflicting-version", OwnerPrincipalID: principalOne, AgentID: agentSibling,
@@ -304,7 +323,7 @@ func TestAccountRegistrationBindsPrincipalAgentAndSession(t *testing.T) {
 	}
 }
 
-func TestSkillPackageMigrationPreservesInstalledSkill(t *testing.T) {
+func TestSkillPackageAndBundleMigrationsPreserveInstalledSkill(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
 	if databaseURL == "" {
 		t.Skip("TEST_DATABASE_URL is not set")
@@ -365,5 +384,21 @@ func TestSkillPackageMigrationPreservesInstalledSkill(t *testing.T) {
 	}
 	if packageID != "migration-skill" || versionID != "migration-skill" || version != "1.0.0" || contentHash != "sha256:migrated" || !enabled {
 		t.Fatalf("legacy Skill was not preserved: package=%q versionID=%q version=%q hash=%q enabled=%v", packageID, versionID, version, contentHash, enabled)
+	}
+	if err := goose.UpTo(database, ".", 5); err != nil {
+		t.Fatal(err)
+	}
+	var filePath, fileHash string
+	var fileContent []byte
+	err = database.QueryRowContext(t.Context(), `
+		SELECT path, content_hash, content
+		FROM skill_version_files
+		WHERE version_id='migration-skill'`,
+	).Scan(&filePath, &fileHash, &fileContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filePath != "SKILL.md" || fileHash != "sha256:migrated" || !strings.Contains(string(fileContent), "migrated-skill") {
+		t.Fatalf("legacy Skill manifest was not migrated into bundle files: path=%q hash=%q content=%q", filePath, fileHash, fileContent)
 	}
 }

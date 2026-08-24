@@ -2,8 +2,6 @@ package skills
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"regexp"
 	"strings"
 	"unicode/utf8"
@@ -46,23 +44,39 @@ func (service *Service) Install(ctx context.Context, principalID, agentID, conte
 	if err := service.authorize(ctx, principalID, agentID); err != nil {
 		return Skill{}, err
 	}
-	metadata, err := parseSkill(content)
+	return service.installFiles(ctx, principalID, agentID, []File{newFile("SKILL.md", []byte(content))}, version, "inline")
+}
+
+func (service *Service) Import(ctx context.Context, principalID, agentID string, request ImportRequest) (Skill, error) {
+	if err := service.authorize(ctx, principalID, agentID); err != nil {
+		return Skill{}, err
+	}
+	files, err := parseImportedBundle(request.FileName, request.Data)
 	if err != nil {
 		return Skill{}, err
 	}
-	hash := sha256.Sum256([]byte(content))
-	hashValue := "sha256:" + hex.EncodeToString(hash[:])
-	version = strings.TrimSpace(version)
-	if version == "" || version == "local" {
-		version = "local-" + hex.EncodeToString(hash[:6])
+	return service.installFiles(ctx, principalID, agentID, files, request.Version, "local")
+
+}
+
+func (service *Service) installFiles(ctx context.Context, principalID, agentID string, files []File, version, sourceType string) (Skill, error) {
+	manifest, ok := fileByPath(files, "SKILL.md")
+	if !ok {
+		return Skill{}, ErrInvalidBundle
 	}
-	if utf8.RuneCountInString(version) > 80 {
-		return Skill{}, ErrInvalid
+	metadata, err := parseSkill(string(manifest.Content))
+	if err != nil {
+		return Skill{}, err
+	}
+	hashValue := bundleContentHash(files)
+	version, err = normalizedVersion(version, hashValue)
+	if err != nil {
+		return Skill{}, err
 	}
 	return service.repository.Install(ctx, Skill{
 		ID: ulid.Make().String(), VersionID: ulid.Make().String(), OwnerPrincipalID: principalID, AgentID: agentID,
 		Name: metadata.Name, Description: metadata.Description, Version: version,
-		SourceType: "inline", Content: content, ContentHash: hashValue, Enabled: true,
+		SourceType: sourceType, Content: string(manifest.Content), ContentHash: hashValue, Files: files, Enabled: true,
 	})
 }
 
@@ -82,6 +96,20 @@ func (service *Service) Uninstall(ctx context.Context, principalID, agentID, ski
 
 func (service *Service) Enabled(ctx context.Context, principalID, agentID string) ([]Skill, error) {
 	return service.repository.Enabled(ctx, principalID, agentID)
+}
+
+func (service *Service) ReadFile(ctx context.Context, principalID, agentID, skillID, filePath string) (File, error) {
+	if err := service.authorize(ctx, principalID, agentID); err != nil {
+		return File{}, err
+	}
+	file, err := service.repository.ReadFile(ctx, principalID, agentID, skillID, filePath)
+	if err != nil {
+		return File{}, err
+	}
+	if !file.TextReadable || !utf8.Valid(file.Content) {
+		return File{}, ErrResourceUnreadable
+	}
+	return file, nil
 }
 
 func (service *Service) authorize(ctx context.Context, principalID, agentID string) error {

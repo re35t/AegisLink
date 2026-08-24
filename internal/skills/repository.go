@@ -8,4 +8,5 @@ type Repository interface {
 	SetEnabled(context.Context, string, string, string, bool) (Skill, error)
 	Uninstall(context.Context, string, string, string) error
 	Enabled(context.Context, string, string) ([]Skill, error)
+	ReadFile(context.Context, string, string, string, string) (File, error)
 }

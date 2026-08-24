@@ -209,6 +209,24 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/agents/{agentId}/skills/import": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["importAgentSkill"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/agents/{agentId}/skills/{skillId}": {
     parameters: {
       query?: never;
@@ -469,6 +487,16 @@ export interface components {
       confidence?: number;
       confirmed?: boolean;
     };
+    SkillFile: {
+      /** @description Normalized path relative to the Skill bundle root */
+      path: string;
+      mediaType: string;
+      /** Format: int64 */
+      sizeBytes: number;
+      contentHash: string;
+      /** @description Whether the Agent Runtime may load this file as UTF-8 text */
+      textReadable: boolean;
+    };
     Skill: {
       /** @description Stable Skill package identifier used by Agent binding routes */
       id: string;
@@ -482,6 +510,8 @@ export interface components {
       sourceType: "inline" | "local" | "git";
       content: string;
       contentHash: string;
+      /** @description Immutable files stored for the selected Skill version */
+      files: components["schemas"]["SkillFile"][];
       enabled: boolean;
       /** Format: date-time */
       createdAt: string;
@@ -1022,6 +1052,44 @@ export interface operations {
       400: components["responses"]["Error"];
       404: components["responses"]["Error"];
       409: components["responses"]["Error"];
+    };
+  };
+  importAgentSkill: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "multipart/form-data": {
+          /**
+           * Format: binary
+           * @description A SKILL.md file or ZIP bundle containing a root SKILL.md
+           */
+          bundle: string;
+          /** @description Optional immutable version label; omitted imports use a bundle-hash-derived local label */
+          version?: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Local Skill file or bundle validated, imported, and bound to this Agent */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Skill"];
+        };
+      };
+      400: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      413: components["responses"]["Error"];
     };
   };
   uninstallAgentSkill: {

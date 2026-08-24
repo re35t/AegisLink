@@ -15,6 +15,7 @@ type MemoryReader interface {
 
 type SkillReader interface {
 	Enabled(context.Context, string, string) ([]skills.Skill, error)
+	ReadFile(context.Context, string, string, string, string) (skills.File, error)
 }
 
 type MCPRuntime interface {
@@ -56,9 +57,26 @@ func (service *Service) Resolve(ctx context.Context, principalID, agentID string
 		})
 	}
 	for _, item := range enabledSkills {
-		resolved.Skills = append(resolved.Skills, conversation.RuntimeSkill{
-			Name: item.Name, Description: item.Description, Content: item.Content,
-		})
+		skill := item
+		resolvedSkill := conversation.RuntimeSkill{
+			Name: skill.Name, Description: skill.Description, Content: skill.Content,
+			Files: make([]conversation.RuntimeSkillFile, 0, len(skill.Files)),
+			ReadResource: func(readContext context.Context, filePath string) (conversation.RuntimeSkillResource, error) {
+				file, err := service.skills.ReadFile(readContext, principalID, agentID, skill.ID, filePath)
+				if err != nil {
+					return conversation.RuntimeSkillResource{}, err
+				}
+				return conversation.RuntimeSkillResource{
+					Path: file.Path, MediaType: file.MediaType, Content: string(file.Content),
+				}, nil
+			},
+		}
+		for _, file := range skill.Files {
+			resolvedSkill.Files = append(resolvedSkill.Files, conversation.RuntimeSkillFile{
+				Path: file.Path, MediaType: file.MediaType, SizeBytes: file.SizeBytes, TextReadable: file.TextReadable,
+			})
+		}
+		resolved.Skills = append(resolved.Skills, resolvedSkill)
 	}
 	for _, item := range mcpTools {
 		tool := item

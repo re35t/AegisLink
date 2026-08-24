@@ -12,6 +12,7 @@ export type McpTool = components["schemas"]["McpTool"];
 export type Run = components["schemas"]["Run"];
 export type RunEvent = components["schemas"]["RunEvent"];
 export type Skill = components["schemas"]["Skill"];
+export type SkillFile = components["schemas"]["SkillFile"];
 export type User = components["schemas"]["User"];
 
 export class APIError extends Error {
@@ -78,6 +79,15 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ content, ...(version ? { version } : {}) }),
     }),
+  importSkill: (agentId: string, bundle: File, version?: string) => {
+    const body = new FormData();
+    body.set("bundle", bundle);
+    if (version) body.set("version", version);
+    return request<Skill>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/skills/import`,
+      { method: "POST", body },
+    );
+  },
   updateSkill: (agentId: string, skillId: string, enabled: boolean) =>
     request<Skill>(
       `/api/v1/agents/${encodeURIComponent(agentId)}/skills/${encodeURIComponent(skillId)}`,
@@ -162,10 +172,14 @@ export function runEventsURL(runId: string): string {
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const headers = new Headers(init.headers);
+  if (init.body !== undefined && !(init.body instanceof FormData)) {
+    headers.set("Content-Type", "application/json");
+  }
   const response = await fetch(path, {
     ...init,
     credentials: "include",
-    headers: { "Content-Type": "application/json", ...init.headers },
+    headers,
   });
   if (!response.ok) {
     const fallback = {

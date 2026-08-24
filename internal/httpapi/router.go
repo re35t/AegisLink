@@ -52,6 +52,7 @@ type MemoryService interface {
 type SkillService interface {
 	List(context.Context, string, string) ([]skills.Skill, error)
 	Install(context.Context, string, string, string, string) (skills.Skill, error)
+	Import(context.Context, string, string, skills.ImportRequest) (skills.Skill, error)
 	SetEnabled(context.Context, string, string, string, bool) (skills.Skill, error)
 	Uninstall(context.Context, string, string, string) error
 }
@@ -124,6 +125,7 @@ func NewRouter(dependencies Dependencies, webOrigin string, auth AuthConfig, mod
 	protected.DELETE("/agents/:agentId/memories/:memoryId", handler.forgetMemory)
 	protected.GET("/agents/:agentId/skills", handler.listSkills)
 	protected.POST("/agents/:agentId/skills", handler.installSkill)
+	protected.POST("/agents/:agentId/skills/import", handler.importSkill)
 	protected.PATCH("/agents/:agentId/skills/:skillId", handler.updateSkill)
 	protected.DELETE("/agents/:agentId/skills/:skillId", handler.uninstallSkill)
 	protected.GET("/agents/:agentId/mcp-servers", handler.listMCPServers)

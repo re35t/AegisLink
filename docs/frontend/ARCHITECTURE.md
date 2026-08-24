@@ -25,7 +25,7 @@ web/src/
 ├── features/capabilities/
 │   ├── CapabilityShell.tsx      shared Agent-scoped management shell
 │   ├── MemoryPage.tsx           inspect/edit/confirm/forget Memory
-│   ├── SkillsPage.tsx           install and enable SKILL.md
+│   ├── SkillsPage.tsx           author, import, version, and enable Skill bundles
 │   └── McpPage.tsx              server discovery and tool permissions
 └── styles.css              current global styles and component classes
 ```

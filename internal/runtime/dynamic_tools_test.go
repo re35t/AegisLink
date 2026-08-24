@@ -71,3 +71,41 @@ func TestAgentInstructionInjectsMemoryButOnlySkillMetadata(t *testing.T) {
 		t.Fatalf("full skill content leaked before progressive load: %s", instruction)
 	}
 }
+
+func TestRuntimeToolsReadSkillResourcesWithoutExecutingScripts(t *testing.T) {
+	read := false
+	tools, err := runtimeTools(t.Context(), nil, conversation.AgentContext{
+		Skills: []conversation.RuntimeSkill{{
+			Name: "bundle-skill", Description: "Uses a reference", Content: "Read references/guide.md",
+			Files: []conversation.RuntimeSkillFile{
+				{Path: "SKILL.md", MediaType: "text/markdown", SizeBytes: 32, TextReadable: true},
+				{Path: "references/guide.md", MediaType: "text/markdown", SizeBytes: 12, TextReadable: true},
+				{Path: "assets/image.png", MediaType: "image/png", SizeBytes: 20, TextReadable: false},
+			},
+			ReadResource: func(_ context.Context, filePath string) (conversation.RuntimeSkillResource, error) {
+				read = true
+				return conversation.RuntimeSkillResource{Path: filePath, MediaType: "text/markdown", Content: "reference body"}, nil
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tools) != 2 {
+		t.Fatalf("tool count = %d", len(tools))
+	}
+	manifestLoader := tools[0].(tool.InvokableTool)
+	manifest, err := manifestLoader.InvokableRun(t.Context(), `{"name":"bundle-skill"}`)
+	if err != nil || !strings.Contains(manifest, "references/guide.md") || !strings.Contains(manifest, "assets/image.png") {
+		t.Fatalf("bundle manifest metadata missing: output=%q err=%v", manifest, err)
+	}
+	resourceLoader := tools[1].(tool.InvokableTool)
+	resource, err := resourceLoader.InvokableRun(t.Context(), `{"name":"bundle-skill","path":"references/guide.md"}`)
+	if err != nil || !read || !strings.Contains(resource, "reference body") {
+		t.Fatalf("resource was not loaded safely: read=%v output=%q err=%v", read, resource, err)
+	}
+	_, err = resourceLoader.InvokableRun(t.Context(), `{"name":"bundle-skill","path":"assets/image.png"}`)
+	if err == nil {
+		t.Fatal("binary asset should not be exposed as a text resource")
+	}
+}

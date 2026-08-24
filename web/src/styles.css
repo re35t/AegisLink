@@ -795,6 +795,7 @@ textarea:focus-visible {
 .capability-composer,
 .capability-card,
 .capability-empty,
+.skill-workbench,
 .safety-note {
   border: 1px solid var(--color-border-subtle);
   border-radius: 12px;
@@ -836,6 +837,8 @@ textarea:focus-visible {
 .capability-card textarea,
 .capability-composer input,
 .capability-composer select,
+.skill-workbench textarea,
+.skill-workbench input,
 .tool-row select {
   width: 100%;
   border: 1px solid var(--color-border);
@@ -851,7 +854,8 @@ textarea:focus-visible {
 }
 
 .capability-composer textarea,
-.capability-card textarea {
+.capability-card textarea,
+.skill-workbench textarea {
   min-height: 82px;
   padding: 11px 12px;
   resize: vertical;
@@ -860,6 +864,7 @@ textarea:focus-visible {
 
 .capability-composer input,
 .capability-composer select,
+.skill-workbench input,
 .tool-row select {
   min-height: 40px;
   padding: 0 10px;
@@ -874,6 +879,8 @@ textarea:focus-visible {
 .capability-card textarea:focus,
 .capability-composer input:focus,
 .capability-composer select:focus,
+.skill-workbench textarea:focus,
+.skill-workbench input:focus,
 .tool-row select:focus {
   border-color: #60776a;
   box-shadow: 0 0 0 3px var(--color-focus);
@@ -896,6 +903,7 @@ textarea:focus-visible {
 
 .composer-actions > button,
 .secondary-button,
+.ghost-button,
 .danger-button,
 .capability-error button {
   display: inline-flex;
@@ -922,6 +930,17 @@ textarea:focus-visible {
   color: #8b403a;
   border-color: #ecd6d3;
   background: #fffafa;
+}
+
+.ghost-button {
+  border-color: transparent;
+  background: transparent;
+}
+
+.secondary-button:hover,
+.ghost-button:hover {
+  color: var(--color-text);
+  background: var(--color-surface-muted);
 }
 
 .capability-list {
@@ -1048,6 +1067,215 @@ textarea:focus-visible {
 .skill-version-field {
   display: grid;
   gap: 6px;
+}
+
+.skill-workbench {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  box-shadow: 0 5px 20px rgba(22, 30, 26, 0.04);
+}
+
+.skill-mode-tabs {
+  display: flex;
+  gap: 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.skill-mode-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--color-text-secondary);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.skill-mode-tabs button:hover {
+  color: var(--color-text);
+  background: var(--color-surface-subtle);
+}
+
+.skill-mode-tabs button.active {
+  color: var(--color-text);
+  background: var(--color-surface-muted);
+}
+
+.skill-composer-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.skill-panel-heading,
+.skill-import-guidance,
+.selected-skill-file,
+.skill-list-heading,
+.skill-summary-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.skill-panel-heading {
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.skill-panel-heading > div,
+.skill-import-guidance > div,
+.selected-skill-file > span,
+.skill-list-heading > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.skill-panel-heading strong,
+.skill-import-guidance strong,
+.selected-skill-file strong {
+  font-size: 12px;
+}
+
+.skill-panel-heading span,
+.skill-import-guidance span,
+.selected-skill-file small,
+.skill-list-heading p {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.field-label,
+.skill-file-field {
+  display: grid;
+  gap: 6px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.skill-file-field input[type="file"] {
+  min-height: 44px;
+  padding: 5px;
+  color: var(--color-text-secondary);
+}
+
+.skill-file-field input[type="file"]::file-selector-button {
+  min-height: 32px;
+  margin-right: 10px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text);
+  background: var(--color-surface-muted);
+  cursor: pointer;
+}
+
+.skill-file-field small {
+  color: var(--color-text-tertiary);
+  font-weight: 400;
+}
+
+.skill-import-guidance {
+  align-items: flex-start;
+  padding: 12px;
+  border-radius: 8px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-subtle);
+}
+
+.selected-skill-file {
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 8px;
+}
+
+.skill-feedback {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--color-success);
+  color: #315d40;
+  background: #eef8f1;
+  font-size: 12px;
+}
+
+.skill-list-heading {
+  justify-content: space-between;
+  padding: 8px 2px 0;
+}
+
+.skill-list-heading h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.skill-list-heading p {
+  margin: 0;
+}
+
+.skill-list-heading > span,
+.skill-file-count {
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  border-radius: 999px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-muted);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.skill-summary-row {
+  justify-content: space-between;
+}
+
+.skill-files {
+  border-top: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.skill-files summary {
+  padding: 10px 0;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.skill-files ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0 0 12px;
+  list-style: none;
+}
+
+.skill-files li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+}
+
+.skill-files li span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-files li small {
+  flex: 0 0 auto;
+  color: var(--color-text-tertiary);
 }
 
 .skill-version-field > span {
@@ -2265,8 +2493,36 @@ textarea:focus-visible {
   }
 
   .capability-composer,
-  .capability-card {
+  .capability-card,
+  .skill-workbench {
     padding: 15px;
+  }
+
+  .skill-mode-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .skill-mode-tabs button {
+    justify-content: center;
+    padding: 0 8px;
+  }
+
+  .skill-panel-heading {
+    gap: 8px;
+  }
+
+  .skill-composer-panel .composer-actions > button {
+    width: 100%;
+  }
+
+  .skill-files li {
+    display: grid;
+    gap: 3px;
+  }
+
+  .skill-files li small {
+    white-space: normal;
   }
 
   .mcp-fields {

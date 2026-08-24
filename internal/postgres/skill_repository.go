@@ -54,7 +54,19 @@ func (repository *SkillRepository) list(ctx context.Context, principalID, agentI
 		}
 		items = append(items, item)
 	}
-	return items, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, fmt.Errorf("close Skill rows: %w", err)
+	}
+	for index := range items {
+		items[index].Files, err = listSkillFiles(ctx, repository.database, items[index].VersionID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return items, nil
 }
 
 func (repository *SkillRepository) Install(ctx context.Context, item skills.Skill) (skills.Skill, error) {
@@ -75,6 +87,7 @@ func (repository *SkillRepository) Install(ctx context.Context, item skills.Skil
 	}
 
 	requestedVersionID := item.VersionID
+	createdVersion := false
 	err = transaction.QueryRowContext(ctx, `
 		INSERT INTO skill_versions (
 			id, package_id, owner_principal_id, version, description,
@@ -92,6 +105,22 @@ func (repository *SkillRepository) Install(ctx context.Context, item skills.Skil
 		}
 	} else if err != nil {
 		return skills.Skill{}, fmt.Errorf("create skill version: %w", err)
+	} else {
+		createdVersion = true
+	}
+
+	if createdVersion {
+		for _, file := range item.Files {
+			if _, err := transaction.ExecContext(ctx, `
+				INSERT INTO skill_version_files (
+					version_id, path, media_type, size_bytes, content_hash, text_readable, content
+				) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+				item.VersionID, file.Path, file.MediaType, file.SizeBytes,
+				file.ContentHash, file.TextReadable, file.Content,
+			); err != nil {
+				return skills.Skill{}, fmt.Errorf("store Skill bundle file %q: %w", file.Path, err)
+			}
+		}
 	}
 
 	err = transaction.QueryRowContext(ctx, `
@@ -104,6 +133,10 @@ func (repository *SkillRepository) Install(ctx context.Context, item skills.Skil
 	).Scan(&item.Enabled, &item.UpdatedAt)
 	if err != nil {
 		return skills.Skill{}, fmt.Errorf("bind skill version to agent: %w", err)
+	}
+	item.Files, err = listSkillFiles(ctx, transaction, item.VersionID)
+	if err != nil {
+		return skills.Skill{}, err
 	}
 	if err := transaction.Commit(); err != nil {
 		return skills.Skill{}, fmt.Errorf("commit skill install: %w", err)
@@ -164,6 +197,10 @@ func (repository *SkillRepository) SetEnabled(ctx context.Context, principalID, 
 	if err != nil {
 		return skills.Skill{}, fmt.Errorf("set skill enabled: %w", err)
 	}
+	item.Files, err = listSkillFiles(ctx, repository.database, item.VersionID)
+	if err != nil {
+		return skills.Skill{}, err
+	}
 	return item, nil
 }
 
@@ -182,6 +219,59 @@ func (repository *SkillRepository) Uninstall(ctx context.Context, principalID, a
 		return skills.ErrNotFound
 	}
 	return nil
+}
+
+func (repository *SkillRepository) ReadFile(ctx context.Context, principalID, agentID, skillID, filePath string) (skills.File, error) {
+	var file skills.File
+	err := repository.database.QueryRowContext(ctx, `
+		SELECT files.path, files.media_type, files.size_bytes, files.content_hash,
+		       files.text_readable, files.content
+		FROM agent_skills bindings
+		JOIN skill_version_files files ON files.version_id=bindings.version_id
+		WHERE bindings.owner_principal_id=$1 AND bindings.agent_id=$2
+		  AND bindings.package_id=$3 AND bindings.enabled AND files.path=$4`,
+		principalID, agentID, skillID, filePath,
+	).Scan(
+		&file.Path, &file.MediaType, &file.SizeBytes, &file.ContentHash,
+		&file.TextReadable, &file.Content,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return skills.File{}, skills.ErrNotFound
+	}
+	if err != nil {
+		return skills.File{}, fmt.Errorf("read Skill bundle file: %w", err)
+	}
+	return file, nil
+}
+
+type skillFileQueryer interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
+func listSkillFiles(ctx context.Context, queryer skillFileQueryer, versionID string) ([]skills.File, error) {
+	rows, err := queryer.QueryContext(ctx, `
+		SELECT path, media_type, size_bytes, content_hash, text_readable
+		FROM skill_version_files
+		WHERE version_id=$1
+		ORDER BY path`, versionID)
+	if err != nil {
+		return nil, fmt.Errorf("list Skill bundle files: %w", err)
+	}
+	defer rows.Close()
+	files := make([]skills.File, 0)
+	for rows.Next() {
+		var file skills.File
+		if err := rows.Scan(
+			&file.Path, &file.MediaType, &file.SizeBytes, &file.ContentHash, &file.TextReadable,
+		); err != nil {
+			return nil, fmt.Errorf("scan Skill bundle file: %w", err)
+		}
+		files = append(files, file)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate Skill bundle files: %w", err)
+	}
+	return files, nil
 }
 
 func skillScanTargets(item *skills.Skill) []any {

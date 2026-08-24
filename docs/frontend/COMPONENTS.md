@@ -14,6 +14,7 @@
 | Markdown                        | `MarkdownText.tsx` using `@assistant-ui/react-markdown`       | Add safe render extensions here so all assistant messages behave consistently                                 |
 | REST API                        | `api/client.ts` + generated `api/schema.ts`                   | Add typed client operations after updating OpenAPI; never fetch ad hoc from a page                            |
 | Server cache                    | shared TanStack `queryClient`                                 | Add object-specific query hooks as features grow; do not introduce duplicate caches                           |
+| Skill management                | `features/capabilities/SkillsPage.tsx`                        | Reuse its custom editor, multipart import, version binding, bundle metadata, and Agent-scoped mutation states |
 | Run recovery                    | `useRunEvents.ts` + `features/conversation/RunRecovery.tsx`   | Preserve until native AG-UI replay/resume replaces it with equivalent acceptance coverage                     |
 | Icons                           | `lucide-react`                                                | Reuse existing icons and sizing conventions; do not add a second icon package                                 |
 | Global visual rules             | `styles.css`                                                  | Extract tokens and feature styles incrementally; do not add a styling framework for convenience               |

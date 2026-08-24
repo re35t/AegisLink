@@ -37,9 +37,24 @@ type RuntimeMemory struct {
 }
 
 type RuntimeSkill struct {
-	Name        string
-	Description string
-	Content     string
+	Name         string
+	Description  string
+	Content      string
+	Files        []RuntimeSkillFile
+	ReadResource func(context.Context, string) (RuntimeSkillResource, error)
+}
+
+type RuntimeSkillFile struct {
+	Path         string
+	MediaType    string
+	SizeBytes    int64
+	TextReadable bool
+}
+
+type RuntimeSkillResource struct {
+	Path      string
+	MediaType string
+	Content   string
 }
 
 type RuntimeTool struct {

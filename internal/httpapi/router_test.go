@@ -1,10 +1,12 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -112,6 +114,39 @@ func TestBootstrapExposesStableModelMetadata(t *testing.T) {
 	}
 	if body.Model.ID != model.ID || body.Model.Name != model.Name || len(body.Model.Capabilities) != 2 {
 		t.Fatalf("unexpected model metadata: %#v", body.Model)
+	}
+}
+
+func TestImportSkillAcceptsMultipartBundle(t *testing.T) {
+	t.Parallel()
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	part, err := writer.CreateFormFile("bundle", "custom.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := "---\nname: custom\ndescription: Custom imported Skill.\n---\n"
+	if _, err := part.Write([]byte(content)); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteField("version", "1.2.0"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	skillService := &fakeSkillService{}
+	router := newTestRouterWithSkills(&fakeService{}, ModelInfo{}, skillService)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/agents/agent-1/skills/import", &body)
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	authorize(request)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("status=%d body=%q", response.Code, response.Body.String())
+	}
+	if skillService.imported == nil || skillService.imported.FileName != "custom.md" || skillService.imported.Version != "1.2.0" || string(skillService.imported.Data) != content {
+		t.Fatalf("unexpected import request: %#v", skillService.imported)
 	}
 }
 
@@ -241,13 +276,19 @@ func (*fakeMemoryService) Update(context.Context, string, string, string, memory
 }
 func (*fakeMemoryService) Forget(context.Context, string, string, string) error { return nil }
 
-type fakeSkillService struct{}
+type fakeSkillService struct {
+	imported *skills.ImportRequest
+}
 
 func (*fakeSkillService) List(context.Context, string, string) ([]skills.Skill, error) {
 	return nil, nil
 }
 func (*fakeSkillService) Install(context.Context, string, string, string, string) (skills.Skill, error) {
 	return skills.Skill{}, nil
+}
+func (fake *fakeSkillService) Import(_ context.Context, _, _ string, request skills.ImportRequest) (skills.Skill, error) {
+	fake.imported = &request
+	return skills.Skill{Name: "custom", Version: request.Version, Files: []skills.File{}}, nil
 }
 func (*fakeSkillService) SetEnabled(context.Context, string, string, string, bool) (skills.Skill, error) {
 	return skills.Skill{}, nil
@@ -278,10 +319,14 @@ func discardLogger() *slog.Logger {
 }
 
 func newTestRouter(service *fakeService, model ModelInfo) http.Handler {
+	return newTestRouterWithSkills(service, model, &fakeSkillService{})
+}
+
+func newTestRouterWithSkills(service *fakeService, model ModelInfo, skillService SkillService) http.Handler {
 	return NewRouter(
 		Dependencies{
 			Accounts: service, Agents: service, Conversations: service,
-			Memories: &fakeMemoryService{}, Skills: &fakeSkillService{}, MCP: &fakeMCPService{},
+			Memories: &fakeMemoryService{}, Skills: skillService, MCP: &fakeMCPService{},
 		},
 		"http://127.0.0.1:5173",
 		AuthConfig{CookieName: "aegislink_session"},

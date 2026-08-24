@@ -27,4 +27,23 @@ describe("API client", () => {
       expect.objectContaining({ credentials: "include" }),
     );
   });
+
+  it("uploads Skill bundles as multipart without overriding the boundary", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ name: "portable-skill" }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const bundle = new File(["---\nname: portable-skill\n---\n"], "SKILL.md", {
+      type: "text/markdown",
+    });
+    await api.importSkill("agent-one", bundle, "1.0.0");
+    const [, init] = fetch.mock.calls[0];
+    expect(init?.body).toBeInstanceOf(FormData);
+    expect(new Headers(init?.headers).has("Content-Type")).toBe(false);
+    const form = init?.body as FormData;
+    expect(form.get("bundle")).toBe(bundle);
+    expect(form.get("version")).toBe("1.0.0");
+  });
 });

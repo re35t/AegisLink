@@ -54,6 +54,12 @@ func (handler *handler) handleError(c *gin.Context, err error) {
 		writeError(c, http.StatusNotFound, "memory_not_found", "the requested memory was not found")
 	case errors.Is(err, skills.ErrInvalid):
 		writeError(c, http.StatusBadRequest, "invalid_skill", "SKILL.md frontmatter or content is invalid")
+	case errors.Is(err, skills.ErrInvalidBundle):
+		writeError(c, http.StatusBadRequest, "invalid_skill_bundle", "use a SKILL.md file or a safe ZIP bundle with SKILL.md at its root")
+	case errors.Is(err, skills.ErrTooLarge):
+		writeError(c, http.StatusRequestEntityTooLarge, "skill_bundle_too_large", "the Skill bundle exceeds the allowed file or archive size")
+	case errors.Is(err, skills.ErrResourceUnreadable):
+		writeError(c, http.StatusBadRequest, "skill_resource_unreadable", "the requested Skill resource is not readable UTF-8 text")
 	case errors.Is(err, skills.ErrConflict):
 		writeError(c, http.StatusConflict, "skill_version_conflict", "this Skill version label already refers to different content")
 	case errors.Is(err, skills.ErrNotFound):

@@ -30,8 +30,8 @@ Human Principal
 
 `00004_skill_packages_and_versions.sql` 将每一条旧 `skills` 记录迁移为一个 Package 和一个 Version，并把旧 `agent_skills.skill_id` 同时映射为 `package_id` 与 `version_id`，保留内容、hash、启用状态和时间戳。
 
-## 边界
+## 后续演进
 
-- 当前仍只支持 inline `SKILL.md`，尚未实现目录 bundle、scripts、references、assets 或 Git fetch。
+- ADR 0009 已在该版本模型上增加本地 Markdown/ZIP Bundle 与 immutable files；本 ADR 的 Package/Version/Binding 语义保持不变。
 - 当前管理页通过再次安装来创建/选择 Version，尚未提供 Package Library 和历史 Version 选择器。
 - Version label 不是信任或发布签名；未来远端来源需要 provenance、签名和安全扫描。

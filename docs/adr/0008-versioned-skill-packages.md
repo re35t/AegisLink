@@ -14,6 +14,6 @@ Uninstall removes only the Agent binding; packages and versions remain available
 
 Migration `00004_skill_packages_and_versions.sql` converts every previous Skill into one package, one version, and its existing bindings without losing content, hashes, or enablement.
 
-## Boundary
+## Evolution
 
-V0 still accepts inline `SKILL.md` only. Package libraries, historical version selection, directory bundles, scripts, references, assets, Git provenance, signatures, and physical package purge remain future work.
+ADR 0009 adds local Markdown/ZIP bundles and immutable files on top of this version model. Package libraries, historical version selection, Git provenance, signatures, executable scripts, and physical package purge remain future work.

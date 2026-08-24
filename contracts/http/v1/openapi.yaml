@@ -255,6 +255,42 @@ paths:
           $ref: "#/components/responses/Error"
         "409":
           $ref: "#/components/responses/Error"
+  /api/v1/agents/{agentId}/skills/import:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+    post:
+      operationId: importAgentSkill
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [bundle]
+              properties:
+                bundle:
+                  type: string
+                  format: binary
+                  description: A SKILL.md file or ZIP bundle containing a root SKILL.md
+                version:
+                  type: string
+                  maxLength: 80
+                  description: Optional immutable version label; omitted imports use a bundle-hash-derived local label
+      responses:
+        "201":
+          description: Local Skill file or bundle validated, imported, and bound to this Agent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Skill"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "413":
+          $ref: "#/components/responses/Error"
   /api/v1/agents/{agentId}/skills/{skillId}:
     parameters:
       - $ref: "#/components/parameters/AgentId"
@@ -670,7 +706,18 @@ components:
           format: date-time
     Memory:
       type: object
-      required: [id, agentId, kind, content, confidence, sourceUri, status, createdAt, updatedAt]
+      required:
+        [
+          id,
+          agentId,
+          kind,
+          content,
+          confidence,
+          sourceUri,
+          status,
+          createdAt,
+          updatedAt,
+        ]
       properties:
         id:
           type: string
@@ -737,9 +784,42 @@ components:
           maximum: 1
         confirmed:
           type: boolean
+    SkillFile:
+      type: object
+      required: [path, mediaType, sizeBytes, contentHash, textReadable]
+      properties:
+        path:
+          type: string
+          description: Normalized path relative to the Skill bundle root
+        mediaType:
+          type: string
+        sizeBytes:
+          type: integer
+          format: int64
+          minimum: 0
+        contentHash:
+          type: string
+        textReadable:
+          type: boolean
+          description: Whether the Agent Runtime may load this file as UTF-8 text
     Skill:
       type: object
-      required: [id, versionId, agentId, name, description, version, sourceType, content, contentHash, enabled, createdAt, updatedAt]
+      required:
+        [
+          id,
+          versionId,
+          agentId,
+          name,
+          description,
+          version,
+          sourceType,
+          content,
+          contentHash,
+          files,
+          enabled,
+          createdAt,
+          updatedAt,
+        ]
       properties:
         id:
           type: string
@@ -762,6 +842,11 @@ components:
           type: string
         contentHash:
           type: string
+        files:
+          type: array
+          description: Immutable files stored for the selected Skill version
+          items:
+            $ref: "#/components/schemas/SkillFile"
         enabled:
           type: boolean
         createdAt:
@@ -800,7 +885,19 @@ components:
           enum: [read-only, external-write, destructive]
     McpServer:
       type: object
-      required: [id, agentId, name, endpoint, transport, enabled, status, tools, createdAt, updatedAt]
+      required:
+        [
+          id,
+          agentId,
+          name,
+          endpoint,
+          transport,
+          enabled,
+          status,
+          tools,
+          createdAt,
+          updatedAt,
+        ]
       properties:
         id:
           type: string
@@ -935,7 +1032,8 @@ components:
           format: date-time
     AgUiRunAgentInput:
       type: object
-      required: [threadId, runId, state, messages, tools, context, forwardedProps]
+      required:
+        [threadId, runId, state, messages, tools, context, forwardedProps]
       properties:
         threadId:
           type: string

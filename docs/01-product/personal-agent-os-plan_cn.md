@@ -466,6 +466,7 @@ run_events
 memories
 skill_packages
 skill_versions
+skill_version_files
 agent_skills
 mcp_servers
 mcp_tools
@@ -520,7 +521,10 @@ trace_spans
 - 已完成：inline `SKILL.md` frontmatter 校验、安装、启停、内容 hash 与渐进式 `load_skill` 加载。
 - 已完成：Principal 级 `skill_packages`、immutable `skill_versions` 与 Agent 级 binding 分离；不同 Agent 可选择同名 Package 的不同 Version。
 - 已完成：Skills 管理页面。
-- 下一切片：目录 bundle、来源升级、scripts/references/assets 的安全边界和 Skill 使用 Trace。
+- 已完成：自定义与基于现有 Skill 派生新版本；导入单个 `SKILL.md` 或 ZIP Bundle。
+- 已完成：`skill_version_files` 存储规范化 Bundle；限制路径、文件数、单文件/总容量并拒绝 traversal、symlink 和越界目录。
+- 已完成：Runtime 只读加载 UTF-8 references/scripts；binary assets 仅登记，scripts 不自动执行。
+- 下一切片：Git 来源、provenance/签名、安全扫描、历史 Version 选择器和 Skill 使用 Trace。
 - 用无外部依赖的示例 Skill 覆盖端到端测试。
 
 验收：无效或越界 bundle 被拒绝；disabled Skill 不进入 Runtime；版本/hash 可审计；脚本不会绕过工具权限。
@@ -564,11 +568,11 @@ trace_spans
 
 ## 14. 选型与参考资料
 
-| 项目                    | 状态                        | 资料                                                                                                                                                                                        |
-| ----------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| AG-UI                   | 文本 Run 第一切片已实现     | [AG-UI Overview](https://docs.ag-ui.com/introduction)                                                                                                                                       |
-| `assistant-ui`          | Chat/Tool 第一切片已实现    | [文档](https://www.assistant-ui.com/docs)、[AG-UI runtime](https://www.assistant-ui.com/docs/runtimes/ag-ui/overview)、[MCP Config Dialog](https://www.assistant-ui.com/docs/ui/mcp-config) |
-| MCP                     | Streamable HTTP V0 已实现   | [Model Context Protocol](https://modelcontextprotocol.io/)、[官方 Go SDK](https://github.com/modelcontextprotocol/go-sdk)                                                                    |
-| OpenAI Agents SDK       | 仅作 Runtime 设计参考       | [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/)                                                                                                                         |
-| Agent Skills            | inline `SKILL.md` V0 已实现 | [Agent Skills 规范](https://github.com/agentskills/agentskills/blob/main/docs/specification.mdx)                                                                                            |
-| Letta / Graphiti / Mem0 | Memory 后续研究或 benchmark | [Letta](https://docs.letta.com/tutorials/attaching-detaching-blocks/)、[Graphiti](https://help.getzep.com/graphiti/getting-started/welcome)、[Mem0](https://docs.mem0.ai/platform/overview) |
+| 项目                    | 状态                           | 资料                                                                                                                                                                                        |
+| ----------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AG-UI                   | 文本 Run 第一切片已实现        | [AG-UI Overview](https://docs.ag-ui.com/introduction)                                                                                                                                       |
+| `assistant-ui`          | Chat/Tool 第一切片已实现       | [文档](https://www.assistant-ui.com/docs)、[AG-UI runtime](https://www.assistant-ui.com/docs/runtimes/ag-ui/overview)、[MCP Config Dialog](https://www.assistant-ui.com/docs/ui/mcp-config) |
+| MCP                     | Streamable HTTP V0 已实现      | [Model Context Protocol](https://modelcontextprotocol.io/)、[官方 Go SDK](https://github.com/modelcontextprotocol/go-sdk)                                                                   |
+| OpenAI Agents SDK       | 仅作 Runtime 设计参考          | [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/)                                                                                                                         |
+| Agent Skills            | 自定义与本地 Bundle 导入已实现 | [Agent Skills 规范](https://github.com/agentskills/agentskills/blob/main/docs/specification.mdx)                                                                                            |
+| Letta / Graphiti / Mem0 | Memory 后续研究或 benchmark    | [Letta](https://docs.letta.com/tutorials/attaching-detaching-blocks/)、[Graphiti](https://help.getzep.com/graphiti/getting-started/welcome)、[Mem0](https://docs.mem0.ai/platform/overview) |
