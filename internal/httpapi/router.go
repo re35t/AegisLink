@@ -10,6 +10,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/re35t/AegisLink/internal/account"
 	"github.com/re35t/AegisLink/internal/agent"
+	"github.com/re35t/AegisLink/internal/catalog"
 	"github.com/re35t/AegisLink/internal/conversation"
 	"github.com/re35t/AegisLink/internal/mcp"
 	"github.com/re35t/AegisLink/internal/memory"
@@ -31,6 +32,12 @@ type AccountService interface {
 type AgentService interface {
 	Bootstrap(context.Context, string) (agent.Agent, error)
 	List(context.Context, string) ([]agent.Agent, error)
+}
+
+type AgentProfileService interface {
+	Get(context.Context, string, string) (agent.Profile, error)
+	Update(context.Context, string, string, agent.ProfileUpdate) (agent.Profile, error)
+	UpdatePolicies(context.Context, string, string, int64, []agent.PolicyChange) (agent.Profile, error)
 }
 
 type ConversationService interface {
@@ -75,13 +82,19 @@ type MCPService interface {
 	Mentions(context.Context, string, string, mcp.MentionQuery) (mcp.MentionPage, error)
 }
 
+type CatalogService interface {
+	List(context.Context, string, string, catalog.Query) (catalog.Page, error)
+}
+
 type Dependencies struct {
 	Accounts      AccountService
 	Agents        AgentService
+	Profiles      AgentProfileService
 	Conversations ConversationService
 	Memories      MemoryService
 	Skills        SkillService
 	MCP           MCPService
+	Catalog       CatalogService
 }
 
 type AuthConfig struct {
@@ -106,10 +119,12 @@ func NewRouter(dependencies Dependencies, webOrigin string, auth AuthConfig, mod
 	handler := &handler{
 		accounts:      dependencies.Accounts,
 		agents:        dependencies.Agents,
+		profiles:      dependencies.Profiles,
 		conversations: dependencies.Conversations,
 		memories:      dependencies.Memories,
 		skills:        dependencies.Skills,
 		mcp:           dependencies.MCP,
+		catalog:       dependencies.Catalog,
 		auth:          auth,
 		model:         model,
 		logger:        logger,
@@ -131,6 +146,9 @@ func NewRouter(dependencies Dependencies, webOrigin string, auth AuthConfig, mod
 	protected.GET("/bootstrap", handler.bootstrap)
 	protected.POST("/ag-ui", handler.runAgent)
 	protected.GET("/agents", handler.listAgents)
+	protected.GET("/agents/:agentId/profile", handler.getAgentProfile)
+	protected.PATCH("/agents/:agentId/profile", handler.updateAgentProfile)
+	protected.PATCH("/agents/:agentId/profile/disclosure-policies", handler.updateAgentProfileDisclosurePolicies)
 	protected.GET("/agents/:agentId/memories", handler.listMemories)
 	protected.POST("/agents/:agentId/memories", handler.createMemory)
 	protected.PATCH("/agents/:agentId/memories/:memoryId", handler.updateMemory)

@@ -48,6 +48,6 @@ type selectionContext struct {
 	err error
 }
 
-func (contextProvider selectionContext) ResolveToolSelection(context.Context, string, string, string) (ExecutionPolicy, error) {
+func (contextProvider selectionContext) ResolveSelection(context.Context, string, string, RunSelection) (ExecutionPolicy, error) {
 	return ExecutionPolicy{}, contextProvider.err
 }

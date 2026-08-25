@@ -15,6 +15,7 @@ import (
 
 	"github.com/re35t/AegisLink/internal/account"
 	"github.com/re35t/AegisLink/internal/agent"
+	"github.com/re35t/AegisLink/internal/catalog"
 	"github.com/re35t/AegisLink/internal/conversation"
 	"github.com/re35t/AegisLink/internal/mcp"
 	"github.com/re35t/AegisLink/internal/memory"
@@ -145,6 +146,55 @@ func TestBootstrapExposesStableModelMetadata(t *testing.T) {
 	}
 }
 
+func TestAgentProfileEndpointsReturnOwnerViewAndAcceptUpdates(t *testing.T) {
+	t.Parallel()
+	service := &fakeService{}
+	router := newTestRouter(service, ModelInfo{})
+
+	getRequest := httptest.NewRequest(http.MethodGet, "/api/v1/agents/agent-1/profile", nil)
+	authorize(getRequest)
+	getResponse := httptest.NewRecorder()
+	router.ServeHTTP(getResponse, getRequest)
+	if getResponse.Code != http.StatusOK || !strings.Contains(getResponse.Body.String(), `"agentId":"agent-1"`) || strings.Contains(getResponse.Body.String(), "systemPrompt") {
+		t.Fatalf("unexpected profile response: status=%d body=%q", getResponse.Code, getResponse.Body.String())
+	}
+
+	patchRequest := httptest.NewRequest(http.MethodPatch, "/api/v1/agents/agent-1/profile", strings.NewReader(`{
+		"expectedVersion":1,"name":"Research Agent","avatarUrl":"https://example.test/avatar.png"
+	}`))
+	patchRequest.Header.Set("Content-Type", "application/json")
+	authorize(patchRequest)
+	patchResponse := httptest.NewRecorder()
+	router.ServeHTTP(patchResponse, patchRequest)
+	if patchResponse.Code != http.StatusOK || service.profileUpdate == nil || service.profileUpdate.Name == nil || *service.profileUpdate.Name != "Research Agent" {
+		t.Fatalf("unexpected profile update: status=%d body=%q update=%#v", patchResponse.Code, patchResponse.Body.String(), service.profileUpdate)
+	}
+
+	policyRequest := httptest.NewRequest(http.MethodPatch, "/api/v1/agents/agent-1/profile/disclosure-policies", strings.NewReader(`{
+		"expectedVersion":2,"changes":[{"subjectType":"identity","subjectId":"agent-1","policy":{"visibility":"public","channels":["agent-card"],"indexable":false,"audiences":[]}}]
+	}`))
+	policyRequest.Header.Set("Content-Type", "application/json")
+	authorize(policyRequest)
+	policyResponse := httptest.NewRecorder()
+	router.ServeHTTP(policyResponse, policyRequest)
+	if policyResponse.Code != http.StatusOK || len(service.policyChanges) != 1 || service.policyChanges[0].Policy.Visibility != agent.VisibilityPublic {
+		t.Fatalf("unexpected policy update: status=%d body=%q changes=%#v", policyResponse.Code, policyResponse.Body.String(), service.policyChanges)
+	}
+}
+
+func TestAgentProfileVersionConflictUsesStableError(t *testing.T) {
+	t.Parallel()
+	router := newTestRouter(&fakeService{profileError: agent.ErrProfileConflict}, ModelInfo{})
+	request := httptest.NewRequest(http.MethodPatch, "/api/v1/agents/agent-1/profile", strings.NewReader(`{"expectedVersion":1,"name":"Aegis"}`))
+	request.Header.Set("Content-Type", "application/json")
+	authorize(request)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "profile_version_conflict") {
+		t.Fatalf("unexpected profile conflict: status=%d body=%q", response.Code, response.Body.String())
+	}
+}
+
 func TestImportSkillAcceptsMultipartBundle(t *testing.T) {
 	t.Parallel()
 	var body bytes.Buffer
@@ -175,6 +225,25 @@ func TestImportSkillAcceptsMultipartBundle(t *testing.T) {
 	}
 	if skillService.imported == nil || skillService.imported.FileName != "custom.md" || skillService.imported.Version != "1.2.0" || string(skillService.imported.Data) != content {
 		t.Fatalf("unexpected import request: %#v", skillService.imported)
+	}
+}
+
+func TestMentionCatalogReturnsDistinctCapabilityKinds(t *testing.T) {
+	t.Parallel()
+	router := newTestRouter(&fakeService{}, ModelInfo{})
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/agents/agent-1/mentions?kinds=mcp-tool,skill,discovery", nil)
+	authorize(request)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%q", response.Code, response.Body.String())
+	}
+	var page catalog.Page
+	if err := json.Unmarshal(response.Body.Bytes(), &page); err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) != 3 || page.Items[0].Kind != "mcp-tool" || page.Items[1].Kind != "skill" || page.Items[2].Kind != "discovery" {
+		t.Fatalf("items = %#v", page.Items)
 	}
 }
 
@@ -241,12 +310,15 @@ func TestAGUIRunStreamsProtocolLifecycleAndTextEvents(t *testing.T) {
 
 type fakeService struct {
 	conversationError error
+	profileError      error
 	run               conversation.Run
 	events            []conversation.RunEvent
 	startRequest      *conversation.RunRequest
 	settingsUpdate    *account.SettingsUpdate
 	currentPassword   string
 	newPassword       string
+	profileUpdate     *agent.ProfileUpdate
+	policyChanges     []agent.PolicyChange
 }
 
 func (fake *fakeService) Register(context.Context, string, string, string) (account.AuthResult, error) {
@@ -295,6 +367,30 @@ func (fake *fakeService) Bootstrap(context.Context, string) (agent.Agent, error)
 	return agent.Agent{}, nil
 }
 func (fake *fakeService) List(context.Context, string) ([]agent.Agent, error) { return nil, nil }
+func (fake *fakeService) Get(context.Context, string, string) (agent.Profile, error) {
+	if fake.profileError != nil {
+		return agent.Profile{}, fake.profileError
+	}
+	return testAgentProfile(), nil
+}
+func (fake *fakeService) Update(_ context.Context, _, _ string, update agent.ProfileUpdate) (agent.Profile, error) {
+	if fake.profileError != nil {
+		return agent.Profile{}, fake.profileError
+	}
+	fake.profileUpdate = &update
+	profile := testAgentProfile()
+	profile.Version++
+	return profile, nil
+}
+func (fake *fakeService) UpdatePolicies(_ context.Context, _, _ string, _ int64, changes []agent.PolicyChange) (agent.Profile, error) {
+	if fake.profileError != nil {
+		return agent.Profile{}, fake.profileError
+	}
+	fake.policyChanges = changes
+	profile := testAgentProfile()
+	profile.Version++
+	return profile, nil
+}
 func (fake *fakeService) ListConversations(context.Context, string) ([]conversation.Conversation, error) {
 	return nil, nil
 }
@@ -387,6 +483,16 @@ func (*fakeMCPService) Mentions(context.Context, string, string, mcp.MentionQuer
 	return mcp.MentionPage{}, nil
 }
 
+type fakeCatalogService struct{}
+
+func (*fakeCatalogService) List(context.Context, string, string, catalog.Query) (catalog.Page, error) {
+	return catalog.Page{Items: []catalog.Item{
+		{ID: "mcp-tool:one", Kind: "mcp-tool", Category: "mcp", Action: "force-tool-once", Availability: "ready", ResourceID: "one"},
+		{ID: "skill:one", Kind: "skill", Category: "skills", Action: "use-skill-once", Availability: "ready", ResourceID: "one"},
+		{ID: catalog.DiscoveryMentionID, Kind: "discovery", Category: "discovery", Action: "discover-once", Availability: "ready", ResourceID: catalog.DiscoveryResourceID},
+	}}, nil
+}
+
 func discardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
@@ -398,14 +504,26 @@ func newTestRouter(service *fakeService, model ModelInfo) http.Handler {
 func newTestRouterWithSkills(service *fakeService, model ModelInfo, skillService SkillService) http.Handler {
 	return NewRouter(
 		Dependencies{
-			Accounts: service, Agents: service, Conversations: service,
-			Memories: &fakeMemoryService{}, Skills: skillService, MCP: &fakeMCPService{},
+			Accounts: service, Agents: service, Profiles: service, Conversations: service,
+			Memories: &fakeMemoryService{}, Skills: skillService, MCP: &fakeMCPService{}, Catalog: &fakeCatalogService{},
 		},
 		"http://127.0.0.1:5173",
 		AuthConfig{CookieName: "aegislink_session"},
 		model,
 		discardLogger(),
 	)
+}
+
+func testAgentProfile() agent.Profile {
+	now := time.Now()
+	return agent.Profile{
+		AgentID: "agent-1", Version: 1, CreatedAt: now, UpdatedAt: now,
+		Identity: agent.ProfileIdentity{
+			ID: "agent-1", Name: "Aegis", Description: "Personal Agent", HumanLinked: true,
+			Disclosure: agent.DefaultDisclosurePolicy(),
+		},
+		Capabilities: []agent.ProfileCapability{}, Facts: []agent.ProfileFact{}, MemoryProjections: []agent.MemoryProjection{},
+	}
 }
 
 func authorize(request *http.Request) {

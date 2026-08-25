@@ -74,7 +74,7 @@ func TestEinoRunsReActToolLoop(t *testing.T) {
 	if answer.String() != "tool result observed" {
 		t.Fatalf("unexpected answer %q", answer.String())
 	}
-	if !fake.sawToolResult || len(fake.tools) != 1 || fake.tools[0].Name != "echo" {
+	if !fake.sawToolResult || !hasToolNamed(fake.tools, "echo") || !hasToolNamed(fake.tools, "discover_capabilities") {
 		t.Fatalf("ReAct loop did not bind and observe the tool result: %#v", fake)
 	}
 	if len(toolEvents) != 2 {
@@ -153,9 +153,55 @@ func TestEinoRejectsIgnoredAndMismatchedForcedTool(t *testing.T) {
 	}
 }
 
+func TestEinoForcesSelectedSkillAndValidatesItsName(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name      string
+		modelName string
+		expected  error
+	}{
+		{name: "selected", modelName: "go-review"},
+		{name: "different skill", modelName: "other-skill", expected: conversation.ErrSelectedSkillMismatch},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fake := &selectedSkillModel{skillName: test.modelName}
+			runtime := NewWithModel(fake, Options{MaxIterations: 4})
+			var runtimeErr error
+			for output := range runtime.Stream(t.Context(), conversation.RuntimeInput{
+				Agent: agent.Agent{Name: "Aegis"}, Messages: []conversation.Message{{Role: "user", Content: "review this"}},
+				Context: conversation.AgentContext{Skills: []conversation.RuntimeSkill{{
+					Name: "go-review", Description: "Review Go", Content: "Review safely.",
+				}}},
+				Policy: conversation.ExecutionPolicy{
+					Mode: "use-skill-once", SkillName: "go-review", QualifiedToolName: "load_skill",
+				},
+			}) {
+				if output.Err != nil {
+					runtimeErr = output.Err
+				}
+			}
+			if !errors.Is(runtimeErr, test.expected) {
+				t.Fatalf("error = %v, expected %v", runtimeErr, test.expected)
+			}
+			if fake.options[0].ToolChoice == nil || *fake.options[0].ToolChoice != schema.ToolChoiceForced || fake.options[0].AllowedToolNames[0] != "load_skill" {
+				t.Fatalf("selected Skill was not forced: %#v", fake.options[0])
+			}
+		})
+	}
+}
+
 type fakeModel struct {
 	input []*schema.Message
 	tools []*schema.ToolInfo
+}
+
+func hasToolNamed(tools []*schema.ToolInfo, name string) bool {
+	for _, item := range tools {
+		if item.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 func (fake *fakeModel) Generate(context.Context, []*schema.Message, ...model.Option) (*schema.Message, error) {
@@ -188,6 +234,33 @@ type reactModel struct {
 	tools         []*schema.ToolInfo
 	options       []*model.Options
 	sawToolResult bool
+}
+
+type selectedSkillModel struct {
+	calls     int
+	skillName string
+	options   []*model.Options
+}
+
+func (*selectedSkillModel) Generate(context.Context, []*schema.Message, ...model.Option) (*schema.Message, error) {
+	return nil, errors.New("unexpected Generate")
+}
+
+func (fake *selectedSkillModel) Stream(_ context.Context, _ []*schema.Message, options ...model.Option) (*schema.StreamReader[*schema.Message], error) {
+	fake.calls++
+	fake.options = append(fake.options, model.GetCommonOptions(&model.Options{}, options...))
+	if fake.calls == 1 {
+		index := 0
+		return schema.StreamReaderFromArray([]*schema.Message{schema.AssistantMessage("", []schema.ToolCall{{
+			Index: &index, ID: "call-skill", Type: "function",
+			Function: schema.FunctionCall{Name: "load_skill", Arguments: `{"name":"` + fake.skillName + `"}`},
+		}})}), nil
+	}
+	return schema.StreamReaderFromArray([]*schema.Message{schema.AssistantMessage("skill applied", nil)}), nil
+}
+
+func (fake *selectedSkillModel) WithTools(_ []*schema.ToolInfo) (model.ToolCallingChatModel, error) {
+	return fake, nil
 }
 
 func (fake *reactModel) Generate(context.Context, []*schema.Message, ...model.Option) (*schema.Message, error) {

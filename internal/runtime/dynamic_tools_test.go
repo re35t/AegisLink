@@ -28,10 +28,18 @@ func TestRuntimeToolsUseProgressiveSkillLoadingAndDynamicMCP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tools) != 2 {
+	if len(tools) != 3 {
 		t.Fatalf("tool count = %d", len(tools))
 	}
-	loader, ok := tools[0].(tool.InvokableTool)
+	discovery, ok := tools[0].(tool.InvokableTool)
+	if !ok {
+		t.Fatalf("discovery tool is not invokable: %T", tools[0])
+	}
+	discovered, err := discovery.InvokableRun(t.Context(), `{"query":"read demo data"}`)
+	if err != nil || !strings.Contains(discovered, "test-skill") || !strings.Contains(discovered, "mcp__demo__read") {
+		t.Fatalf("capability discovery output=%q err=%v", discovered, err)
+	}
+	loader, ok := tools[1].(tool.InvokableTool)
 	if !ok {
 		t.Fatalf("skill loader is not invokable: %T", tools[0])
 	}
@@ -42,7 +50,7 @@ func TestRuntimeToolsUseProgressiveSkillLoadingAndDynamicMCP(t *testing.T) {
 	if loaded == "" || loaded == `{"name":"test-skill"}` {
 		t.Fatalf("skill content was not loaded: %q", loaded)
 	}
-	dynamic, ok := tools[1].(tool.InvokableTool)
+	dynamic, ok := tools[2].(tool.InvokableTool)
 	if !ok {
 		t.Fatalf("MCP tool is not invokable: %T", tools[1])
 	}
@@ -91,15 +99,15 @@ func TestRuntimeToolsReadSkillResourcesWithoutExecutingScripts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tools) != 2 {
+	if len(tools) != 3 {
 		t.Fatalf("tool count = %d", len(tools))
 	}
-	manifestLoader := tools[0].(tool.InvokableTool)
+	manifestLoader := tools[1].(tool.InvokableTool)
 	manifest, err := manifestLoader.InvokableRun(t.Context(), `{"name":"bundle-skill"}`)
 	if err != nil || !strings.Contains(manifest, "references/guide.md") || !strings.Contains(manifest, "assets/image.png") {
 		t.Fatalf("bundle manifest metadata missing: output=%q err=%v", manifest, err)
 	}
-	resourceLoader := tools[1].(tool.InvokableTool)
+	resourceLoader := tools[2].(tool.InvokableTool)
 	resource, err := resourceLoader.InvokableRun(t.Context(), `{"name":"bundle-skill","path":"references/guide.md"}`)
 	if err != nil || !read || !strings.Contains(resource, "reference body") {
 		t.Fatalf("resource was not loaded safely: read=%v output=%q err=%v", read, resource, err)

@@ -39,9 +39,15 @@ type Run struct {
 
 type ExecutionPolicy struct {
 	Mode              string `json:"mode"`
+	Kind              string `json:"kind,omitempty"`
+	Action            string `json:"action,omitempty"`
 	MentionID         string `json:"mentionId,omitempty"`
+	ResourceID        string `json:"resourceId,omitempty"`
+	Label             string `json:"label,omitempty"`
 	ToolID            string `json:"toolId,omitempty"`
 	ToolName          string `json:"toolName,omitempty"`
+	SkillID           string `json:"skillId,omitempty"`
+	SkillName         string `json:"skillName,omitempty"`
 	QualifiedToolName string `json:"-"`
 }
 

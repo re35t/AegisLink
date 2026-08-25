@@ -52,6 +52,14 @@ Do not render raw JSON as the primary successful result. Raw input/output may be
 - A failed enable action preserves the message draft and provides retry. A selected Tool is cleared only after `RUN_STARTED`, not when Send is pressed.
 - The Run Inspector distinguishes the user-specified Tool from actual `TOOL_CALL_*` results.
 
+### Composer capability menu
+
+- The Composer's leading action is a compact `+` button. It opens a narrow first-level menu containing `MCP`, `Skills`, and `Discovery`; selecting a type opens its child list to the right.
+- `@` continues to use the same server-projected catalog and selection state through the assistant-ui Trigger Popover.
+- MCP entries use `mcp-tool / force-tool-once`; Skill entries use `skill / use-skill-once`; Discovery uses `discovery / discover-once`. These types remain distinct in the AG-UI selection and durable Run execution policy.
+- Selecting a Skill forces `load_skill` once with the exact authorized Skill name, then returns to normal inference. Selecting Discovery forces the local `discover_capabilities` tool once; it reports enabled Agent Skills and MCP Tools and does not imply Internet or multi-Agent discovery.
+- Disabled MCP Tools and Skills require an explicit enable mutation before selection. Failed enablement keeps the draft and offers retry.
+
 ## Human-in-the-loop and approvals
 
 Meaningful external effects require an explicit approval state unless policy has already granted the exact scope. An approval surface names:
@@ -91,3 +99,11 @@ Errors must retain the attempted object/action and offer the safest next step. D
 ## Feedback and confirmations
 
 Confirm changes by naming the object and resulting state. Use reversible inline feedback for low-risk changes. Reserve modal confirmation for destructive, expensive, credential, permission, or external-effect actions. A toast alone is not sufficient for a failed action whose context disappears.
+
+## Agent Profile disclosure
+
+- The owner view always shows the full Agent Profile plus the effective policy for every identity, capability, Fact, and Memory Projection item.
+- `private` is the default and may only target the local Runtime context. External Agent Facts and Agent Card channels require an explicit non-private visibility.
+- Restricted disclosure requires at least one named audience. Indexing is available only for public items that include the Agent Facts channel.
+- Saving identity or disclosure changes advances the Profile version. A version conflict preserves the draft, explains that the Profile changed elsewhere, and offers reload rather than silently overwriting newer state.
+- Agent Card and Agent Facts controls store disclosure intent only until those publishing surfaces are explicitly implemented; the UI must say that they are not currently published.

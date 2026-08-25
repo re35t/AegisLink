@@ -72,7 +72,7 @@ interface RunActivity {
   runId?: string;
   status: RunActivityStatus;
   tools: ToolActivity[];
-  requestedTool?: SelectedMention;
+  requestedCapability?: SelectedMention;
 }
 
 class AegisHttpAgent extends HttpAgent {
@@ -151,7 +151,7 @@ export function AssistantThread({
           runId: event.runId,
           status: "running",
           tools: [],
-          requestedTool: selectionRef.current,
+          requestedCapability: selectionRef.current,
         });
         selectionRef.current = undefined;
         setSelectedMention(undefined);
@@ -552,11 +552,14 @@ function RunInspector({
           <span>Tool calls</span>
           <strong>{activity.tools.length}</strong>
         </div>
-        {activity.requestedTool && (
+        {activity.requestedCapability && (
           <div className="run-requested-tool">
-            <span>User specified</span>
-            <strong>{activity.requestedTool.label}</strong>
-            <small>{activity.requestedTool.groupLabel} · force once</small>
+            <span>User-specified capability</span>
+            <strong>{activity.requestedCapability.label}</strong>
+            <small>
+              {activity.requestedCapability.groupLabel} ·{" "}
+              {activity.requestedCapability.kind}
+            </small>
           </div>
         )}
         {activity.tools.length === 0 ? (

@@ -9,4 +9,5 @@ var (
 	ErrResourceUnreadable = errors.New("skill resource is not readable text")
 	ErrNotFound           = errors.New("skill not found")
 	ErrConflict           = errors.New("skill version label already refers to different content")
+	ErrDisabled           = errors.New("skill is disabled for this Agent")
 )

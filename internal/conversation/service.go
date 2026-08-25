@@ -89,14 +89,14 @@ func (service *Service) StartRun(ctx context.Context, principalID string, reques
 	}
 	policy := ExecutionPolicy{Mode: "auto"}
 	if request.Selection != nil {
-		if request.Selection.Action != "force-tool-once" || !validRunIdentifier(request.Selection.MentionID) {
+		if !validSelectionAction(request.Selection.Action) || !validRunIdentifier(request.Selection.MentionID) {
 			return Message{}, Run{}, ErrInvalidMessage
 		}
 		detail, err := service.repository.GetConversation(ctx, principalID, request.ConversationID)
 		if err != nil {
 			return Message{}, Run{}, err
 		}
-		policy, err = service.context.ResolveToolSelection(ctx, principalID, detail.Conversation.AgentID, request.Selection.MentionID)
+		policy, err = service.context.ResolveSelection(ctx, principalID, detail.Conversation.AgentID, *request.Selection)
 		if err != nil {
 			return Message{}, Run{}, err
 		}
@@ -122,6 +122,10 @@ func (service *Service) StartRun(ctx context.Context, principalID string, reques
 
 	go service.execute(runContext, principalID, run)
 	return message, run, nil
+}
+
+func validSelectionAction(action string) bool {
+	return action == "force-tool-once" || action == "use-skill-once" || action == "discover-once"
 }
 
 func (service *Service) GetRun(ctx context.Context, principalID, runID string) (Run, error) {

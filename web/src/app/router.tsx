@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-router";
 
 import { Workspace } from "../components/Workspace";
+import { AgentProfilePage } from "../features/agent/AgentProfilePage";
 import { AuthGate } from "../features/account/AuthGate";
 import { McpPage } from "../features/capabilities/McpPage";
 import { MemoryPage } from "../features/capabilities/MemoryPage";
@@ -56,9 +57,26 @@ const settingsRoute = createRoute({
   component: SettingsPage,
 });
 
+const agentProfileRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings/agent-profile",
+  validateSearch: (search: Record<string, unknown>) => ({
+    agentId:
+      typeof search.agentId === "string" && search.agentId.length > 0
+        ? search.agentId
+        : undefined,
+  }),
+  component: AgentProfileRoute,
+});
+
 function ConversationRoute() {
   const { conversationId } = conversationRoute.useParams();
   return <Workspace conversationId={conversationId} />;
+}
+
+function AgentProfileRoute() {
+  const { agentId } = agentProfileRoute.useSearch();
+  return <AgentProfilePage agentId={agentId} />;
 }
 
 const routeTree = rootRoute.addChildren([
@@ -68,6 +86,7 @@ const routeTree = rootRoute.addChildren([
   skillsRoute,
   mcpRoute,
   settingsRoute,
+  agentProfileRoute,
 ]);
 
 export const router = createRouter({ routeTree });

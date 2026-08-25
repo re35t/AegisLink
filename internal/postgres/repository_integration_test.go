@@ -322,6 +322,10 @@ func TestAccountRegistrationBindsPrincipalAgentAndSession(t *testing.T) {
 	if identity.User.ID != registration.User.ID || identity.Agent.OwnerPrincipalID != registration.User.ID {
 		t.Fatalf("unexpected identity: %#v", identity)
 	}
+	profileRecord, err := NewAgentProfileRepository(database).GetProfile(t.Context(), registration.User.ID, registration.Agent.ID)
+	if err != nil || profileRecord.Version != 1 {
+		t.Fatalf("default Agent Profile was not created: profile=%#v err=%v", profileRecord, err)
+	}
 	tokenHash := []byte("01234567890123456789012345678901")
 	expiresAt := time.Now().Add(time.Hour)
 	if err := repository.CreateSession(t.Context(), account.Session{
@@ -373,6 +377,135 @@ func TestAccountRegistrationBindsPrincipalAgentAndSession(t *testing.T) {
 	}
 	if _, err := repository.AuthenticateSession(t.Context(), tokenHash, time.Now()); err != nil {
 		t.Fatalf("current session should remain active: %v", err)
+	}
+}
+
+func TestAgentProfileRepositoryLifecycleAndIsolation(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is not set")
+	}
+	database, err := Open(t.Context(), databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	if err := Migrate(database); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.ExecContext(t.Context(), `
+		TRUNCATE account_sessions, user_accounts, agents, human_principals CASCADE`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.ExecContext(t.Context(), `
+		INSERT INTO human_principals (id, display_name) VALUES
+		  ('profile-owner', 'Profile owner'), ('profile-other', 'Other owner');
+		INSERT INTO agents (id, owner_principal_id, name, description, system_prompt)
+		VALUES ('profile-agent', 'profile-owner', 'Aegis', 'Original', 'secret prompt');
+		INSERT INTO agent_profiles (agent_id, owner_principal_id)
+		VALUES ('profile-agent', 'profile-owner');
+		INSERT INTO memories (id, owner_principal_id, agent_id, kind, content, confidence, source_uri)
+		VALUES ('profile-memory', 'profile-owner', 'profile-agent', 'semantic', 'Interested in security', 1, 'manual://test');
+		INSERT INTO agent_profile_facts (
+		  id, owner_principal_id, agent_id, namespace, fact_key, value_json, source, confidence
+		) VALUES (
+		  'profile-fact', 'profile-owner', 'profile-agent', 'interest', 'topic', '{"name":"security"}', 'memory_projection', 0.9
+		);
+		INSERT INTO agent_memory_projections (
+		  id, owner_principal_id, agent_id, projection_type, summary, confidence, freshness, generated_at, status
+		) VALUES (
+		  'profile-projection', 'profile-owner', 'profile-agent', 'research_interest', 'Interested in security research', 0.9, 1, now(), 'accepted'
+		);
+		INSERT INTO agent_memory_projection_sources (owner_principal_id, agent_id, projection_id, memory_id)
+		VALUES ('profile-owner', 'profile-agent', 'profile-projection', 'profile-memory')`); err != nil {
+		t.Fatal(err)
+	}
+
+	repository := NewAgentProfileRepository(database)
+	facts, err := repository.ListProfileFacts(t.Context(), "profile-owner", "profile-agent")
+	if err != nil || len(facts) != 1 || facts[0].Value["name"] != "security" {
+		t.Fatalf("unexpected Profile facts: facts=%#v err=%v", facts, err)
+	}
+	projections, err := repository.ListMemoryProjections(t.Context(), "profile-owner", "profile-agent")
+	if err != nil || len(projections) != 1 || len(projections[0].SourceMemoryIDs) != 1 || projections[0].SourceMemoryIDs[0] != "profile-memory" {
+		t.Fatalf("unexpected Memory projections: projections=%#v err=%v", projections, err)
+	}
+	if _, err := repository.GetProfile(t.Context(), "profile-other", "profile-agent"); !errors.Is(err, agent.ErrNotFound) {
+		t.Fatalf("Profile must not cross Principal scope: %v", err)
+	}
+	name := "Updated Aegis"
+	avatar := "https://example.test/aegis.png"
+	if err := repository.UpdateProfileIdentity(t.Context(), "profile-owner", "profile-agent", agent.ProfileUpdate{
+		ExpectedVersion: 1, Name: &name, AvatarURL: &avatar,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.UpdateDisclosurePolicies(t.Context(), "profile-owner", "profile-agent", 2, []agent.PolicyChange{{
+		SubjectType: agent.SubjectFact, SubjectID: "profile-fact",
+		Policy: agent.DisclosurePolicy{
+			Visibility: agent.VisibilityPublic, Channels: []agent.DisclosureChannel{agent.ChannelAgentFacts}, Indexable: true, Audiences: []string{},
+		},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	record, err := repository.GetProfile(t.Context(), "profile-owner", "profile-agent")
+	if err != nil || record.Version != 3 || record.AvatarURL != avatar {
+		t.Fatalf("unexpected updated Profile record: record=%#v err=%v", record, err)
+	}
+	policies, err := repository.ListDisclosurePolicies(t.Context(), "profile-owner", "profile-agent")
+	if err != nil || !policies[agent.PolicyKey{SubjectType: agent.SubjectFact, SubjectID: "profile-fact"}].Indexable {
+		t.Fatalf("unexpected disclosure policies: policies=%#v err=%v", policies, err)
+	}
+	if err := repository.UpdateDisclosurePolicies(t.Context(), "profile-owner", "profile-agent", 2, []agent.PolicyChange{{
+		SubjectType: agent.SubjectFact, SubjectID: "profile-fact", Policy: agent.DefaultDisclosurePolicy(),
+	}}); !errors.Is(err, agent.ErrProfileConflict) {
+		t.Fatalf("stale Profile update should conflict: %v", err)
+	}
+	if _, err := database.ExecContext(t.Context(), `DELETE FROM agents WHERE id='profile-agent'`); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := database.QueryRowContext(t.Context(), `SELECT count(*) FROM agent_profiles WHERE agent_id='profile-agent'`).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("Agent Profile did not cascade with Agent: count=%d err=%v", count, err)
+	}
+}
+
+func TestAgentProfileMigrationBackfillsExistingAgents(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is not set")
+	}
+	database, err := Open(t.Context(), databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	goose.SetBaseFS(migrations.FS)
+	if err := goose.SetDialect("postgres"); err != nil {
+		t.Fatal(err)
+	}
+	if err := goose.DownTo(database, ".", 7); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := goose.Up(database, "."); err != nil {
+			t.Errorf("restore latest schema: %v", err)
+		}
+	}()
+	if _, err := database.ExecContext(t.Context(), `
+		TRUNCATE account_sessions, user_accounts, agents, human_principals CASCADE;
+		INSERT INTO human_principals (id, display_name) VALUES ('backfill-owner', 'Backfill owner');
+		INSERT INTO agents (id, owner_principal_id, name, description, system_prompt)
+		VALUES ('backfill-agent', 'backfill-owner', 'Backfill Agent', '', 'prompt')`); err != nil {
+		t.Fatal(err)
+	}
+	if err := goose.UpTo(database, ".", 8); err != nil {
+		t.Fatal(err)
+	}
+	var version int64
+	if err := database.QueryRowContext(t.Context(), `
+		SELECT version FROM agent_profiles WHERE agent_id='backfill-agent' AND owner_principal_id='backfill-owner'`).Scan(&version); err != nil || version != 1 {
+		t.Fatalf("existing Agent was not backfilled: version=%d err=%v", version, err)
 	}
 }
 

@@ -82,7 +82,52 @@ describe("API client", () => {
       expect.objectContaining({ method: "PUT" }),
     );
     expect(fetch.mock.calls[2][0]).toBe(
-      "/api/v1/agents/agent-one/mentions?kinds=mcp-tool&limit=50&query=file",
+      "/api/v1/agents/agent-one/mentions?kinds=mcp-tool%2Cskill%2Cdiscovery&limit=50&query=file",
+    );
+  });
+
+  it("uses Agent-scoped Profile and disclosure policy contracts", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ agentId: "agent-one", version: 2 }), {
+          status: 200,
+        }),
+      ),
+    );
+
+    await api.getAgentProfile("agent-one");
+    await api.updateAgentProfile("agent-one", {
+      expectedVersion: 2,
+      name: "Research Agent",
+    });
+    await api.updateAgentProfileDisclosurePolicies("agent-one", {
+      expectedVersion: 3,
+      changes: [
+        {
+          subjectType: "identity",
+          subjectId: "agent-one",
+          policy: {
+            visibility: "public",
+            channels: ["agent-card"],
+            indexable: false,
+            audiences: [],
+          },
+        },
+      ],
+    });
+
+    expect(fetch.mock.calls[0][0]).toBe("/api/v1/agents/agent-one/profile");
+    expect(fetch.mock.calls[1][1]).toEqual(
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({
+          expectedVersion: 2,
+          name: "Research Agent",
+        }),
+      }),
+    );
+    expect(fetch.mock.calls[2][0]).toBe(
+      "/api/v1/agents/agent-one/profile/disclosure-policies",
     );
   });
 });

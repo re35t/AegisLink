@@ -11,6 +11,7 @@ import (
 	"github.com/re35t/AegisLink/internal/account"
 	"github.com/re35t/AegisLink/internal/agent"
 	"github.com/re35t/AegisLink/internal/agentcontext"
+	"github.com/re35t/AegisLink/internal/catalog"
 	"github.com/re35t/AegisLink/internal/config"
 	"github.com/re35t/AegisLink/internal/conversation"
 	"github.com/re35t/AegisLink/internal/httpapi"
@@ -47,6 +48,7 @@ func New(parent context.Context, cfg config.Config, logger *slog.Logger) (*Appli
 	}
 	accountRepository := postgres.NewAccountRepository(database)
 	agentRepository := postgres.NewAgentRepository(database)
+	agentProfileRepository := postgres.NewAgentProfileRepository(database)
 	conversationRepository := postgres.NewConversationRepository(database)
 	memoryRepository := postgres.NewMemoryRepository(database)
 	skillRepository := postgres.NewSkillRepository(database)
@@ -67,6 +69,27 @@ func New(parent context.Context, cfg config.Config, logger *slog.Logger) (*Appli
 	skillService := skills.NewService(skillRepository, agentService)
 	mcpClient := mcp.NewOfficialClient(cfg.MCP.Timeout, cfg.MCP.AllowPrivateNetworks)
 	mcpService := mcp.NewService(mcpRepository, agentService, mcpClient)
+	profileService := agent.NewProfileService(
+		agentProfileRepository,
+		agentService,
+		skillService,
+		mcpService,
+		agent.StaticCapabilityProvider{Capabilities: []agent.ProfileCapability{
+			{
+				ID: "model:" + cfg.Model.ID + ":streaming", Name: "Streaming responses",
+				Description: "Streams response text while the Agent Run is active.",
+				Kind:        agent.CapabilityModel, Tags: []string{"model", cfg.Model.Driver},
+				Source: agent.CapabilitySourceRuntime, Confidence: 1, Callable: true,
+			},
+			{
+				ID: "model:" + cfg.Model.ID + ":tool-calling", Name: "Tool calling",
+				Description: "Can request authorized Agent Skills and MCP Tools during a Run.",
+				Kind:        agent.CapabilityModel, Tags: []string{"model", cfg.Model.Driver},
+				Source: agent.CapabilitySourceRuntime, Confidence: 1, Callable: true,
+			},
+		}},
+	)
+	catalogService := catalog.NewService(agentService, mcpService, skillService)
 	contextService := agentcontext.NewService(memoryService, skillService, mcpService)
 	conversationService := conversation.NewService(
 		root,
@@ -79,10 +102,12 @@ func New(parent context.Context, cfg config.Config, logger *slog.Logger) (*Appli
 	router := httpapi.NewRouter(httpapi.Dependencies{
 		Accounts:      accountService,
 		Agents:        agentService,
+		Profiles:      profileService,
 		Conversations: conversationService,
 		Memories:      memoryService,
 		Skills:        skillService,
 		MCP:           mcpService,
+		Catalog:       catalogService,
 	}, cfg.Web.Origin, httpapi.AuthConfig{
 		CookieName: authCookieName, CookieSecure: cfg.Auth.CookieSecure,
 	}, httpapi.ModelInfo{

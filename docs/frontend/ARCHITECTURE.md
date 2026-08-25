@@ -15,7 +15,7 @@ web/src/
 ├── components/
 │   ├── Workspace.tsx       query/mutation orchestration and feature composition
 │   ├── AssistantThread.tsx assistant-ui + AG-UI runtime, Tool UI, and Run Inspector
-│   ├── MentionCatalog.tsx  assistant-ui `@` Trigger wrapper and Agent Tool enablement
+│   ├── MentionCatalog.tsx  assistant-ui `@` Trigger plus typed MCP/Skill/Discovery `+` menu
 │   ├── aguiSelection.ts    trusted-minimum AG-UI forwarded selection serializer
 │   ├── MarkdownText.tsx    shared assistant Markdown renderer
 │   ├── layout/AppShell.tsx product navigation and responsive shell
@@ -32,10 +32,13 @@ web/src/
 ├── features/settings/
 │   ├── SettingsPage.tsx         account profile, interface preferences, and password security
 │   └── preferences.tsx          Query-backed language/theme resolution and document application
+├── features/agent/
+│   ├── AgentProfilePage.tsx     Agent selection, stable identity editing, and Profile query coordination
+│   └── DisclosurePolicyEditor.tsx per-item disclosure drafts and validation-aware controls
 └── styles.css              current global styles and component classes
 ```
 
-Conversation, Memory, Skills, and MCP management now have real routes. Agent profile and Runs/Traces remain planned. Capability management is grouped because it shares Agent bootstrap/scope and compact CRUD patterns; backend domain ownership remains split across Memory, Skills, and MCP.
+Conversation, Memory, Skills, MCP management, and Agent Profile now have real routes. Runs/Traces remain planned. Capability management is grouped because it shares Agent bootstrap/scope and compact CRUD patterns; backend domain ownership remains split across Memory, Skills, and MCP. Agent Profile aggregates those authoritative capability sources and owns only identity extensions and disclosure policy state.
 
 Account Settings is intentionally separate from Agent capabilities. Display name, login security, interface language, and theme belong to the authenticated User Account/Human Principal; Memory, Skills, MCP, and future model behavior remain Agent-scoped.
 
@@ -83,7 +86,7 @@ Do not let a component both render a large surface and implement fetch/SSE parsi
 
 Use TanStack Query for server state: Agent bootstrap data, Conversations, Messages, Runs, Memory, Skills, MCP Servers, and Mention Catalog projections. Invalidate or update query caches after mutations; do not duplicate them into React context or a general store.
 
-The selected Mention is ephemeral local Composer state. It is cleared only after AG-UI emits `RUN_STARTED`; validation and network failures retain it for retry. Durable authority remains the Run `executionPolicy` snapshot on the server.
+The selected capability Mention is ephemeral local Composer state. MCP Tool, Skill, and Discovery selections keep distinct `kind` and `action` values. It is cleared only after AG-UI emits `RUN_STARTED`; validation and network failures retain it for retry. Durable authority remains the typed Run `executionPolicy` snapshot on the server.
 
 Use local React state for transient presentation state such as an open drawer, selected tab, draft-only filter, or expanded tool row. State that must survive reload, be shared across clients, authorize an external effect, or support event replay belongs on the server.
 
@@ -97,7 +100,7 @@ Do not add a client state library until there is a demonstrated cross-route clie
 - Use `web/src/api/client.ts` as the application-facing REST adapter rather than calling `fetch` throughout components.
 - Use REST for durable resource CRUD and bootstrap/history reads.
 - Use AG-UI through `@assistant-ui/react-ag-ui` for active Runs. Do not expose internal Eino or provider event shapes to React.
-- AG-UI forced Tool requests carry only `forwardedProps.aegislink.selection.mentionId` and `action`. Tool names, schemas, and client AG-UI `tools` are not permission evidence.
+- AG-UI capability requests carry only `forwardedProps.aegislink.selection.mentionId` and `action`. Tool names, Skill content, schemas, and client AG-UI `tools` are not permission evidence. The server resolves MCP Tool, Skill, or Discovery authority from the Conversation's Agent.
 - PostgreSQL history is authoritative. assistant-ui history adapters translate persisted messages into UI messages; they do not become a second database.
 - The transitional `useRunEvents.ts` recovery path should be removed only after AG-UI replay/resume has equivalent tested behavior.
 

@@ -1,6 +1,10 @@
 import type { components } from "./schema";
 
 export type Agent = components["schemas"]["Agent"];
+export type AgentProfile = components["schemas"]["AgentProfile"];
+export type DisclosurePolicy = components["schemas"]["DisclosurePolicy"];
+export type DisclosurePolicyChange =
+  components["schemas"]["DisclosurePolicyChange"];
 export type AccountSettings = components["schemas"]["AccountSettingsResponse"];
 export type AuthResponse = components["schemas"]["AuthResponse"];
 export type Bootstrap = components["schemas"]["BootstrapResponse"];
@@ -57,6 +61,30 @@ export const api = {
       body: JSON.stringify(input),
     }),
   bootstrap: () => request<Bootstrap>("/api/v1/bootstrap"),
+  listAgents: async () => {
+    const response = await request<{ agents: Agent[] }>("/api/v1/agents");
+    return response.agents;
+  },
+  getAgentProfile: (agentId: string) =>
+    request<AgentProfile>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/profile`,
+    ),
+  updateAgentProfile: (
+    agentId: string,
+    input: components["schemas"]["UpdateAgentProfileRequest"],
+  ) =>
+    request<AgentProfile>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/profile`,
+      { method: "PATCH", body: JSON.stringify(input) },
+    ),
+  updateAgentProfileDisclosurePolicies: (
+    agentId: string,
+    input: components["schemas"]["UpdateDisclosurePoliciesRequest"],
+  ) =>
+    request<AgentProfile>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/profile/disclosure-policies`,
+      { method: "PATCH", body: JSON.stringify(input) },
+    ),
   listMemories: async (agentId: string) => {
     const response = await request<{ memories: Memory[] }>(
       `/api/v1/agents/${encodeURIComponent(agentId)}/memories`,
@@ -170,7 +198,10 @@ export const api = {
       { method: "DELETE" },
     ),
   listAgentMentions: (agentId: string, query = "") => {
-    const parameters = new URLSearchParams({ kinds: "mcp-tool", limit: "50" });
+    const parameters = new URLSearchParams({
+      kinds: "mcp-tool,skill,discovery",
+      limit: "50",
+    });
     if (query.trim()) parameters.set("query", query.trim());
     return request<MentionCatalogPage>(
       `/api/v1/agents/${encodeURIComponent(agentId)}/mentions?${parameters.toString()}`,

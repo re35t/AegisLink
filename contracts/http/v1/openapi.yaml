@@ -192,6 +192,65 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/Agent"
+  /api/v1/agents/{agentId}/profile:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+    get:
+      operationId: getAgentProfile
+      responses:
+        "200":
+          description: Owner view of the Agent's stable identity, effective capabilities, facts, projections, and disclosure policies
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentProfile"
+        "404":
+          $ref: "#/components/responses/Error"
+    patch:
+      operationId: updateAgentProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAgentProfileRequest"
+      responses:
+        "200":
+          description: Agent identity updated and Profile version advanced
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentProfile"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /api/v1/agents/{agentId}/profile/disclosure-policies:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+    patch:
+      operationId: updateAgentProfileDisclosurePolicies
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDisclosurePoliciesRequest"
+      responses:
+        "200":
+          description: Disclosure policy overrides saved and Profile version advanced
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentProfile"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
   /api/v1/agents/{agentId}/memories:
     parameters:
       - $ref: "#/components/parameters/AgentId"
@@ -562,9 +621,9 @@ paths:
           maxLength: 200
       - name: kinds
         in: query
+        description: Comma-separated capability kinds. Defaults to mcp-tool, skill, and discovery.
         schema:
           type: string
-          enum: [mcp-tool]
       - name: cursor
         in: query
         schema:
@@ -899,6 +958,219 @@ components:
         updatedAt:
           type: string
           format: date-time
+    DisclosurePolicy:
+      type: object
+      required: [visibility, channels, indexable, audiences]
+      properties:
+        visibility:
+          type: string
+          enum: [private, authenticated, restricted, public]
+        channels:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum: [runtime-context, agent-facts, agent-card]
+        indexable:
+          type: boolean
+        audiences:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+            maxLength: 120
+    AgentProfileIdentity:
+      type: object
+      required: [id, name, description, avatarUrl, humanLinked, disclosure]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        avatarUrl:
+          type: string
+        humanLinked:
+          type: boolean
+        disclosure:
+          $ref: "#/components/schemas/DisclosurePolicy"
+    AgentProfileCapability:
+      type: object
+      required: [id, name, description, kind, tags, source, confidence, callable, disclosure]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        kind:
+          type: string
+          enum: [skill, tool, model_capability]
+        tags:
+          type: array
+          items:
+            type: string
+        source:
+          type: string
+          enum: [declared, runtime, tool, inferred]
+        confidence:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        callable:
+          type: boolean
+        disclosure:
+          $ref: "#/components/schemas/DisclosurePolicy"
+    AgentProfileFact:
+      type: object
+      required: [id, namespace, key, value, source, confidence, disclosure, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        namespace:
+          type: string
+        key:
+          type: string
+        value:
+          type: object
+          additionalProperties: true
+        source:
+          type: string
+          enum: [declared, memory_projection, runtime, imported]
+        confidence:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        validFrom:
+          type: string
+          format: date-time
+        validUntil:
+          type: string
+          format: date-time
+        disclosure:
+          $ref: "#/components/schemas/DisclosurePolicy"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    AgentMemoryProjection:
+      type: object
+      required: [id, type, summary, sourceMemoryIds, confidence, freshness, generatedAt, status, disclosure]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        summary:
+          type: string
+        sourceMemoryIds:
+          type: array
+          items:
+            type: string
+        confidence:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        freshness:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        generatedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [candidate, accepted, rejected, stale]
+        disclosure:
+          $ref: "#/components/schemas/DisclosurePolicy"
+    AgentProfile:
+      type: object
+      required: [agentId, version, identity, capabilities, facts, memoryProjections, createdAt, updatedAt]
+      properties:
+        agentId:
+          type: string
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        identity:
+          $ref: "#/components/schemas/AgentProfileIdentity"
+        capabilities:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentProfileCapability"
+        facts:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentProfileFact"
+        memoryProjections:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentMemoryProjection"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    UpdateAgentProfileRequest:
+      type: object
+      required: [expectedVersion]
+      minProperties: 2
+      properties:
+        expectedVersion:
+          type: integer
+          format: int64
+          minimum: 1
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        description:
+          type: string
+          maxLength: 1000
+        avatarUrl:
+          type: string
+          maxLength: 2048
+    DisclosurePolicyChange:
+      type: object
+      required: [subjectType, subjectId, policy]
+      properties:
+        subjectType:
+          type: string
+          enum: [identity, capability, fact, projection]
+        subjectId:
+          type: string
+          minLength: 1
+          maxLength: 512
+        policy:
+          $ref: "#/components/schemas/DisclosurePolicy"
+    UpdateDisclosurePoliciesRequest:
+      type: object
+      required: [expectedVersion, changes]
+      properties:
+        expectedVersion:
+          type: integer
+          format: int64
+          minimum: 1
+        changes:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            $ref: "#/components/schemas/DisclosurePolicyChange"
     Memory:
       type: object
       required:
@@ -1065,7 +1337,8 @@ components:
           description: Optional immutable version label; omitted inline installs use a content-derived local label
     McpTool:
       type: object
-      required: [id, serverId, name, description, inputSchema, enabled, riskLevel]
+      required:
+        [id, serverId, name, description, inputSchema, enabled, riskLevel]
       properties:
         id:
           type: string
@@ -1167,21 +1440,32 @@ components:
           type: string
         kind:
           type: string
-          enum: [mcp-plugin]
+          enum: [mcp-plugin, agent, system]
         label:
           type: string
     MentionItem:
       type: object
-      required: [id, kind, category, group, label, description, action, availability, toolId]
+      required:
+        [
+          id,
+          kind,
+          category,
+          group,
+          label,
+          description,
+          action,
+          availability,
+          resourceId,
+        ]
       properties:
         id:
           type: string
         kind:
           type: string
-          enum: [mcp-tool]
+          enum: [mcp-tool, skill, discovery]
         category:
           type: string
-          enum: [tools]
+          enum: [mcp, skills, discovery]
         group:
           $ref: "#/components/schemas/MentionGroup"
         label:
@@ -1190,13 +1474,21 @@ components:
           type: string
         action:
           type: string
-          enum: [force-tool-once]
+          enum: [force-tool-once, use-skill-once, discover-once]
         availability:
           type: string
-          enum: [ready, needs-agent-enable, server-offline, tool-disabled, approval-required]
+          enum:
+            [
+              ready,
+              needs-agent-enable,
+              server-offline,
+              tool-disabled,
+              skill-disabled,
+              approval-required,
+            ]
         disabledReason:
           type: string
-        toolId:
+        resourceId:
           type: string
     MentionCatalogPage:
       type: object
@@ -1214,12 +1506,26 @@ components:
       properties:
         mode:
           type: string
-          enum: [auto, force-tool-once]
+          enum: [auto, force-tool-once, use-skill-once, discover-once]
+        kind:
+          type: string
+          enum: [mcp-tool, skill, discovery]
+        action:
+          type: string
+          enum: [force-tool-once, use-skill-once, discover-once]
         mentionId:
+          type: string
+        resourceId:
+          type: string
+        label:
           type: string
         toolId:
           type: string
         toolName:
+          type: string
+        skillId:
+          type: string
+        skillName:
           type: string
     Conversation:
       type: object
@@ -1355,7 +1661,7 @@ components:
                   type: string
                 action:
                   type: string
-                  enum: [force-tool-once]
+                  enum: [force-tool-once, use-skill-once, discover-once]
     AgUiMessage:
       type: object
       required: [id, role]

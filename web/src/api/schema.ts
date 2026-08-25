@@ -186,6 +186,42 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/agents/{agentId}/profile": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    get: operations["getAgentProfile"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch: operations["updateAgentProfile"];
+    trace?: never;
+  };
+  "/api/v1/agents/{agentId}/profile/disclosure-policies": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch: operations["updateAgentProfileDisclosurePolicies"];
+    trace?: never;
+  };
   "/api/v1/agents/{agentId}/memories": {
     parameters: {
       query?: never;
@@ -409,7 +445,8 @@ export interface paths {
     parameters: {
       query?: {
         query?: string;
-        kinds?: "mcp-tool";
+        /** @description Comma-separated capability kinds. Defaults to mcp-tool, skill, and discovery. */
+        kinds?: string;
         cursor?: string;
         limit?: number;
       };
@@ -584,6 +621,104 @@ export interface components {
       /** Format: date-time */
       updatedAt: string;
     };
+    DisclosurePolicy: {
+      /** @enum {string} */
+      visibility: "private" | "authenticated" | "restricted" | "public";
+      channels: ("runtime-context" | "agent-facts" | "agent-card")[];
+      indexable: boolean;
+      audiences: string[];
+    };
+    AgentProfileIdentity: {
+      id: string;
+      name: string;
+      description: string;
+      avatarUrl: string;
+      humanLinked: boolean;
+      disclosure: components["schemas"]["DisclosurePolicy"];
+    };
+    AgentProfileCapability: {
+      id: string;
+      name: string;
+      description: string;
+      /** @enum {string} */
+      kind: "skill" | "tool" | "model_capability";
+      tags: string[];
+      /** @enum {string} */
+      source: "declared" | "runtime" | "tool" | "inferred";
+      /** Format: double */
+      confidence: number;
+      callable: boolean;
+      disclosure: components["schemas"]["DisclosurePolicy"];
+    };
+    AgentProfileFact: {
+      id: string;
+      namespace: string;
+      key: string;
+      value: {
+        [key: string]: unknown;
+      };
+      /** @enum {string} */
+      source: "declared" | "memory_projection" | "runtime" | "imported";
+      /** Format: double */
+      confidence: number;
+      /** Format: date-time */
+      validFrom?: string;
+      /** Format: date-time */
+      validUntil?: string;
+      disclosure: components["schemas"]["DisclosurePolicy"];
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: date-time */
+      updatedAt: string;
+    };
+    AgentMemoryProjection: {
+      id: string;
+      type: string;
+      summary: string;
+      sourceMemoryIds: string[];
+      /** Format: double */
+      confidence: number;
+      /** Format: double */
+      freshness: number;
+      /** Format: date-time */
+      generatedAt: string;
+      /** Format: date-time */
+      expiresAt?: string;
+      /** @enum {string} */
+      status: "candidate" | "accepted" | "rejected" | "stale";
+      disclosure: components["schemas"]["DisclosurePolicy"];
+    };
+    AgentProfile: {
+      agentId: string;
+      /** Format: int64 */
+      version: number;
+      identity: components["schemas"]["AgentProfileIdentity"];
+      capabilities: components["schemas"]["AgentProfileCapability"][];
+      facts: components["schemas"]["AgentProfileFact"][];
+      memoryProjections: components["schemas"]["AgentMemoryProjection"][];
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: date-time */
+      updatedAt: string;
+    };
+    UpdateAgentProfileRequest: {
+      /** Format: int64 */
+      expectedVersion: number;
+      name?: string;
+      description?: string;
+      avatarUrl?: string;
+    };
+    DisclosurePolicyChange: {
+      /** @enum {string} */
+      subjectType: "identity" | "capability" | "fact" | "projection";
+      subjectId: string;
+      policy: components["schemas"]["DisclosurePolicy"];
+    };
+    UpdateDisclosurePoliciesRequest: {
+      /** Format: int64 */
+      expectedVersion: number;
+      changes: components["schemas"]["DisclosurePolicyChange"][];
+    };
     Memory: {
       id: string;
       agentId: string;
@@ -705,29 +840,30 @@ export interface components {
     MentionGroup: {
       id: string;
       /** @enum {string} */
-      kind: "mcp-plugin";
+      kind: "mcp-plugin" | "agent" | "system";
       label: string;
     };
     MentionItem: {
       id: string;
       /** @enum {string} */
-      kind: "mcp-tool";
+      kind: "mcp-tool" | "skill" | "discovery";
       /** @enum {string} */
-      category: "tools";
+      category: "mcp" | "skills" | "discovery";
       group: components["schemas"]["MentionGroup"];
       label: string;
       description: string;
       /** @enum {string} */
-      action: "force-tool-once";
+      action: "force-tool-once" | "use-skill-once" | "discover-once";
       /** @enum {string} */
       availability:
         | "ready"
         | "needs-agent-enable"
         | "server-offline"
         | "tool-disabled"
+        | "skill-disabled"
         | "approval-required";
       disabledReason?: string;
-      toolId: string;
+      resourceId: string;
     };
     MentionCatalogPage: {
       items: components["schemas"]["MentionItem"][];
@@ -735,10 +871,18 @@ export interface components {
     };
     RunExecutionPolicy: {
       /** @enum {string} */
-      mode: "auto" | "force-tool-once";
+      mode: "auto" | "force-tool-once" | "use-skill-once" | "discover-once";
+      /** @enum {string} */
+      kind?: "mcp-tool" | "skill" | "discovery";
+      /** @enum {string} */
+      action?: "force-tool-once" | "use-skill-once" | "discover-once";
       mentionId?: string;
+      resourceId?: string;
+      label?: string;
       toolId?: string;
       toolName?: string;
+      skillId?: string;
+      skillName?: string;
     };
     Conversation: {
       id: string;
@@ -817,7 +961,7 @@ export interface components {
         selection?: {
           mentionId: string;
           /** @enum {string} */
-          action: "force-tool-once";
+          action: "force-tool-once" | "use-skill-once" | "discover-once";
         };
       };
     } & {
@@ -1156,6 +1300,87 @@ export interface operations {
           };
         };
       };
+    };
+  };
+  getAgentProfile: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Owner view of the Agent's stable identity, effective capabilities, facts, projections, and disclosure policies */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentProfile"];
+        };
+      };
+      404: components["responses"]["Error"];
+    };
+  };
+  updateAgentProfile: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["UpdateAgentProfileRequest"];
+      };
+    };
+    responses: {
+      /** @description Agent identity updated and Profile version advanced */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentProfile"];
+        };
+      };
+      400: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+    };
+  };
+  updateAgentProfileDisclosurePolicies: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["UpdateDisclosurePoliciesRequest"];
+      };
+    };
+    responses: {
+      /** @description Disclosure policy overrides saved and Profile version advanced */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentProfile"];
+        };
+      };
+      400: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
     };
   };
   listAgentMemories: {
@@ -1681,7 +1906,8 @@ export interface operations {
     parameters: {
       query?: {
         query?: string;
-        kinds?: "mcp-tool";
+        /** @description Comma-separated capability kinds. Defaults to mcp-tool, skill, and discovery. */
+        kinds?: string;
         cursor?: string;
         limit?: number;
       };

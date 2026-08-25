@@ -43,6 +43,8 @@ func (service *Service) execute(ctx context.Context, principalID string, run Run
 				service.finishFailed(principalID, run.ID, "forced_tool_not_called", false)
 			} else if errors.Is(output.Err, ErrForcedToolMismatch) {
 				service.finishFailed(principalID, run.ID, "forced_tool_mismatch", false)
+			} else if errors.Is(output.Err, ErrSelectedSkillMismatch) {
+				service.finishFailed(principalID, run.ID, "selected_skill_mismatch", false)
 			} else {
 				service.logger.Error("agent runtime failed", "runId", run.ID, "error", output.Err)
 				service.finishFailed(principalID, run.ID, "runtime_error", false)

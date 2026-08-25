@@ -16,7 +16,7 @@ Agent
 └── Capabilities
 ```
 
-Agent, Conversation, Memory, Skill, and MCP Server are first-class navigation and data concepts. Identity and Capabilities should be visible as agent context when implemented. Credentials, Connections, Groups, Discovery, and Agent Network remain future objects until a concrete workflow requires them.
+Agent, Conversation, Memory, Skill, and MCP Server are first-class navigation and data concepts. Identity and Capabilities should be visible as agent context when implemented. Composer Discovery is now a bounded Run mode for inspecting this Agent's enabled Skills and MCP Tools; it is not Internet Agent discovery. Credentials, Connections, Groups, network Discovery, and Agent Network remain future objects until a concrete workflow requires them.
 
 Do not use Agent, assistant, bot, model, and chat interchangeably:
 

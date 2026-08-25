@@ -41,6 +41,22 @@ type skillResourceOutput struct {
 	Content   string `json:"content"`
 }
 
+type discoveryInput struct {
+	Query string `json:"query,omitempty" jsonschema:"description=Optional capability need inferred from the user request"`
+}
+
+type discoveryOutput struct {
+	Query       string                `json:"query,omitempty"`
+	MemoryCount int                   `json:"memoryCount"`
+	Skills      []discoveryCapability `json:"skills"`
+	MCPTools    []discoveryCapability `json:"mcpTools"`
+}
+
+type discoveryCapability struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
 type dynamicTool struct {
 	definition conversation.RuntimeTool
 	parameters *jsonschema.Schema
@@ -48,6 +64,28 @@ type dynamicTool struct {
 
 func runtimeTools(ctx context.Context, builtIns []tool.BaseTool, agentContext conversation.AgentContext) ([]tool.BaseTool, error) {
 	resolved := append([]tool.BaseTool(nil), builtIns...)
+	discoveryTool, err := toolutils.InferTool(
+		"discover_capabilities",
+		"Inspect the current Agent's enabled Skills and MCP tools so the Agent can explain which capabilities fit the request.",
+		func(_ context.Context, input *discoveryInput) (*discoveryOutput, error) {
+			result := &discoveryOutput{
+				Query: input.Query, MemoryCount: len(agentContext.Memories),
+				Skills:   make([]discoveryCapability, 0, len(agentContext.Skills)),
+				MCPTools: make([]discoveryCapability, 0, len(agentContext.Tools)),
+			}
+			for _, item := range agentContext.Skills {
+				result.Skills = append(result.Skills, discoveryCapability{Name: item.Name, Description: item.Description})
+			}
+			for _, item := range agentContext.Tools {
+				result.MCPTools = append(result.MCPTools, discoveryCapability{Name: item.Name, Description: item.Description})
+			}
+			return result, nil
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create capability discovery tool: %w", err)
+	}
+	resolved = append(resolved, discoveryTool)
 	if len(agentContext.Skills) > 0 {
 		skillsByName := make(map[string]conversation.RuntimeSkill, len(agentContext.Skills))
 		hasReadableResources := false

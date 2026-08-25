@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/re35t/AegisLink/internal/catalog"
 	"github.com/re35t/AegisLink/internal/mcp"
 )
 
@@ -150,12 +151,12 @@ func (handler *handler) listMentions(c *gin.Context) {
 		}
 		limit = parsed
 	}
-	kinds := []string{"mcp-tool"}
+	kinds := []string{"mcp-tool", "skill", "discovery"}
 	if raw := strings.TrimSpace(c.Query("kinds")); raw != "" {
 		kinds = strings.Split(raw, ",")
 	}
 	actor := actorFrom(c)
-	page, err := handler.mcp.Mentions(c.Request.Context(), actor.User.ID, c.Param("agentId"), mcp.MentionQuery{
+	page, err := handler.catalog.List(c.Request.Context(), actor.User.ID, c.Param("agentId"), catalog.Query{
 		Query: c.Query("query"), Kinds: kinds, Cursor: c.Query("cursor"), Limit: limit,
 	})
 	if err != nil {

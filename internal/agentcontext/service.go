@@ -2,7 +2,9 @@ package agentcontext
 
 import (
 	"context"
+	"strings"
 
+	"github.com/re35t/AegisLink/internal/catalog"
 	"github.com/re35t/AegisLink/internal/conversation"
 	"github.com/re35t/AegisLink/internal/mcp"
 	"github.com/re35t/AegisLink/internal/memory"
@@ -14,6 +16,7 @@ type MemoryReader interface {
 }
 
 type SkillReader interface {
+	List(context.Context, string, string) ([]skills.Skill, error)
 	Enabled(context.Context, string, string) ([]skills.Skill, error)
 	ReadFile(context.Context, string, string, string, string) (skills.File, error)
 }
@@ -24,15 +27,53 @@ type MCPRuntime interface {
 	Invoke(context.Context, string, string, string, string, string) (string, error)
 }
 
-func (service *Service) ResolveToolSelection(ctx context.Context, principalID, agentID, mentionID string) (conversation.ExecutionPolicy, error) {
-	tool, err := service.mcp.ResolveMention(ctx, principalID, agentID, mentionID)
-	if err != nil {
-		return conversation.ExecutionPolicy{}, err
+func (service *Service) ResolveSelection(ctx context.Context, principalID, agentID string, selection conversation.RunSelection) (conversation.ExecutionPolicy, error) {
+	switch selection.Action {
+	case "force-tool-once":
+		tool, err := service.mcp.ResolveMention(ctx, principalID, agentID, selection.MentionID)
+		if err != nil {
+			return conversation.ExecutionPolicy{}, err
+		}
+		return conversation.ExecutionPolicy{
+			Mode: "force-tool-once", Kind: "mcp-tool", Action: selection.Action,
+			MentionID: selection.MentionID, ResourceID: tool.ToolID, Label: tool.Name,
+			ToolID: tool.ToolID, ToolName: tool.Name, QualifiedToolName: tool.QualifiedName,
+		}, nil
+	case "use-skill-once":
+		skillID, ok := strings.CutPrefix(selection.MentionID, "skill:")
+		if !ok || skillID == "" {
+			return conversation.ExecutionPolicy{}, skills.ErrNotFound
+		}
+		items, err := service.skills.List(ctx, principalID, agentID)
+		if err != nil {
+			return conversation.ExecutionPolicy{}, err
+		}
+		for _, item := range items {
+			if item.ID != skillID {
+				continue
+			}
+			if !item.Enabled {
+				return conversation.ExecutionPolicy{}, skills.ErrDisabled
+			}
+			return conversation.ExecutionPolicy{
+				Mode: "use-skill-once", Kind: "skill", Action: selection.Action,
+				MentionID: selection.MentionID, ResourceID: item.ID, Label: item.Name,
+				SkillID: item.ID, SkillName: item.Name, QualifiedToolName: "load_skill",
+			}, nil
+		}
+		return conversation.ExecutionPolicy{}, skills.ErrNotFound
+	case "discover-once":
+		if selection.MentionID != catalog.DiscoveryMentionID {
+			return conversation.ExecutionPolicy{}, catalog.ErrInvalid
+		}
+		return conversation.ExecutionPolicy{
+			Mode: "discover-once", Kind: "discovery", Action: selection.Action,
+			MentionID: selection.MentionID, ResourceID: catalog.DiscoveryResourceID,
+			Label: "Agent capabilities", QualifiedToolName: "discover_capabilities",
+		}, nil
+	default:
+		return conversation.ExecutionPolicy{}, catalog.ErrInvalid
 	}
-	return conversation.ExecutionPolicy{
-		Mode: "force-tool-once", MentionID: mentionID, ToolID: tool.ToolID,
-		ToolName: tool.Name, QualifiedToolName: tool.QualifiedName,
-	}, nil
 }
 
 type Service struct {

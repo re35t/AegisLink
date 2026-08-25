@@ -102,7 +102,7 @@ type Runtime interface {
 
 type ContextProvider interface {
 	Resolve(context.Context, string, string) (AgentContext, error)
-	ResolveToolSelection(context.Context, string, string, string) (ExecutionPolicy, error)
+	ResolveSelection(context.Context, string, string, RunSelection) (ExecutionPolicy, error)
 }
 
 type AgentReader interface {

@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import {
+  Bot,
   Check,
   Languages,
   LockKeyhole,
@@ -67,6 +68,10 @@ export function SettingsPage() {
           <Monitor size={16} />
           {t("General", "通用")}
         </a>
+        <Link to="/settings/agent-profile" search={{ agentId: undefined }}>
+          <Bot size={16} />
+          {t("Agent Profile", "Agent Profile")}
+        </Link>
         <a href="#account-settings">
           <UserRound size={16} />
           {t("Account", "账户")}

@@ -73,6 +73,11 @@ func (repository *AccountRepository) CreateAccountWithAgent(ctx context.Context,
 	if err != nil {
 		return account.Identity{}, fmt.Errorf("create personal agent: %w", err)
 	}
+	if _, err := transaction.ExecContext(ctx, `
+		INSERT INTO agent_profiles (agent_id, owner_principal_id)
+		VALUES ($1, $2)`, agentRecord.ID, agentRecord.OwnerPrincipalID); err != nil {
+		return account.Identity{}, fmt.Errorf("create personal agent profile: %w", err)
+	}
 	if err := transaction.Commit(); err != nil {
 		return account.Identity{}, fmt.Errorf("commit account registration: %w", err)
 	}

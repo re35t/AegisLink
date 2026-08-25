@@ -98,6 +98,27 @@ func (service *Service) Enabled(ctx context.Context, principalID, agentID string
 	return service.repository.Enabled(ctx, principalID, agentID)
 }
 
+func (service *Service) ProfileCapabilities(ctx context.Context, principalID, agentID string) ([]agent.ProfileCapability, error) {
+	items, err := service.List(ctx, principalID, agentID)
+	if err != nil {
+		return nil, err
+	}
+	capabilities := make([]agent.ProfileCapability, 0, len(items))
+	for _, item := range items {
+		capabilities = append(capabilities, agent.ProfileCapability{
+			ID:          "skill:" + item.ID,
+			Name:        item.Name,
+			Description: item.Description,
+			Kind:        agent.CapabilitySkill,
+			Tags:        []string{"skill", item.SourceType},
+			Source:      agent.CapabilitySourceRuntime,
+			Confidence:  1,
+			Callable:    item.Enabled,
+		})
+	}
+	return capabilities, nil
+}
+
 func (service *Service) ReadFile(ctx context.Context, principalID, agentID, skillID, filePath string) (File, error) {
 	if err := service.authorize(ctx, principalID, agentID); err != nil {
 		return File{}, err

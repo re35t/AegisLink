@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/re35t/AegisLink/internal/account"
 	"github.com/re35t/AegisLink/internal/agent"
+	"github.com/re35t/AegisLink/internal/catalog"
 	"github.com/re35t/AegisLink/internal/conversation"
 	"github.com/re35t/AegisLink/internal/mcp"
 	"github.com/re35t/AegisLink/internal/memory"
@@ -17,10 +18,12 @@ import (
 type handler struct {
 	accounts      AccountService
 	agents        AgentService
+	profiles      AgentProfileService
 	conversations ConversationService
 	memories      MemoryService
 	skills        SkillService
 	mcp           MCPService
+	catalog       CatalogService
 	auth          AuthConfig
 	model         ModelInfo
 	logger        *slog.Logger
@@ -48,12 +51,20 @@ func (handler *handler) handleError(c *gin.Context, err error) {
 		writeError(c, http.StatusUnauthorized, "invalid_credentials", "email or password is incorrect")
 	case errors.Is(err, conversation.ErrNotFound), errors.Is(err, agent.ErrNotFound):
 		writeError(c, http.StatusNotFound, "resource_not_found", "the requested resource was not found")
+	case errors.Is(err, agent.ErrProfileSubject):
+		writeError(c, http.StatusNotFound, "profile_subject_not_found", "the requested profile item was not found")
+	case errors.Is(err, agent.ErrProfileConflict):
+		writeError(c, http.StatusConflict, "profile_version_conflict", "the Agent Profile changed; reload it before saving again")
+	case errors.Is(err, agent.ErrInvalidProfile):
+		writeError(c, http.StatusBadRequest, "invalid_agent_profile", "the Agent identity or disclosure policy is invalid")
 	case errors.Is(err, conversation.ErrActiveRun):
 		writeError(c, http.StatusConflict, "active_run_exists", "the conversation already has an active run")
 	case errors.Is(err, conversation.ErrRunNotActive):
 		writeError(c, http.StatusConflict, "run_not_active", "the run is no longer active")
 	case errors.Is(err, conversation.ErrInvalidMessage):
 		writeError(c, http.StatusBadRequest, "invalid_message", "the message is empty or too long")
+	case errors.Is(err, catalog.ErrInvalid):
+		writeError(c, http.StatusBadRequest, "invalid_mentions_query", "mention query, kinds, cursor, or limit is invalid")
 	case errors.Is(err, memory.ErrInvalid):
 		writeError(c, http.StatusBadRequest, "invalid_memory", "memory kind, content, source, or confidence is invalid")
 	case errors.Is(err, memory.ErrNotFound):
@@ -70,6 +81,8 @@ func (handler *handler) handleError(c *gin.Context, err error) {
 		writeError(c, http.StatusConflict, "skill_version_conflict", "this Skill version label already refers to different content")
 	case errors.Is(err, skills.ErrNotFound):
 		writeError(c, http.StatusNotFound, "skill_not_found", "the requested Skill was not found")
+	case errors.Is(err, skills.ErrDisabled):
+		writeError(c, http.StatusConflict, "skill_disabled", "this Skill is not enabled for the current Agent")
 	case errors.Is(err, mcp.ErrInvalid):
 		writeError(c, http.StatusBadRequest, "invalid_mcp_server", "MCP name, endpoint, or tool permission is invalid")
 	case errors.Is(err, mcp.ErrConflict):

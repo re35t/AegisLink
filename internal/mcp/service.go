@@ -43,6 +43,35 @@ func (service *Service) List(ctx context.Context, principalID, agentID string) (
 	return service.repository.ListForAgent(ctx, principalID, agentID)
 }
 
+func (service *Service) ProfileCapabilities(ctx context.Context, principalID, agentID string) ([]agent.ProfileCapability, error) {
+	servers, err := service.List(ctx, principalID, agentID)
+	if err != nil {
+		return nil, err
+	}
+	capabilities := make([]agent.ProfileCapability, 0)
+	for _, server := range servers {
+		if !server.Bound {
+			continue
+		}
+		for _, tool := range server.Tools {
+			if !tool.Enabled {
+				continue
+			}
+			capabilities = append(capabilities, agent.ProfileCapability{
+				ID:          "mcp-tool:" + tool.ID,
+				Name:        tool.Name,
+				Description: tool.Description,
+				Kind:        agent.CapabilityTool,
+				Tags:        []string{"mcp", server.Name, string(tool.RiskLevel)},
+				Source:      agent.CapabilitySourceTool,
+				Confidence:  1,
+				Callable:    server.Enabled && server.Status == "connected" && tool.RiskLevel == ReadOnly,
+			})
+		}
+	}
+	return capabilities, nil
+}
+
 func (service *Service) Create(ctx context.Context, principalID, agentID, name, endpoint string) (Server, error) {
 	if err := service.authorize(ctx, principalID, agentID); err != nil {
 		return Server{}, err
@@ -171,7 +200,7 @@ func (service *Service) Mentions(ctx context.Context, principalID, agentID strin
 			if needle != "" && !strings.Contains(strings.ToLower(server.Name+" "+tool.Name+" "+tool.Description), needle) {
 				continue
 			}
-			availability, reason := mentionAvailability(server, tool)
+			availability, reason := MentionAvailability(server, tool)
 			items = append(items, Mention{
 				ID: mentionPrefix + tool.ID, Kind: "mcp-tool", Category: "tools",
 				Group: MentionGroup{ID: server.ID, Kind: "mcp-plugin", Label: server.Name},
@@ -271,7 +300,7 @@ func validRisk(risk RiskLevel) bool {
 	return risk == ReadOnly || risk == ExternalWrite || risk == Destructive
 }
 
-func mentionAvailability(server Server, tool Tool) (string, string) {
+func MentionAvailability(server Server, tool Tool) (string, string) {
 	if server.Status != "connected" {
 		return "server-offline", "Connect and discover this MCP Server first"
 	}
