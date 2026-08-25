@@ -13,6 +13,8 @@
 - Keep model SDK types inside `internal/runtime`. The rest of the application consumes the small `conversation.Runtime` interface.
 - PostgreSQL is authoritative for conversations, messages, runs, and replayable run events.
 - Add schema changes as a new Goose migration. Never rewrite a migration that may have been applied.
+- Use GORM for every runtime PostgreSQL operation under `internal/postgres`; do not add direct `database/sql`, `pgx`, or hand-managed `sql.Tx` queries in repositories. Complex PostgreSQL-specific statements may use GORM `Raw` or `Exec`, but connection ownership, context propagation, transactions, result handling, and error mapping must still go through GORM.
+- Keep persistence models and GORM-specific clauses inside `internal/postgres`. Repository interfaces, services, and HTTP handlers continue to exchange domain types only. Goose remains the only schema-migration mechanism; do not use GORM `AutoMigrate`.
 - TypeScript is allowed only under `web` and frontend tooling. Backend and CLI code must be Go.
 
 ## Public contracts and agent protocol

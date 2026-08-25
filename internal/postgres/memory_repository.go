@@ -2,47 +2,54 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/re35t/AegisLink/internal/memory"
+	"gorm.io/gorm"
 )
 
 type MemoryRepository struct {
-	database *sql.DB
+	database *gorm.DB
 }
 
 var _ memory.Repository = (*MemoryRepository)(nil)
 
-func NewMemoryRepository(database *sql.DB) *MemoryRepository {
+func NewMemoryRepository(database *gorm.DB) *MemoryRepository {
 	return &MemoryRepository{database: database}
 }
 
 func (repository *MemoryRepository) List(ctx context.Context, principalID, agentID string) ([]memory.Memory, error) {
-	rows, err := repository.database.QueryContext(ctx, `
+	items := make([]memory.Memory, 0)
+	result := raw(repository.database.WithContext(ctx), `
 		SELECT id, owner_principal_id, agent_id, kind, content, confidence, source_uri, status,
 		       last_confirmed_at, created_at, updated_at
 		FROM memories
 		WHERE owner_principal_id=$1 AND agent_id=$2 AND status='active'
-		ORDER BY updated_at DESC, id`, principalID, agentID)
-	if err != nil {
-		return nil, fmt.Errorf("list memories: %w", err)
+		ORDER BY updated_at DESC, id`, principalID, agentID).Scan(&items)
+	if result.Error != nil {
+		return nil, fmt.Errorf("list memories: %w", result.Error)
 	}
-	defer rows.Close()
-	return scanMemories(rows)
+	return items, nil
 }
 
 func (repository *MemoryRepository) Create(ctx context.Context, item memory.Memory) (memory.Memory, error) {
-	err := repository.database.QueryRowContext(ctx, `
+	var timestamps struct {
+		CreatedAt time.Time
+		UpdatedAt time.Time
+	}
+	err := scanOne(repository.database.WithContext(ctx), &timestamps, `
 		INSERT INTO memories (id, owner_principal_id, agent_id, kind, content, confidence, source_uri, status)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, 'active')
 		RETURNING created_at, updated_at`,
 		item.ID, item.OwnerPrincipalID, item.AgentID, item.Kind, item.Content, item.Confidence, item.SourceURI,
-	).Scan(&item.CreatedAt, &item.UpdatedAt)
+	)
 	if err != nil {
 		return memory.Memory{}, fmt.Errorf("create memory: %w", err)
 	}
+	item.CreatedAt = timestamps.CreatedAt
+	item.UpdatedAt = timestamps.UpdatedAt
 	return item, nil
 }
 
@@ -53,7 +60,7 @@ func (repository *MemoryRepository) Update(ctx context.Context, principalID, age
 		kind = &value
 	}
 	var item memory.Memory
-	err := repository.database.QueryRowContext(ctx, `
+	err := scanOne(repository.database.WithContext(ctx), &item, `
 		UPDATE memories
 		SET kind=COALESCE($4, kind),
 		    content=COALESCE($5, content),
@@ -64,8 +71,8 @@ func (repository *MemoryRepository) Update(ctx context.Context, principalID, age
 		RETURNING id, owner_principal_id, agent_id, kind, content, confidence, source_uri, status,
 		          last_confirmed_at, created_at, updated_at`,
 		principalID, agentID, memoryID, kind, update.Content, update.Confidence, update.Confirmed,
-	).Scan(memoryScanTargets(&item)...)
-	if errors.Is(err, sql.ErrNoRows) {
+	)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return memory.Memory{}, memory.ErrNotFound
 	}
 	if err != nil {
@@ -75,53 +82,30 @@ func (repository *MemoryRepository) Update(ctx context.Context, principalID, age
 }
 
 func (repository *MemoryRepository) Forget(ctx context.Context, principalID, agentID, memoryID string) error {
-	result, err := repository.database.ExecContext(ctx, `
+	result := exec(repository.database.WithContext(ctx), `
 		UPDATE memories SET status='forgotten', updated_at=now()
 		WHERE owner_principal_id=$1 AND agent_id=$2 AND id=$3 AND status='active'`, principalID, agentID, memoryID)
-	if err != nil {
-		return fmt.Errorf("forget memory: %w", err)
+	if result.Error != nil {
+		return fmt.Errorf("forget memory: %w", result.Error)
 	}
-	changed, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("read forgotten memory rows: %w", err)
-	}
-	if changed == 0 {
+	if result.RowsAffected == 0 {
 		return memory.ErrNotFound
 	}
 	return nil
 }
 
 func (repository *MemoryRepository) Context(ctx context.Context, principalID, agentID string, limit int) ([]memory.Memory, error) {
-	rows, err := repository.database.QueryContext(ctx, `
+	items := make([]memory.Memory, 0)
+	result := raw(repository.database.WithContext(ctx), `
 		SELECT id, owner_principal_id, agent_id, kind, content, confidence, source_uri, status,
 		       last_confirmed_at, created_at, updated_at
 		FROM memories
 		WHERE owner_principal_id=$1 AND agent_id=$2 AND status='active'
 		ORDER BY CASE kind WHEN 'semantic' THEN 0 ELSE 1 END,
 		         last_confirmed_at DESC NULLS LAST, confidence DESC, updated_at DESC
-		LIMIT $3`, principalID, agentID, limit)
-	if err != nil {
-		return nil, fmt.Errorf("load memory context: %w", err)
+		LIMIT $3`, principalID, agentID, limit).Scan(&items)
+	if result.Error != nil {
+		return nil, fmt.Errorf("load memory context: %w", result.Error)
 	}
-	defer rows.Close()
-	return scanMemories(rows)
-}
-
-func scanMemories(rows *sql.Rows) ([]memory.Memory, error) {
-	items := make([]memory.Memory, 0)
-	for rows.Next() {
-		var item memory.Memory
-		if err := rows.Scan(memoryScanTargets(&item)...); err != nil {
-			return nil, fmt.Errorf("scan memory: %w", err)
-		}
-		items = append(items, item)
-	}
-	return items, rows.Err()
-}
-
-func memoryScanTargets(item *memory.Memory) []any {
-	return []any{
-		&item.ID, &item.OwnerPrincipalID, &item.AgentID, &item.Kind, &item.Content, &item.Confidence,
-		&item.SourceURI, &item.Status, &item.LastConfirmedAt, &item.CreatedAt, &item.UpdatedAt,
-	}
+	return items, nil
 }

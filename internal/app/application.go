@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -20,6 +19,7 @@ import (
 	"github.com/re35t/AegisLink/internal/postgres"
 	agentruntime "github.com/re35t/AegisLink/internal/runtime"
 	"github.com/re35t/AegisLink/internal/skills"
+	"gorm.io/gorm"
 )
 
 const authCookieName = "aegislink_session"
@@ -27,7 +27,7 @@ const authCookieName = "aegislink_session"
 type Application struct {
 	Server *http.Server
 
-	database *sql.DB
+	database *gorm.DB
 	cancel   context.CancelFunc
 }
 
@@ -39,7 +39,9 @@ func New(parent context.Context, cfg config.Config, logger *slog.Logger) (*Appli
 		return nil, err
 	}
 	closeOnError := func(err error) (*Application, error) {
-		database.Close()
+		if sqlDatabase, databaseError := database.DB(); databaseError == nil {
+			_ = sqlDatabase.Close()
+		}
 		cancel()
 		return nil, err
 	}
@@ -125,7 +127,11 @@ func New(parent context.Context, cfg config.Config, logger *slog.Logger) (*Appli
 
 func (application *Application) Close() error {
 	application.cancel()
-	if err := application.database.Close(); err != nil {
+	sqlDatabase, err := application.database.DB()
+	if err != nil {
+		return fmt.Errorf("access database connection pool: %w", err)
+	}
+	if err := sqlDatabase.Close(); err != nil {
 		return fmt.Errorf("close database: %w", err)
 	}
 	return nil

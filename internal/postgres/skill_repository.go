@@ -2,20 +2,46 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/re35t/AegisLink/internal/skills"
+	"gorm.io/gorm"
 )
 
 type SkillRepository struct {
-	database *sql.DB
+	database *gorm.DB
+}
+
+type skillRow struct {
+	ID               string
+	VersionID        string
+	OwnerPrincipalID string
+	AgentID          string
+	Name             string
+	Description      string
+	Version          string
+	SourceType       string
+	Content          string
+	ContentHash      string
+	Enabled          bool
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
+func (row skillRow) skill() skills.Skill {
+	return skills.Skill{
+		ID: row.ID, VersionID: row.VersionID, OwnerPrincipalID: row.OwnerPrincipalID, AgentID: row.AgentID,
+		Name: row.Name, Description: row.Description, Version: row.Version, SourceType: row.SourceType,
+		Content: row.Content, ContentHash: row.ContentHash, Enabled: row.Enabled,
+		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
+	}
 }
 
 var _ skills.Repository = (*SkillRepository)(nil)
 
-func NewSkillRepository(database *sql.DB) *SkillRepository {
+func NewSkillRepository(database *gorm.DB) *SkillRepository {
 	return &SkillRepository{database: database}
 }
 
@@ -28,11 +54,12 @@ func (repository *SkillRepository) Enabled(ctx context.Context, principalID, age
 }
 
 func (repository *SkillRepository) list(ctx context.Context, principalID, agentID string, enabledOnly bool) ([]skills.Skill, error) {
-	rows, err := repository.database.QueryContext(ctx, `
-		SELECT packages.id, versions.id, packages.owner_principal_id, bindings.agent_id,
+	rows := make([]skillRow, 0)
+	result := raw(repository.database.WithContext(ctx), `
+		SELECT packages.id, versions.id AS version_id, packages.owner_principal_id, bindings.agent_id,
 		       packages.name, versions.description, versions.version, versions.source_type,
-		       versions.manifest_content, versions.content_hash, bindings.enabled,
-		       packages.created_at, GREATEST(packages.updated_at, bindings.updated_at, versions.created_at)
+		       versions.manifest_content AS content, versions.content_hash, bindings.enabled,
+		       packages.created_at, GREATEST(packages.updated_at, bindings.updated_at, versions.created_at) AS updated_at
 		FROM agent_skills bindings
 		JOIN skill_packages packages
 		  ON packages.id=bindings.package_id AND packages.owner_principal_id=bindings.owner_principal_id
@@ -41,128 +68,117 @@ func (repository *SkillRepository) list(ctx context.Context, principalID, agentI
 		 AND versions.owner_principal_id=bindings.owner_principal_id
 		WHERE bindings.owner_principal_id=$1 AND bindings.agent_id=$2
 		  AND (NOT $3 OR bindings.enabled)
-		ORDER BY packages.name`, principalID, agentID, enabledOnly)
-	if err != nil {
-		return nil, fmt.Errorf("list skills: %w", err)
+		ORDER BY packages.name`, principalID, agentID, enabledOnly).Scan(&rows)
+	if result.Error != nil {
+		return nil, fmt.Errorf("list skills: %w", result.Error)
 	}
-	defer rows.Close()
-	items := make([]skills.Skill, 0)
-	for rows.Next() {
-		var item skills.Skill
-		if err := rows.Scan(skillScanTargets(&item)...); err != nil {
-			return nil, fmt.Errorf("scan skill: %w", err)
-		}
-		items = append(items, item)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	if err := rows.Close(); err != nil {
-		return nil, fmt.Errorf("close Skill rows: %w", err)
+	items := make([]skills.Skill, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, row.skill())
 	}
 	for index := range items {
-		items[index].Files, err = listSkillFiles(ctx, repository.database, items[index].VersionID)
-		if err != nil {
-			return nil, err
+		items[index].Files, result.Error = listSkillFiles(repository.database.WithContext(ctx), items[index].VersionID)
+		if result.Error != nil {
+			return nil, result.Error
 		}
 	}
 	return items, nil
 }
 
 func (repository *SkillRepository) Install(ctx context.Context, item skills.Skill) (skills.Skill, error) {
-	transaction, err := repository.database.BeginTx(ctx, nil)
-	if err != nil {
-		return skills.Skill{}, fmt.Errorf("begin skill install: %w", err)
-	}
-	defer transaction.Rollback()
-
-	err = transaction.QueryRowContext(ctx, `
-		INSERT INTO skill_packages (id, owner_principal_id, name)
-		VALUES ($1, $2, $3)
-		ON CONFLICT (owner_principal_id, name) DO UPDATE SET name=EXCLUDED.name
-		RETURNING id, created_at`, item.ID, item.OwnerPrincipalID, item.Name,
-	).Scan(&item.ID, &item.CreatedAt)
-	if err != nil {
-		return skills.Skill{}, fmt.Errorf("create or resolve skill package: %w", err)
-	}
-
-	requestedVersionID := item.VersionID
-	createdVersion := false
-	err = transaction.QueryRowContext(ctx, `
-		INSERT INTO skill_versions (
-			id, package_id, owner_principal_id, version, description,
-			manifest_content, content_hash, source_type
-		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		ON CONFLICT DO NOTHING
-		RETURNING id`,
-		requestedVersionID, item.ID, item.OwnerPrincipalID, item.Version, item.Description,
-		item.Content, item.ContentHash, item.SourceType,
-	).Scan(&item.VersionID)
-	if errors.Is(err, sql.ErrNoRows) {
-		if err := resolveExistingSkillVersion(ctx, transaction, &item); err != nil {
-			return skills.Skill{}, err
+	err := repository.database.WithContext(ctx).Transaction(func(transaction *gorm.DB) error {
+		var packageResult struct {
+			ID        string
+			CreatedAt time.Time
 		}
-	} else if err != nil {
-		return skills.Skill{}, fmt.Errorf("create skill version: %w", err)
-	} else {
-		createdVersion = true
-	}
+		if err := scanOne(transaction, &packageResult, `
+			INSERT INTO skill_packages (id, owner_principal_id, name)
+			VALUES ($1, $2, $3)
+			ON CONFLICT (owner_principal_id, name) DO UPDATE SET name=EXCLUDED.name
+			RETURNING id, created_at`, item.ID, item.OwnerPrincipalID, item.Name); err != nil {
+			return fmt.Errorf("create or resolve skill package: %w", err)
+		}
+		item.ID = packageResult.ID
+		item.CreatedAt = packageResult.CreatedAt
 
-	if createdVersion {
-		for _, file := range item.Files {
-			if _, err := transaction.ExecContext(ctx, `
-				INSERT INTO skill_version_files (
-					version_id, path, media_type, size_bytes, content_hash, text_readable, content
-				) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-				item.VersionID, file.Path, file.MediaType, file.SizeBytes,
-				file.ContentHash, file.TextReadable, file.Content,
-			); err != nil {
-				return skills.Skill{}, fmt.Errorf("store Skill bundle file %q: %w", file.Path, err)
+		requestedVersionID := item.VersionID
+		var versionResult struct{ ID string }
+		err := scanOne(transaction, &versionResult, `
+			INSERT INTO skill_versions (
+				id, package_id, owner_principal_id, version, description,
+				manifest_content, content_hash, source_type
+			)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			ON CONFLICT DO NOTHING
+			RETURNING id`,
+			requestedVersionID, item.ID, item.OwnerPrincipalID, item.Version, item.Description,
+			item.Content, item.ContentHash, item.SourceType)
+		createdVersion := err == nil
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			if err := resolveExistingSkillVersion(transaction, &item); err != nil {
+				return err
+			}
+		} else if err != nil {
+			return fmt.Errorf("create skill version: %w", err)
+		} else {
+			item.VersionID = versionResult.ID
+		}
+
+		if createdVersion {
+			for _, file := range item.Files {
+				result := exec(transaction, `
+					INSERT INTO skill_version_files (
+						version_id, path, media_type, size_bytes, content_hash, text_readable, content
+					) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+					item.VersionID, file.Path, file.MediaType, file.SizeBytes,
+					file.ContentHash, file.TextReadable, file.Content)
+				if result.Error != nil {
+					return fmt.Errorf("store Skill bundle file %q: %w", file.Path, result.Error)
+				}
 			}
 		}
-	}
 
-	err = transaction.QueryRowContext(ctx, `
-		INSERT INTO agent_skills (owner_principal_id, agent_id, package_id, version_id, enabled)
-		VALUES ($1, $2, $3, $4, true)
-		ON CONFLICT (agent_id, package_id) DO UPDATE
-		SET version_id=EXCLUDED.version_id, enabled=true, updated_at=now()
-		RETURNING enabled, updated_at`,
-		item.OwnerPrincipalID, item.AgentID, item.ID, item.VersionID,
-	).Scan(&item.Enabled, &item.UpdatedAt)
-	if err != nil {
-		return skills.Skill{}, fmt.Errorf("bind skill version to agent: %w", err)
-	}
-	item.Files, err = listSkillFiles(ctx, transaction, item.VersionID)
+		var bindingResult struct {
+			Enabled   bool
+			UpdatedAt time.Time
+		}
+		if err := scanOne(transaction, &bindingResult, `
+			INSERT INTO agent_skills (owner_principal_id, agent_id, package_id, version_id, enabled)
+			VALUES ($1, $2, $3, $4, true)
+			ON CONFLICT (agent_id, package_id) DO UPDATE
+			SET version_id=EXCLUDED.version_id, enabled=true, updated_at=now()
+			RETURNING enabled, updated_at`,
+			item.OwnerPrincipalID, item.AgentID, item.ID, item.VersionID); err != nil {
+			return fmt.Errorf("bind skill version to agent: %w", err)
+		}
+		item.Enabled = bindingResult.Enabled
+		item.UpdatedAt = bindingResult.UpdatedAt
+		item.Files, err = listSkillFiles(transaction, item.VersionID)
+		return err
+	})
 	if err != nil {
 		return skills.Skill{}, err
-	}
-	if err := transaction.Commit(); err != nil {
-		return skills.Skill{}, fmt.Errorf("commit skill install: %w", err)
 	}
 	return item, nil
 }
 
-func resolveExistingSkillVersion(ctx context.Context, transaction *sql.Tx, item *skills.Skill) error {
-	var existing skills.Skill
-	err := transaction.QueryRowContext(ctx, `
-		SELECT id, version, description, source_type, manifest_content, content_hash
+func resolveExistingSkillVersion(transaction *gorm.DB, item *skills.Skill) error {
+	var row skillRow
+	err := scanOne(transaction, &row, `
+		SELECT id AS version_id, version, description, source_type,
+		       manifest_content AS content, content_hash
 		FROM skill_versions
 		WHERE package_id=$1 AND owner_principal_id=$2
 		  AND (version=$3 OR content_hash=$4)
 		ORDER BY CASE WHEN content_hash=$4 THEN 0 ELSE 1 END, created_at, id
-		LIMIT 1`, item.ID, item.OwnerPrincipalID, item.Version, item.ContentHash,
-	).Scan(
-		&existing.VersionID, &existing.Version, &existing.Description, &existing.SourceType,
-		&existing.Content, &existing.ContentHash,
-	)
-	if errors.Is(err, sql.ErrNoRows) {
+		LIMIT 1`, item.ID, item.OwnerPrincipalID, item.Version, item.ContentHash)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return skills.ErrConflict
 	}
 	if err != nil {
 		return fmt.Errorf("resolve skill version: %w", err)
 	}
+	existing := row.skill()
 	if existing.ContentHash != item.ContentHash {
 		return skills.ErrConflict
 	}
@@ -176,8 +192,8 @@ func resolveExistingSkillVersion(ctx context.Context, transaction *sql.Tx, item 
 }
 
 func (repository *SkillRepository) SetEnabled(ctx context.Context, principalID, agentID, skillID string, enabled bool) (skills.Skill, error) {
-	var item skills.Skill
-	err := repository.database.QueryRowContext(ctx, `
+	var row skillRow
+	err := scanOne(repository.database.WithContext(ctx), &row, `
 		UPDATE agent_skills bindings
 		SET enabled=$4, updated_at=now()
 		FROM skill_packages packages, skill_versions versions
@@ -185,19 +201,19 @@ func (repository *SkillRepository) SetEnabled(ctx context.Context, principalID, 
 		  AND packages.id=bindings.package_id AND packages.owner_principal_id=bindings.owner_principal_id
 		  AND versions.id=bindings.version_id AND versions.package_id=bindings.package_id
 		  AND versions.owner_principal_id=bindings.owner_principal_id
-		RETURNING packages.id, versions.id, packages.owner_principal_id, bindings.agent_id,
+		RETURNING packages.id, versions.id AS version_id, packages.owner_principal_id, bindings.agent_id,
 		          packages.name, versions.description, versions.version, versions.source_type,
-		          versions.manifest_content, versions.content_hash, bindings.enabled,
-		          packages.created_at, GREATEST(packages.updated_at, bindings.updated_at, versions.created_at)`,
-		principalID, agentID, skillID, enabled,
-	).Scan(skillScanTargets(&item)...)
-	if errors.Is(err, sql.ErrNoRows) {
+		          versions.manifest_content AS content, versions.content_hash, bindings.enabled,
+		          packages.created_at, GREATEST(packages.updated_at, bindings.updated_at, versions.created_at) AS updated_at`,
+		principalID, agentID, skillID, enabled)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return skills.Skill{}, skills.ErrNotFound
 	}
 	if err != nil {
 		return skills.Skill{}, fmt.Errorf("set skill enabled: %w", err)
 	}
-	item.Files, err = listSkillFiles(ctx, repository.database, item.VersionID)
+	item := row.skill()
+	item.Files, err = listSkillFiles(repository.database.WithContext(ctx), item.VersionID)
 	if err != nil {
 		return skills.Skill{}, err
 	}
@@ -205,17 +221,13 @@ func (repository *SkillRepository) SetEnabled(ctx context.Context, principalID, 
 }
 
 func (repository *SkillRepository) Uninstall(ctx context.Context, principalID, agentID, skillID string) error {
-	result, err := repository.database.ExecContext(ctx, `
+	result := exec(repository.database.WithContext(ctx), `
 		DELETE FROM agent_skills
 		WHERE owner_principal_id=$1 AND agent_id=$2 AND package_id=$3`, principalID, agentID, skillID)
-	if err != nil {
-		return fmt.Errorf("unbind skill package: %w", err)
+	if result.Error != nil {
+		return fmt.Errorf("unbind skill package: %w", result.Error)
 	}
-	changed, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("read unbound skill rows: %w", err)
-	}
-	if changed == 0 {
+	if result.RowsAffected == 0 {
 		return skills.ErrNotFound
 	}
 	return nil
@@ -223,19 +235,15 @@ func (repository *SkillRepository) Uninstall(ctx context.Context, principalID, a
 
 func (repository *SkillRepository) ReadFile(ctx context.Context, principalID, agentID, skillID, filePath string) (skills.File, error) {
 	var file skills.File
-	err := repository.database.QueryRowContext(ctx, `
+	err := scanOne(repository.database.WithContext(ctx), &file, `
 		SELECT files.path, files.media_type, files.size_bytes, files.content_hash,
 		       files.text_readable, files.content
 		FROM agent_skills bindings
 		JOIN skill_version_files files ON files.version_id=bindings.version_id
 		WHERE bindings.owner_principal_id=$1 AND bindings.agent_id=$2
 		  AND bindings.package_id=$3 AND bindings.enabled AND files.path=$4`,
-		principalID, agentID, skillID, filePath,
-	).Scan(
-		&file.Path, &file.MediaType, &file.SizeBytes, &file.ContentHash,
-		&file.TextReadable, &file.Content,
-	)
-	if errors.Is(err, sql.ErrNoRows) {
+		principalID, agentID, skillID, filePath)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return skills.File{}, skills.ErrNotFound
 	}
 	if err != nil {
@@ -244,40 +252,15 @@ func (repository *SkillRepository) ReadFile(ctx context.Context, principalID, ag
 	return file, nil
 }
 
-type skillFileQueryer interface {
-	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
-}
-
-func listSkillFiles(ctx context.Context, queryer skillFileQueryer, versionID string) ([]skills.File, error) {
-	rows, err := queryer.QueryContext(ctx, `
+func listSkillFiles(database *gorm.DB, versionID string) ([]skills.File, error) {
+	files := make([]skills.File, 0)
+	result := raw(database, `
 		SELECT path, media_type, size_bytes, content_hash, text_readable
 		FROM skill_version_files
 		WHERE version_id=$1
-		ORDER BY path`, versionID)
-	if err != nil {
-		return nil, fmt.Errorf("list Skill bundle files: %w", err)
-	}
-	defer rows.Close()
-	files := make([]skills.File, 0)
-	for rows.Next() {
-		var file skills.File
-		if err := rows.Scan(
-			&file.Path, &file.MediaType, &file.SizeBytes, &file.ContentHash, &file.TextReadable,
-		); err != nil {
-			return nil, fmt.Errorf("scan Skill bundle file: %w", err)
-		}
-		files = append(files, file)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate Skill bundle files: %w", err)
+		ORDER BY path`, versionID).Scan(&files)
+	if result.Error != nil {
+		return nil, fmt.Errorf("list Skill bundle files: %w", result.Error)
 	}
 	return files, nil
-}
-
-func skillScanTargets(item *skills.Skill) []any {
-	return []any{
-		&item.ID, &item.VersionID, &item.OwnerPrincipalID, &item.AgentID, &item.Name,
-		&item.Description, &item.Version, &item.SourceType, &item.Content, &item.ContentHash,
-		&item.Enabled, &item.CreatedAt, &item.UpdatedAt,
-	}
 }

@@ -5,7 +5,7 @@ AegisLink is a local-first personal Agent Web application. The current release i
 ## Stack
 
 - Go 1.26, Gin, Eino ADK
-- PostgreSQL, pgx, Goose migrations
+- PostgreSQL, GORM (pgx driver), Goose migrations
 - React 19, Vite, assistant-ui, AG-UI, TanStack Router, TanStack Query
 - OpenAPI-generated frontend types
 
@@ -110,6 +110,8 @@ make build
 ```
 
 Set `TEST_DATABASE_URL` to include the PostgreSQL repository integration test.
+
+Runtime persistence goes through GORM. Goose remains authoritative for ordered schema migrations; the application intentionally does not call `AutoMigrate`.
 
 ## Current boundary
 

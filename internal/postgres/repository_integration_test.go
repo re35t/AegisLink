@@ -16,6 +16,7 @@ import (
 	"github.com/re35t/AegisLink/internal/memory"
 	"github.com/re35t/AegisLink/internal/skills"
 	"github.com/re35t/AegisLink/migrations"
+	"gorm.io/gorm"
 )
 
 func TestRepositoryConversationRunLifecycle(t *testing.T) {
@@ -30,24 +31,18 @@ func TestRepositoryConversationRunLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer database.Close()
+	defer closeTestDatabase(t, database)
 	if err := Migrate(database); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := database.ExecContext(t.Context(), `
-		TRUNCATE account_sessions, user_accounts, run_events, runs, messages, conversations, agents, human_principals CASCADE`); err != nil {
-		t.Fatal(err)
-	}
+	mustExec(t, database, `
+		TRUNCATE account_sessions, user_accounts, run_events, runs, messages, conversations, agents, human_principals CASCADE`)
 	repository := NewConversationRepository(database)
-	if _, err := database.ExecContext(t.Context(), `
-		INSERT INTO human_principals (id, display_name) VALUES ($1, 'Test user')`, ownerID); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := database.ExecContext(t.Context(), `
+	mustExec(t, database, `
+		INSERT INTO human_principals (id, display_name) VALUES ($1, 'Test user')`, ownerID)
+	mustExec(t, database, `
 		INSERT INTO agents (id, owner_principal_id, name, description, system_prompt)
-		VALUES ($1, $2, 'Aegis', '', 'Test prompt')`, agentID, ownerID); err != nil {
-		t.Fatal(err)
-	}
+		VALUES ($1, $2, 'Aegis', '', 'Test prompt')`, agentID, ownerID)
 	created, err := repository.CreateConversation(t.Context(), ownerID, agentID, "New conversation")
 	if err != nil {
 		t.Fatal(err)
@@ -123,29 +118,23 @@ func TestAgentCapabilitiesRemainIsolated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer database.Close()
+	defer closeTestDatabase(t, database)
 	if err := Migrate(database); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := database.ExecContext(t.Context(), `
+	mustExec(t, database, `
 		TRUNCATE account_sessions, user_accounts, run_events, runs, messages, conversations,
 		         mcp_tools, mcp_servers, agent_skills, skill_version_files, skill_versions, skill_packages,
-		         memories, agents, human_principals CASCADE`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := database.ExecContext(t.Context(), `
+		         memories, agents, human_principals CASCADE`)
+	mustExec(t, database, `
 		INSERT INTO human_principals (id, display_name) VALUES ($1, 'One'), ($2, 'Two')`,
-		principalOne, principalTwo); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := database.ExecContext(t.Context(), `
+		principalOne, principalTwo)
+	mustExec(t, database, `
 		INSERT INTO agents (id, owner_principal_id, name, description, system_prompt)
 		VALUES ($3, $1, 'Agent one', '', 'prompt'),
 		       ($4, $1, 'Agent sibling', '', 'prompt'),
 		       ($5, $2, 'Agent two', '', 'prompt')`,
-		principalOne, principalTwo, agentOne, agentSibling, agentTwo); err != nil {
-		t.Fatal(err)
-	}
+		principalOne, principalTwo, agentOne, agentSibling, agentTwo)
 
 	memoryRepository := NewMemoryRepository(database)
 	createdMemory, err := memoryRepository.Create(t.Context(), memory.Memory{
@@ -245,12 +234,10 @@ func TestAgentCapabilitiesRemainIsolated(t *testing.T) {
 	if len(firstAgentSkills) != 0 || len(siblingSkills) != 1 || siblingSkills[0].Version != "2.0.0" {
 		t.Fatalf("uninstall should remove only one Agent binding: first=%#v sibling=%#v", firstAgentSkills, siblingSkills)
 	}
-	var retainedVersions int
-	if err := database.QueryRowContext(t.Context(), `
-		SELECT count(*) FROM skill_versions WHERE package_id=$1`, firstSkill.ID,
-	).Scan(&retainedVersions); err != nil {
-		t.Fatal(err)
-	}
+	var retainedVersionRow struct{ Count int }
+	mustScan(t, database, &retainedVersionRow, `
+		SELECT count(*) AS count FROM skill_versions WHERE package_id=$1`, firstSkill.ID)
+	retainedVersions := retainedVersionRow.Count
 	if retainedVersions != 2 {
 		t.Fatalf("uninstall removed immutable Skill history: versions=%d", retainedVersions)
 	}
@@ -297,14 +284,12 @@ func TestAccountRegistrationBindsPrincipalAgentAndSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer database.Close()
+	defer closeTestDatabase(t, database)
 	if err := Migrate(database); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := database.ExecContext(t.Context(), `
-		TRUNCATE account_sessions, user_accounts, run_events, runs, messages, conversations, agents, human_principals CASCADE`); err != nil {
-		t.Fatal(err)
-	}
+	mustExec(t, database, `
+		TRUNCATE account_sessions, user_accounts, run_events, runs, messages, conversations, agents, human_principals CASCADE`)
 	repository := NewAccountRepository(database)
 	registration := account.Registration{
 		User: account.User{ID: "principal-1", DisplayName: "Test user"},
@@ -389,15 +374,13 @@ func TestAgentProfileRepositoryLifecycleAndIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer database.Close()
+	defer closeTestDatabase(t, database)
 	if err := Migrate(database); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := database.ExecContext(t.Context(), `
-		TRUNCATE account_sessions, user_accounts, agents, human_principals CASCADE`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := database.ExecContext(t.Context(), `
+	mustExec(t, database, `
+		TRUNCATE account_sessions, user_accounts, agents, human_principals CASCADE`)
+	mustExec(t, database, `
 		INSERT INTO human_principals (id, display_name) VALUES
 		  ('profile-owner', 'Profile owner'), ('profile-other', 'Other owner');
 		INSERT INTO agents (id, owner_principal_id, name, description, system_prompt)
@@ -417,9 +400,7 @@ func TestAgentProfileRepositoryLifecycleAndIsolation(t *testing.T) {
 		  'profile-projection', 'profile-owner', 'profile-agent', 'research_interest', 'Interested in security research', 0.9, 1, now(), 'accepted'
 		);
 		INSERT INTO agent_memory_projection_sources (owner_principal_id, agent_id, projection_id, memory_id)
-		VALUES ('profile-owner', 'profile-agent', 'profile-projection', 'profile-memory')`); err != nil {
-		t.Fatal(err)
-	}
+		VALUES ('profile-owner', 'profile-agent', 'profile-projection', 'profile-memory')`)
 
 	repository := NewAgentProfileRepository(database)
 	facts, err := repository.ListProfileFacts(t.Context(), "profile-owner", "profile-agent")
@@ -461,12 +442,11 @@ func TestAgentProfileRepositoryLifecycleAndIsolation(t *testing.T) {
 	}}); !errors.Is(err, agent.ErrProfileConflict) {
 		t.Fatalf("stale Profile update should conflict: %v", err)
 	}
-	if _, err := database.ExecContext(t.Context(), `DELETE FROM agents WHERE id='profile-agent'`); err != nil {
-		t.Fatal(err)
-	}
-	var count int
-	if err := database.QueryRowContext(t.Context(), `SELECT count(*) FROM agent_profiles WHERE agent_id='profile-agent'`).Scan(&count); err != nil || count != 0 {
-		t.Fatalf("Agent Profile did not cascade with Agent: count=%d err=%v", count, err)
+	mustExec(t, database, `DELETE FROM agents WHERE id='profile-agent'`)
+	var profileCount struct{ Count int }
+	mustScan(t, database, &profileCount, `SELECT count(*) AS count FROM agent_profiles WHERE agent_id='profile-agent'`)
+	if profileCount.Count != 0 {
+		t.Fatalf("Agent Profile did not cascade with Agent: count=%d", profileCount.Count)
 	}
 }
 
@@ -479,33 +459,32 @@ func TestAgentProfileMigrationBackfillsExistingAgents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer database.Close()
+	defer closeTestDatabase(t, database)
 	goose.SetBaseFS(migrations.FS)
 	if err := goose.SetDialect("postgres"); err != nil {
 		t.Fatal(err)
 	}
-	if err := goose.DownTo(database, ".", 7); err != nil {
+	if err := gooseDownTo(database, 7); err != nil {
 		t.Fatal(err)
 	}
 	defer func() {
-		if err := goose.Up(database, "."); err != nil {
+		if err := gooseUp(database); err != nil {
 			t.Errorf("restore latest schema: %v", err)
 		}
 	}()
-	if _, err := database.ExecContext(t.Context(), `
+	mustExec(t, database, `
 		TRUNCATE account_sessions, user_accounts, agents, human_principals CASCADE;
 		INSERT INTO human_principals (id, display_name) VALUES ('backfill-owner', 'Backfill owner');
 		INSERT INTO agents (id, owner_principal_id, name, description, system_prompt)
-		VALUES ('backfill-agent', 'backfill-owner', 'Backfill Agent', '', 'prompt')`); err != nil {
+		VALUES ('backfill-agent', 'backfill-owner', 'Backfill Agent', '', 'prompt')`)
+	if err := gooseUpTo(database, 8); err != nil {
 		t.Fatal(err)
 	}
-	if err := goose.UpTo(database, ".", 8); err != nil {
-		t.Fatal(err)
-	}
-	var version int64
-	if err := database.QueryRowContext(t.Context(), `
-		SELECT version FROM agent_profiles WHERE agent_id='backfill-agent' AND owner_principal_id='backfill-owner'`).Scan(&version); err != nil || version != 1 {
-		t.Fatalf("existing Agent was not backfilled: version=%d err=%v", version, err)
+	var profileVersion struct{ Version int64 }
+	mustScan(t, database, &profileVersion, `
+		SELECT version FROM agent_profiles WHERE agent_id='backfill-agent' AND owner_principal_id='backfill-owner'`)
+	if profileVersion.Version != 1 {
+		t.Fatalf("existing Agent was not backfilled: version=%d", profileVersion.Version)
 	}
 }
 
@@ -518,20 +497,20 @@ func TestSkillPackageAndBundleMigrationsPreserveInstalledSkill(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer database.Close()
+	defer closeTestDatabase(t, database)
 	goose.SetBaseFS(migrations.FS)
 	if err := goose.SetDialect("postgres"); err != nil {
 		t.Fatal(err)
 	}
-	if err := goose.DownTo(database, ".", 0); err != nil {
+	if err := gooseDownTo(database, 0); err != nil {
 		t.Fatal(err)
 	}
 	defer func() {
-		if err := goose.Up(database, "."); err != nil {
+		if err := gooseUp(database); err != nil {
 			t.Errorf("restore latest schema: %v", err)
 		}
 	}()
-	if err := goose.UpTo(database, ".", 3); err != nil {
+	if err := gooseUpTo(database, 3); err != nil {
 		t.Fatal(err)
 	}
 	legacyStatements := []string{
@@ -549,41 +528,51 @@ func TestSkillPackageAndBundleMigrationsPreserveInstalledSkill(t *testing.T) {
 		 VALUES ('migration-principal', 'migration-agent', 'migration-skill', true)`,
 	}
 	for _, statement := range legacyStatements {
-		if _, err := database.ExecContext(t.Context(), statement); err != nil {
-			t.Fatal(err)
-		}
+		mustExec(t, database, statement)
 	}
-	if err := goose.UpTo(database, ".", 4); err != nil {
+	if err := gooseUpTo(database, 4); err != nil {
 		t.Fatal(err)
 	}
 	var packageID, versionID, version, contentHash string
 	var enabled bool
-	err = database.QueryRowContext(t.Context(), `
-		SELECT packages.id, versions.id, versions.version, versions.content_hash, bindings.enabled
+	var migratedSkill struct {
+		PackageID   string `gorm:"column:package_id"`
+		VersionID   string `gorm:"column:version_id"`
+		Version     string
+		ContentHash string
+		Enabled     bool
+	}
+	err = scanOne(database.WithContext(t.Context()), &migratedSkill, `
+		SELECT packages.id AS package_id, versions.id AS version_id, versions.version, versions.content_hash, bindings.enabled
 		FROM agent_skills bindings
 		JOIN skill_packages packages ON packages.id=bindings.package_id
 		JOIN skill_versions versions ON versions.id=bindings.version_id
-		WHERE bindings.agent_id='migration-agent'`,
-	).Scan(&packageID, &versionID, &version, &contentHash, &enabled)
+		WHERE bindings.agent_id='migration-agent'`)
 	if err != nil {
 		t.Fatal(err)
 	}
+	packageID, versionID, version, contentHash, enabled = migratedSkill.PackageID, migratedSkill.VersionID, migratedSkill.Version, migratedSkill.ContentHash, migratedSkill.Enabled
 	if packageID != "migration-skill" || versionID != "migration-skill" || version != "1.0.0" || contentHash != "sha256:migrated" || !enabled {
 		t.Fatalf("legacy Skill was not preserved: package=%q versionID=%q version=%q hash=%q enabled=%v", packageID, versionID, version, contentHash, enabled)
 	}
-	if err := goose.UpTo(database, ".", 5); err != nil {
+	if err := gooseUpTo(database, 5); err != nil {
 		t.Fatal(err)
 	}
 	var filePath, fileHash string
 	var fileContent []byte
-	err = database.QueryRowContext(t.Context(), `
+	var fileRow struct {
+		Path        string
+		ContentHash string
+		Content     []byte
+	}
+	err = scanOne(database.WithContext(t.Context()), &fileRow, `
 		SELECT path, content_hash, content
 		FROM skill_version_files
-		WHERE version_id='migration-skill'`,
-	).Scan(&filePath, &fileHash, &fileContent)
+		WHERE version_id='migration-skill'`)
 	if err != nil {
 		t.Fatal(err)
 	}
+	filePath, fileHash, fileContent = fileRow.Path, fileRow.ContentHash, fileRow.Content
 	if filePath != "SKILL.md" || fileHash != "sha256:migrated" || !strings.Contains(string(fileContent), "migrated-skill") {
 		t.Fatalf("legacy Skill manifest was not migrated into bundle files: path=%q hash=%q content=%q", filePath, fileHash, fileContent)
 	}
@@ -598,20 +587,20 @@ func TestMCPLibraryMigrationPreservesBindingsAndRefreshIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer database.Close()
+	defer closeTestDatabase(t, database)
 	goose.SetBaseFS(migrations.FS)
 	if err := goose.SetDialect("postgres"); err != nil {
 		t.Fatal(err)
 	}
-	if err := goose.DownTo(database, ".", 0); err != nil {
+	if err := gooseDownTo(database, 0); err != nil {
 		t.Fatal(err)
 	}
 	defer func() {
-		if err := goose.Up(database, "."); err != nil {
+		if err := gooseUp(database); err != nil {
 			t.Errorf("restore latest schema: %v", err)
 		}
 	}()
-	if err := goose.UpTo(database, ".", 6); err != nil {
+	if err := gooseUpTo(database, 6); err != nil {
 		t.Fatal(err)
 	}
 	statements := []string{
@@ -629,25 +618,28 @@ func TestMCPLibraryMigrationPreservesBindingsAndRefreshIdentity(t *testing.T) {
 		 VALUES ('mcp-migration-server', 'read', 'legacy read', '{"type":"object"}', true, 'read-only')`,
 	}
 	for _, statement := range statements {
-		if _, err := database.ExecContext(t.Context(), statement); err != nil {
-			t.Fatal(err)
-		}
+		mustExec(t, database, statement)
 	}
-	if err := goose.UpTo(database, ".", 7); err != nil {
+	if err := gooseUpTo(database, 7); err != nil {
 		t.Fatal(err)
 	}
 
 	var toolID string
 	var serverEnabled, toolEnabled bool
-	err = database.QueryRowContext(t.Context(), `
-		SELECT tools.id, server_bindings.enabled, tool_bindings.enabled
+	var migratedTool struct {
+		ToolID        string `gorm:"column:tool_id"`
+		ServerEnabled bool
+		ToolEnabled   bool
+	}
+	err = scanOne(database.WithContext(t.Context()), &migratedTool, `
+		SELECT tools.id AS tool_id, server_bindings.enabled AS server_enabled, tool_bindings.enabled AS tool_enabled
 		FROM mcp_tools tools
 		JOIN agent_mcp_servers server_bindings
 		  ON server_bindings.server_id=tools.server_id AND server_bindings.agent_id='mcp-migration-agent'
 		JOIN agent_mcp_tools tool_bindings
 		  ON tool_bindings.tool_id=tools.id AND tool_bindings.agent_id='mcp-migration-agent'
-		WHERE tools.server_id='mcp-migration-server' AND tools.name='read'`,
-	).Scan(&toolID, &serverEnabled, &toolEnabled)
+		WHERE tools.server_id='mcp-migration-server' AND tools.name='read'`)
+	toolID, serverEnabled, toolEnabled = migratedTool.ToolID, migratedTool.ServerEnabled, migratedTool.ToolEnabled
 	if err != nil || toolID == "" || !serverEnabled || !toolEnabled {
 		t.Fatalf("legacy MCP binding was not preserved: tool=%q server=%v toolEnabled=%v err=%v", toolID, serverEnabled, toolEnabled, err)
 	}
@@ -695,4 +687,55 @@ func TestMCPLibraryMigrationPreservesBindingsAndRefreshIdentity(t *testing.T) {
 			t.Fatalf("risk change did not revoke %s: tools=%#v err=%v", agentID, tools, err)
 		}
 	}
+}
+
+func mustExec(t *testing.T, database *gorm.DB, query string, args ...any) {
+	t.Helper()
+	result := exec(database.WithContext(t.Context()), query, args...)
+	if result.Error != nil {
+		t.Fatal(result.Error)
+	}
+}
+
+func mustScan(t *testing.T, database *gorm.DB, destination any, query string, args ...any) {
+	t.Helper()
+	if err := scanOne(database.WithContext(t.Context()), destination, query, args...); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func closeTestDatabase(t *testing.T, database *gorm.DB) {
+	t.Helper()
+	sqlDatabase, err := database.DB()
+	if err != nil {
+		t.Errorf("access database pool: %v", err)
+		return
+	}
+	if err := sqlDatabase.Close(); err != nil {
+		t.Errorf("close database pool: %v", err)
+	}
+}
+
+func gooseDownTo(database *gorm.DB, version int64) error {
+	sqlDatabase, err := database.DB()
+	if err != nil {
+		return err
+	}
+	return goose.DownTo(sqlDatabase, ".", version)
+}
+
+func gooseUpTo(database *gorm.DB, version int64) error {
+	sqlDatabase, err := database.DB()
+	if err != nil {
+		return err
+	}
+	return goose.UpTo(sqlDatabase, ".", version)
+}
+
+func gooseUp(database *gorm.DB) error {
+	sqlDatabase, err := database.DB()
+	if err != nil {
+		return err
+	}
+	return goose.Up(sqlDatabase, ".")
 }

@@ -11,7 +11,7 @@
 
 The repository-owned Codex workflow is [`../skills/frontend-engineering/SKILL.md`](../skills/frontend-engineering/SKILL.md). Root `AGENTS.md` requires it for substantial frontend changes.
 
-The current implementation baseline is ADR 0004, ADR 0005, ADR 0006, and the root README.
+The current implementation baseline is ADR 0004, ADR 0005, ADR 0006, ADR 0013, and the root README. [ADR 0013](./adr/0013-use-gorm-for-postgres-persistence.md) records GORM as the runtime PostgreSQL persistence boundary while Goose remains authoritative for schema migrations.
 
 Except for the current phase plan linked below, documents under `00-overview` through `10-ops` were written for the original TypeScript prototype. They remain as product and security research, but capability routing, Ed25519 identity, RAG, Chroma, WebSocket, gRPC, integrations, and production deployment described there are not implemented in the current Go release unless the root README says otherwise.
 
