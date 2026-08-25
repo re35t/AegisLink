@@ -16,8 +16,8 @@ type MemoryRepository struct {
 
 var _ memory.Repository = (*MemoryRepository)(nil)
 
-func NewMemoryRepository(database *gorm.DB) *MemoryRepository {
-	return &MemoryRepository{database: database}
+func NewMemoryRepository(database *Database) *MemoryRepository {
+	return &MemoryRepository{database: database.connection}
 }
 
 func (repository *MemoryRepository) List(ctx context.Context, principalID, agentID string) ([]memory.Memory, error) {
@@ -26,7 +26,7 @@ func (repository *MemoryRepository) List(ctx context.Context, principalID, agent
 		SELECT id, owner_principal_id, agent_id, kind, content, confidence, source_uri, status,
 		       last_confirmed_at, created_at, updated_at
 		FROM memories
-		WHERE owner_principal_id=$1 AND agent_id=$2 AND status='active'
+		WHERE owner_principal_id=@p1 AND agent_id=@p2 AND status='active'
 		ORDER BY updated_at DESC, id`, principalID, agentID).Scan(&items)
 	if result.Error != nil {
 		return nil, fmt.Errorf("list memories: %w", result.Error)
@@ -41,7 +41,7 @@ func (repository *MemoryRepository) Create(ctx context.Context, item memory.Memo
 	}
 	err := scanOne(repository.database.WithContext(ctx), &timestamps, `
 		INSERT INTO memories (id, owner_principal_id, agent_id, kind, content, confidence, source_uri, status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, 'active')
+		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, 'active')
 		RETURNING created_at, updated_at`,
 		item.ID, item.OwnerPrincipalID, item.AgentID, item.Kind, item.Content, item.Confidence, item.SourceURI,
 	)
@@ -62,12 +62,12 @@ func (repository *MemoryRepository) Update(ctx context.Context, principalID, age
 	var item memory.Memory
 	err := scanOne(repository.database.WithContext(ctx), &item, `
 		UPDATE memories
-		SET kind=COALESCE($4, kind),
-		    content=COALESCE($5, content),
-		    confidence=COALESCE($6, confidence),
-		    last_confirmed_at=CASE WHEN $7 THEN now() ELSE last_confirmed_at END,
+		SET kind=COALESCE(@p4, kind),
+		    content=COALESCE(@p5, content),
+		    confidence=COALESCE(@p6, confidence),
+		    last_confirmed_at=CASE WHEN @p7 THEN now() ELSE last_confirmed_at END,
 		    updated_at=now()
-		WHERE owner_principal_id=$1 AND agent_id=$2 AND id=$3 AND status='active'
+		WHERE owner_principal_id=@p1 AND agent_id=@p2 AND id=@p3 AND status='active'
 		RETURNING id, owner_principal_id, agent_id, kind, content, confidence, source_uri, status,
 		          last_confirmed_at, created_at, updated_at`,
 		principalID, agentID, memoryID, kind, update.Content, update.Confidence, update.Confirmed,
@@ -84,7 +84,7 @@ func (repository *MemoryRepository) Update(ctx context.Context, principalID, age
 func (repository *MemoryRepository) Forget(ctx context.Context, principalID, agentID, memoryID string) error {
 	result := exec(repository.database.WithContext(ctx), `
 		UPDATE memories SET status='forgotten', updated_at=now()
-		WHERE owner_principal_id=$1 AND agent_id=$2 AND id=$3 AND status='active'`, principalID, agentID, memoryID)
+		WHERE owner_principal_id=@p1 AND agent_id=@p2 AND id=@p3 AND status='active'`, principalID, agentID, memoryID)
 	if result.Error != nil {
 		return fmt.Errorf("forget memory: %w", result.Error)
 	}
@@ -100,10 +100,10 @@ func (repository *MemoryRepository) Context(ctx context.Context, principalID, ag
 		SELECT id, owner_principal_id, agent_id, kind, content, confidence, source_uri, status,
 		       last_confirmed_at, created_at, updated_at
 		FROM memories
-		WHERE owner_principal_id=$1 AND agent_id=$2 AND status='active'
+		WHERE owner_principal_id=@p1 AND agent_id=@p2 AND status='active'
 		ORDER BY CASE kind WHEN 'semantic' THEN 0 ELSE 1 END,
 		         last_confirmed_at DESC NULLS LAST, confidence DESC, updated_at DESC
-		LIMIT $3`, principalID, agentID, limit).Scan(&items)
+		LIMIT @p3`, principalID, agentID, limit).Scan(&items)
 	if result.Error != nil {
 		return nil, fmt.Errorf("load memory context: %w", result.Error)
 	}

@@ -1,9 +1,7 @@
 package conversation
 
 import (
-	"database/sql/driver"
 	"encoding/json"
-	"fmt"
 	"time"
 )
 
@@ -49,22 +47,6 @@ type ExecutionPolicy struct {
 	SkillID           string `json:"skillId,omitempty"`
 	SkillName         string `json:"skillName,omitempty"`
 	QualifiedToolName string `json:"-"`
-}
-
-func (policy *ExecutionPolicy) Scan(value any) error {
-	encoded, ok := value.([]byte)
-	if !ok {
-		if text, textOK := value.(string); textOK {
-			encoded = []byte(text)
-		} else {
-			return fmt.Errorf("scan execution policy from %T", value)
-		}
-	}
-	return json.Unmarshal(encoded, policy)
-}
-
-func (policy ExecutionPolicy) Value() (driver.Value, error) {
-	return json.Marshal(policy)
 }
 
 func (run Run) Terminal() bool {

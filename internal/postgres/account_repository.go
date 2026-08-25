@@ -17,8 +17,8 @@ type AccountRepository struct {
 
 var _ account.Repository = (*AccountRepository)(nil)
 
-func NewAccountRepository(database *gorm.DB) *AccountRepository {
-	return &AccountRepository{database: database}
+func NewAccountRepository(database *Database) *AccountRepository {
+	return &AccountRepository{database: database.connection}
 }
 
 func (repository *AccountRepository) CreateAccountWithAgent(ctx context.Context, registration account.Registration) (account.Identity, error) {
@@ -26,12 +26,12 @@ func (repository *AccountRepository) CreateAccountWithAgent(ctx context.Context,
 	err := repository.database.WithContext(ctx).Transaction(func(transaction *gorm.DB) error {
 		if result := exec(transaction, `
 			INSERT INTO human_principals (id, display_name, status)
-			VALUES ($1, $2, 'active')`, registration.User.ID, registration.User.DisplayName); result.Error != nil {
+			VALUES (@p1, @p2, 'active')`, registration.User.ID, registration.User.DisplayName); result.Error != nil {
 			return fmt.Errorf("create human principal: %w", result.Error)
 		}
 		if result := exec(transaction, `
 			INSERT INTO user_accounts (id, principal_id, email, password_hash, status)
-			VALUES ($1, $2, $3, $4, 'active')`,
+			VALUES (@p1, @p2, @p3, @p4, 'active')`,
 			registration.Account.ID,
 			registration.Account.PrincipalID,
 			registration.Account.Email,
@@ -52,7 +52,7 @@ func (repository *AccountRepository) CreateAccountWithAgent(ctx context.Context,
 		}
 		if result := exec(transaction, `
 			INSERT INTO user_preferences (principal_id, language, theme)
-			VALUES ($1, $2, $3)`, registration.User.ID, language, theme); result.Error != nil {
+			VALUES (@p1, @p2, @p3)`, registration.User.ID, language, theme); result.Error != nil {
 			return fmt.Errorf("create user preferences: %w", result.Error)
 		}
 		var timestamps struct {
@@ -61,7 +61,7 @@ func (repository *AccountRepository) CreateAccountWithAgent(ctx context.Context,
 		}
 		if err := scanOne(transaction, &timestamps, `
 			INSERT INTO agents (id, owner_principal_id, name, description, system_prompt)
-			VALUES ($1, $2, $3, $4, $5)
+			VALUES (@p1, @p2, @p3, @p4, @p5)
 			RETURNING created_at, updated_at`,
 			agentRecord.ID,
 			agentRecord.OwnerPrincipalID,
@@ -75,7 +75,7 @@ func (repository *AccountRepository) CreateAccountWithAgent(ctx context.Context,
 		agentRecord.UpdatedAt = timestamps.UpdatedAt
 		if result := exec(transaction, `
 			INSERT INTO agent_profiles (agent_id, owner_principal_id)
-			VALUES ($1, $2)`, agentRecord.ID, agentRecord.OwnerPrincipalID); result.Error != nil {
+			VALUES (@p1, @p2)`, agentRecord.ID, agentRecord.OwnerPrincipalID); result.Error != nil {
 			return fmt.Errorf("create personal agent profile: %w", result.Error)
 		}
 		return nil
@@ -121,7 +121,7 @@ func (repository *AccountRepository) FindIdentityByEmail(ctx context.Context, em
 			ORDER BY created_at, id
 			LIMIT 1
 		) agents ON true
-		WHERE accounts.email=$1 AND principals.status='active'`, email)
+		WHERE accounts.email=@p1 AND principals.status='active'`, email)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return account.Identity{}, account.ErrInvalidCredentials
 	}
@@ -149,7 +149,7 @@ func accountAgent(row accountIdentityRow) (item agent.Agent) {
 func (repository *AccountRepository) CreateSession(ctx context.Context, session account.Session) error {
 	result := exec(repository.database.WithContext(ctx), `
 		INSERT INTO account_sessions (id, account_id, token_hash, expires_at)
-		VALUES ($1, $2, $3, $4)`, session.ID, session.AccountID, session.TokenHash, session.ExpiresAt)
+		VALUES (@p1, @p2, @p3, @p4)`, session.ID, session.AccountID, session.TokenHash, session.ExpiresAt)
 	if result.Error != nil {
 		return fmt.Errorf("create account session: %w", result.Error)
 	}
@@ -170,13 +170,13 @@ func (repository *AccountRepository) AuthenticateSession(ctx context.Context, to
 	err := scanOne(repository.database.WithContext(ctx), &row, `
 		WITH valid_session AS (
 			UPDATE account_sessions sessions
-			SET last_seen_at=$2
+			SET last_seen_at=@p2
 			FROM user_accounts accounts, human_principals principals
-			WHERE sessions.token_hash=$1
+			WHERE sessions.token_hash=@p1
 			  AND sessions.account_id=accounts.id
 			  AND accounts.principal_id=principals.id
 			  AND sessions.revoked_at IS NULL
-			  AND sessions.expires_at>$2
+			  AND sessions.expires_at>@p2
 			  AND accounts.status='active'
 			  AND principals.status='active'
 			RETURNING sessions.id AS session_id, sessions.account_id, sessions.expires_at,
@@ -199,7 +199,7 @@ func (repository *AccountRepository) AuthenticateSession(ctx context.Context, to
 func (repository *AccountRepository) RevokeSession(ctx context.Context, tokenHash []byte) error {
 	result := exec(repository.database.WithContext(ctx), `
 		UPDATE account_sessions SET revoked_at=COALESCE(revoked_at, now())
-		WHERE token_hash=$1`, tokenHash)
+		WHERE token_hash=@p1`, tokenHash)
 	if result.Error != nil {
 		return fmt.Errorf("revoke account session: %w", result.Error)
 	}
@@ -224,7 +224,7 @@ func (repository *AccountRepository) GetSettings(ctx context.Context, accountID 
 		FROM user_accounts accounts
 		JOIN human_principals principals ON principals.id=accounts.principal_id
 		JOIN user_preferences preferences ON preferences.principal_id=principals.id
-		WHERE accounts.id=$1 AND accounts.status='active' AND principals.status='active'`, accountID)
+		WHERE accounts.id=@p1 AND accounts.status='active' AND principals.status='active'`, accountID)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return account.Settings{}, account.ErrUnauthenticated
 	}
@@ -246,9 +246,9 @@ func (repository *AccountRepository) UpdateSettings(ctx context.Context, account
 		}
 		result := exec(transaction, `
 			UPDATE human_principals principals
-			SET display_name=COALESCE($3::text, principals.display_name), updated_at=now()
+			SET display_name=COALESCE(CAST(@p3 AS text), principals.display_name), updated_at=now()
 			FROM user_accounts accounts
-			WHERE accounts.id=$1 AND accounts.principal_id=$2
+			WHERE accounts.id=@p1 AND accounts.principal_id=@p2
 			  AND principals.id=accounts.principal_id
 			  AND accounts.status='active' AND principals.status='active'`, accountID, principalID, displayName)
 		if result.Error != nil {
@@ -266,10 +266,10 @@ func (repository *AccountRepository) UpdateSettings(ctx context.Context, account
 		}
 		result = exec(transaction, `
 			UPDATE user_preferences
-			SET language=COALESCE($2::text, language),
-			    theme=COALESCE($3::text, theme),
+			SET language=COALESCE(CAST(@p2 AS text), language),
+			    theme=COALESCE(CAST(@p3 AS text), theme),
 			    updated_at=now()
-			WHERE principal_id=$1`, principalID, language, theme)
+			WHERE principal_id=@p1`, principalID, language, theme)
 		if result.Error != nil {
 			return fmt.Errorf("update user preferences: %w", result.Error)
 		}
@@ -285,7 +285,7 @@ func (repository *AccountRepository) PasswordHash(ctx context.Context, accountID
 	var row struct{ PasswordHash string }
 	err := scanOne(repository.database.WithContext(ctx), &row, `
 		SELECT password_hash FROM user_accounts
-		WHERE id=$1 AND status='active'`, accountID)
+		WHERE id=@p1 AND status='active'`, accountID)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return "", account.ErrUnauthenticated
 	}
@@ -299,8 +299,8 @@ func (repository *AccountRepository) ChangePassword(ctx context.Context, account
 	return repository.database.WithContext(ctx).Transaction(func(transaction *gorm.DB) error {
 		result := exec(transaction, `
 			UPDATE user_accounts
-			SET password_hash=$2, updated_at=now()
-			WHERE id=$1 AND status='active'`, accountID, passwordHash)
+			SET password_hash=@p2, updated_at=now()
+			WHERE id=@p1 AND status='active'`, accountID, passwordHash)
 		if result.Error != nil {
 			return fmt.Errorf("update account password: %w", result.Error)
 		}
@@ -310,7 +310,7 @@ func (repository *AccountRepository) ChangePassword(ctx context.Context, account
 		result = exec(transaction, `
 			UPDATE account_sessions
 			SET revoked_at=COALESCE(revoked_at, now())
-			WHERE account_id=$1 AND id<>$2 AND revoked_at IS NULL`, accountID, currentSessionID)
+			WHERE account_id=@p1 AND id<>@p2 AND revoked_at IS NULL`, accountID, currentSessionID)
 		if result.Error != nil {
 			return fmt.Errorf("revoke other account sessions: %w", result.Error)
 		}

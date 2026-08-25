@@ -3,6 +3,8 @@ package postgres
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -16,33 +18,56 @@ import (
 	"github.com/re35t/AegisLink/internal/memory"
 	"github.com/re35t/AegisLink/internal/skills"
 	"github.com/re35t/AegisLink/migrations"
-	"gorm.io/gorm"
 )
+
+func testDatabaseURL(t *testing.T) string {
+	t.Helper()
+	databaseURL := strings.TrimSpace(os.Getenv("TEST_DATABASE_URL"))
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is not set")
+	}
+	if err := validateDestructiveTestDatabaseURL(databaseURL); err != nil {
+		t.Fatal(err)
+	}
+	return databaseURL
+}
+
+func validateDestructiveTestDatabaseURL(databaseURL string) error {
+	parsed, err := url.Parse(databaseURL)
+	if err != nil {
+		return fmt.Errorf("parse TEST_DATABASE_URL: %w", err)
+	}
+	databaseName, err := url.PathUnescape(strings.TrimPrefix(parsed.EscapedPath(), "/"))
+	if err != nil {
+		return fmt.Errorf("decode TEST_DATABASE_URL database name: %w", err)
+	}
+	if databaseName == "" || strings.Contains(databaseName, "/") || !strings.HasSuffix(databaseName, "_test") {
+		return fmt.Errorf("refusing destructive repository tests against database %q: TEST_DATABASE_URL must name a dedicated *_test database", databaseName)
+	}
+	return nil
+}
 
 func TestRepositoryConversationRunLifecycle(t *testing.T) {
 	const ownerID = "01K34A00000000000000000000"
 	const agentID = "01K34A00000000000000000001"
 
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
+	databaseURL := testDatabaseURL(t)
 	database, err := Open(t.Context(), databaseURL)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer closeTestDatabase(t, database)
-	if err := Migrate(database); err != nil {
+	if err := database.Migrate(); err != nil {
 		t.Fatal(err)
 	}
 	mustExec(t, database, `
 		TRUNCATE account_sessions, user_accounts, run_events, runs, messages, conversations, agents, human_principals CASCADE`)
 	repository := NewConversationRepository(database)
 	mustExec(t, database, `
-		INSERT INTO human_principals (id, display_name) VALUES ($1, 'Test user')`, ownerID)
+		INSERT INTO human_principals (id, display_name) VALUES (@p1, 'Test user')`, ownerID)
 	mustExec(t, database, `
 		INSERT INTO agents (id, owner_principal_id, name, description, system_prompt)
-		VALUES ($1, $2, 'Aegis', '', 'Test prompt')`, agentID, ownerID)
+		VALUES (@p1, @p2, 'Aegis', '', 'Test prompt')`, agentID, ownerID)
 	created, err := repository.CreateConversation(t.Context(), ownerID, agentID, "New conversation")
 	if err != nil {
 		t.Fatal(err)
@@ -110,16 +135,13 @@ func TestAgentCapabilitiesRemainIsolated(t *testing.T) {
 		agentSibling = "agent-capability-sibling"
 		agentTwo     = "agent-capability-two"
 	)
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
+	databaseURL := testDatabaseURL(t)
 	database, err := Open(t.Context(), databaseURL)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer closeTestDatabase(t, database)
-	if err := Migrate(database); err != nil {
+	if err := database.Migrate(); err != nil {
 		t.Fatal(err)
 	}
 	mustExec(t, database, `
@@ -127,13 +149,13 @@ func TestAgentCapabilitiesRemainIsolated(t *testing.T) {
 		         mcp_tools, mcp_servers, agent_skills, skill_version_files, skill_versions, skill_packages,
 		         memories, agents, human_principals CASCADE`)
 	mustExec(t, database, `
-		INSERT INTO human_principals (id, display_name) VALUES ($1, 'One'), ($2, 'Two')`,
+		INSERT INTO human_principals (id, display_name) VALUES (@p1, 'One'), (@p2, 'Two')`,
 		principalOne, principalTwo)
 	mustExec(t, database, `
 		INSERT INTO agents (id, owner_principal_id, name, description, system_prompt)
-		VALUES ($3, $1, 'Agent one', '', 'prompt'),
-		       ($4, $1, 'Agent sibling', '', 'prompt'),
-		       ($5, $2, 'Agent two', '', 'prompt')`,
+		VALUES (@p3, @p1, 'Agent one', '', 'prompt'),
+		       (@p4, @p1, 'Agent sibling', '', 'prompt'),
+		       (@p5, @p2, 'Agent two', '', 'prompt')`,
 		principalOne, principalTwo, agentOne, agentSibling, agentTwo)
 
 	memoryRepository := NewMemoryRepository(database)
@@ -236,7 +258,7 @@ func TestAgentCapabilitiesRemainIsolated(t *testing.T) {
 	}
 	var retainedVersionRow struct{ Count int }
 	mustScan(t, database, &retainedVersionRow, `
-		SELECT count(*) AS count FROM skill_versions WHERE package_id=$1`, firstSkill.ID)
+		SELECT count(*) AS count FROM skill_versions WHERE package_id=@p1`, firstSkill.ID)
 	retainedVersions := retainedVersionRow.Count
 	if retainedVersions != 2 {
 		t.Fatalf("uninstall removed immutable Skill history: versions=%d", retainedVersions)
@@ -276,16 +298,13 @@ func TestAgentCapabilitiesRemainIsolated(t *testing.T) {
 }
 
 func TestAccountRegistrationBindsPrincipalAgentAndSession(t *testing.T) {
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
+	databaseURL := testDatabaseURL(t)
 	database, err := Open(t.Context(), databaseURL)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer closeTestDatabase(t, database)
-	if err := Migrate(database); err != nil {
+	if err := database.Migrate(); err != nil {
 		t.Fatal(err)
 	}
 	mustExec(t, database, `
@@ -366,16 +385,13 @@ func TestAccountRegistrationBindsPrincipalAgentAndSession(t *testing.T) {
 }
 
 func TestAgentProfileRepositoryLifecycleAndIsolation(t *testing.T) {
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
+	databaseURL := testDatabaseURL(t)
 	database, err := Open(t.Context(), databaseURL)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer closeTestDatabase(t, database)
-	if err := Migrate(database); err != nil {
+	if err := database.Migrate(); err != nil {
 		t.Fatal(err)
 	}
 	mustExec(t, database, `
@@ -451,10 +467,7 @@ func TestAgentProfileRepositoryLifecycleAndIsolation(t *testing.T) {
 }
 
 func TestAgentProfileMigrationBackfillsExistingAgents(t *testing.T) {
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
+	databaseURL := testDatabaseURL(t)
 	database, err := Open(t.Context(), databaseURL)
 	if err != nil {
 		t.Fatal(err)
@@ -489,10 +502,7 @@ func TestAgentProfileMigrationBackfillsExistingAgents(t *testing.T) {
 }
 
 func TestSkillPackageAndBundleMigrationsPreserveInstalledSkill(t *testing.T) {
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
+	databaseURL := testDatabaseURL(t)
 	database, err := Open(t.Context(), databaseURL)
 	if err != nil {
 		t.Fatal(err)
@@ -542,7 +552,7 @@ func TestSkillPackageAndBundleMigrationsPreserveInstalledSkill(t *testing.T) {
 		ContentHash string
 		Enabled     bool
 	}
-	err = scanOne(database.WithContext(t.Context()), &migratedSkill, `
+	err = scanOne(database.connection.WithContext(t.Context()), &migratedSkill, `
 		SELECT packages.id AS package_id, versions.id AS version_id, versions.version, versions.content_hash, bindings.enabled
 		FROM agent_skills bindings
 		JOIN skill_packages packages ON packages.id=bindings.package_id
@@ -565,7 +575,7 @@ func TestSkillPackageAndBundleMigrationsPreserveInstalledSkill(t *testing.T) {
 		ContentHash string
 		Content     []byte
 	}
-	err = scanOne(database.WithContext(t.Context()), &fileRow, `
+	err = scanOne(database.connection.WithContext(t.Context()), &fileRow, `
 		SELECT path, content_hash, content
 		FROM skill_version_files
 		WHERE version_id='migration-skill'`)
@@ -579,10 +589,7 @@ func TestSkillPackageAndBundleMigrationsPreserveInstalledSkill(t *testing.T) {
 }
 
 func TestMCPLibraryMigrationPreservesBindingsAndRefreshIdentity(t *testing.T) {
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
+	databaseURL := testDatabaseURL(t)
 	database, err := Open(t.Context(), databaseURL)
 	if err != nil {
 		t.Fatal(err)
@@ -631,7 +638,7 @@ func TestMCPLibraryMigrationPreservesBindingsAndRefreshIdentity(t *testing.T) {
 		ServerEnabled bool
 		ToolEnabled   bool
 	}
-	err = scanOne(database.WithContext(t.Context()), &migratedTool, `
+	err = scanOne(database.connection.WithContext(t.Context()), &migratedTool, `
 		SELECT tools.id AS tool_id, server_bindings.enabled AS server_enabled, tool_bindings.enabled AS tool_enabled
 		FROM mcp_tools tools
 		JOIN agent_mcp_servers server_bindings
@@ -689,51 +696,46 @@ func TestMCPLibraryMigrationPreservesBindingsAndRefreshIdentity(t *testing.T) {
 	}
 }
 
-func mustExec(t *testing.T, database *gorm.DB, query string, args ...any) {
+func mustExec(t *testing.T, database *Database, query string, args ...any) {
 	t.Helper()
-	result := exec(database.WithContext(t.Context()), query, args...)
+	result := exec(database.connection.WithContext(t.Context()), query, args...)
 	if result.Error != nil {
 		t.Fatal(result.Error)
 	}
 }
 
-func mustScan(t *testing.T, database *gorm.DB, destination any, query string, args ...any) {
+func mustScan(t *testing.T, database *Database, destination any, query string, args ...any) {
 	t.Helper()
-	if err := scanOne(database.WithContext(t.Context()), destination, query, args...); err != nil {
+	if err := scanOne(database.connection.WithContext(t.Context()), destination, query, args...); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func closeTestDatabase(t *testing.T, database *gorm.DB) {
+func closeTestDatabase(t *testing.T, database *Database) {
 	t.Helper()
-	sqlDatabase, err := database.DB()
-	if err != nil {
-		t.Errorf("access database pool: %v", err)
-		return
-	}
-	if err := sqlDatabase.Close(); err != nil {
+	if err := database.Close(); err != nil {
 		t.Errorf("close database pool: %v", err)
 	}
 }
 
-func gooseDownTo(database *gorm.DB, version int64) error {
-	sqlDatabase, err := database.DB()
+func gooseDownTo(database *Database, version int64) error {
+	sqlDatabase, err := database.connection.DB()
 	if err != nil {
 		return err
 	}
 	return goose.DownTo(sqlDatabase, ".", version)
 }
 
-func gooseUpTo(database *gorm.DB, version int64) error {
-	sqlDatabase, err := database.DB()
+func gooseUpTo(database *Database, version int64) error {
+	sqlDatabase, err := database.connection.DB()
 	if err != nil {
 		return err
 	}
 	return goose.UpTo(sqlDatabase, ".", version)
 }
 
-func gooseUp(database *gorm.DB) error {
-	sqlDatabase, err := database.DB()
+func gooseUp(database *Database) error {
+	sqlDatabase, err := database.connection.DB()
 	if err != nil {
 		return err
 	}

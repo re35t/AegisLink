@@ -109,7 +109,7 @@ make test
 make build
 ```
 
-Set `TEST_DATABASE_URL` to include the PostgreSQL repository integration test.
+Run `make test-integration` to start and use the dedicated `aegislink_test` database. Destructive repository tests reject database names that do not end in `_test`.
 
 Runtime persistence goes through GORM. Goose remains authoritative for ordered schema migrations; the application intentionally does not call `AutoMigrate`.
 

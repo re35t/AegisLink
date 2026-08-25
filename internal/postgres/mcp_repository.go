@@ -18,8 +18,8 @@ type MCPRepository struct {
 
 var _ mcp.Repository = (*MCPRepository)(nil)
 
-func NewMCPRepository(database *gorm.DB) *MCPRepository {
-	return &MCPRepository{database: database}
+func NewMCPRepository(database *Database) *MCPRepository {
+	return &MCPRepository{database: database.connection}
 }
 
 func (repository *MCPRepository) ListLibrary(ctx context.Context, principalID string) ([]mcp.Server, error) {
@@ -40,8 +40,8 @@ func (repository *MCPRepository) list(ctx context.Context, principalID, agentID 
 		       servers.last_checked_at, servers.created_at, servers.updated_at
 		FROM mcp_servers servers
 		LEFT JOIN agent_mcp_servers bindings
-		  ON bindings.server_id=servers.id AND bindings.agent_id=NULLIF($2, '')
-		WHERE servers.owner_principal_id=$1
+		  ON bindings.server_id=servers.id AND bindings.agent_id=NULLIF(@p2, '')
+		WHERE servers.owner_principal_id=@p1
 		ORDER BY servers.name`, principalID, agentID).Scan(&items)
 	if result.Error != nil {
 		return nil, fmt.Errorf("list MCP servers: %w", result.Error)
@@ -63,7 +63,7 @@ func (repository *MCPRepository) Create(ctx context.Context, item mcp.Server, ag
 		}
 		err := scanOne(transaction, &timestamps, `
 			INSERT INTO mcp_servers (id, owner_principal_id, name, endpoint, transport, status)
-			VALUES ($1, $2, $3, $4, 'streamable-http', 'unchecked')
+			VALUES (@p1, @p2, @p3, @p4, 'streamable-http', 'unchecked')
 			RETURNING created_at, updated_at`, item.ID, item.OwnerPrincipalID, item.Name, item.Endpoint)
 		if isUniqueViolation(err) {
 			return mcp.ErrConflict
@@ -76,7 +76,7 @@ func (repository *MCPRepository) Create(ctx context.Context, item mcp.Server, ag
 		if agentID != "" {
 			result := exec(transaction, `
 				INSERT INTO agent_mcp_servers (owner_principal_id, agent_id, server_id, enabled)
-				VALUES ($1, $2, $3, true)`, item.OwnerPrincipalID, agentID, item.ID)
+				VALUES (@p1, @p2, @p3, true)`, item.OwnerPrincipalID, agentID, item.ID)
 			if result.Error != nil {
 				return fmt.Errorf("bind new MCP server: %w", result.Error)
 			}
@@ -100,7 +100,7 @@ func (repository *MCPRepository) Get(ctx context.Context, principalID, serverID 
 		SELECT id, owner_principal_id, name, endpoint, transport, false AS bound, false AS enabled, status,
 		       COALESCE(protocol_version, '') AS protocol_version, COALESCE(last_error, '') AS last_error,
 		       last_checked_at, created_at, updated_at
-		FROM mcp_servers WHERE owner_principal_id=$1 AND id=$2`, principalID, serverID)
+		FROM mcp_servers WHERE owner_principal_id=@p1 AND id=@p2`, principalID, serverID)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return mcp.Server{}, mcp.ErrNotFound
 	}
@@ -120,8 +120,8 @@ func (repository *MCPRepository) GetForAgent(ctx context.Context, principalID, a
 		       COALESCE(servers.last_error, '') AS last_error,
 		       servers.last_checked_at, servers.created_at, servers.updated_at
 		FROM mcp_servers servers
-		LEFT JOIN agent_mcp_servers bindings ON bindings.server_id=servers.id AND bindings.agent_id=$2
-		WHERE servers.owner_principal_id=$1 AND servers.id=$3`, principalID, agentID, serverID)
+		LEFT JOIN agent_mcp_servers bindings ON bindings.server_id=servers.id AND bindings.agent_id=@p2
+		WHERE servers.owner_principal_id=@p1 AND servers.id=@p3`, principalID, agentID, serverID)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return mcp.Server{}, mcp.ErrNotFound
 	}
@@ -134,9 +134,9 @@ func (repository *MCPRepository) GetForAgent(ctx context.Context, principalID, a
 
 func (repository *MCPRepository) Update(ctx context.Context, principalID, serverID, name, endpoint string) (mcp.Server, error) {
 	result := exec(repository.database.WithContext(ctx), `
-		UPDATE mcp_servers SET name=$3, endpoint=$4, status='unchecked', protocol_version=NULL,
+		UPDATE mcp_servers SET name=@p3, endpoint=@p4, status='unchecked', protocol_version=NULL,
 		       last_error=NULL, last_checked_at=NULL, updated_at=now()
-		WHERE owner_principal_id=$1 AND id=$2`, principalID, serverID, name, endpoint)
+		WHERE owner_principal_id=@p1 AND id=@p2`, principalID, serverID, name, endpoint)
 	if isUniqueViolation(result.Error) {
 		return mcp.Server{}, mcp.ErrConflict
 	}
@@ -152,7 +152,7 @@ func (repository *MCPRepository) Update(ctx context.Context, principalID, server
 func (repository *MCPRepository) BindServer(ctx context.Context, principalID, agentID, serverID string) (mcp.Server, error) {
 	result := exec(repository.database.WithContext(ctx), `
 		INSERT INTO agent_mcp_servers (owner_principal_id, agent_id, server_id, enabled)
-		SELECT $1, $2, id, true FROM mcp_servers WHERE id=$3 AND owner_principal_id=$1
+		SELECT @p1, @p2, id, true FROM mcp_servers WHERE id=@p3 AND owner_principal_id=@p1
 		ON CONFLICT (agent_id, server_id) DO UPDATE SET enabled=true, updated_at=now()`, principalID, agentID, serverID)
 	if result.Error != nil {
 		return mcp.Server{}, fmt.Errorf("bind MCP server: %w", result.Error)
@@ -165,7 +165,7 @@ func (repository *MCPRepository) BindServer(ctx context.Context, principalID, ag
 
 func (repository *MCPRepository) UnbindServer(ctx context.Context, principalID, agentID, serverID string) error {
 	result := exec(repository.database.WithContext(ctx), `
-		DELETE FROM agent_mcp_servers WHERE owner_principal_id=$1 AND agent_id=$2 AND server_id=$3`, principalID, agentID, serverID)
+		DELETE FROM agent_mcp_servers WHERE owner_principal_id=@p1 AND agent_id=@p2 AND server_id=@p3`, principalID, agentID, serverID)
 	if result.Error != nil {
 		return fmt.Errorf("unbind MCP server: %w", result.Error)
 	}
@@ -173,7 +173,7 @@ func (repository *MCPRepository) UnbindServer(ctx context.Context, principalID, 
 }
 
 func (repository *MCPRepository) Delete(ctx context.Context, principalID, serverID string) error {
-	result := exec(repository.database.WithContext(ctx), `DELETE FROM mcp_servers WHERE owner_principal_id=$1 AND id=$2`, principalID, serverID)
+	result := exec(repository.database.WithContext(ctx), `DELETE FROM mcp_servers WHERE owner_principal_id=@p1 AND id=@p2`, principalID, serverID)
 	if result.Error != nil {
 		return fmt.Errorf("delete MCP server: %w", result.Error)
 	}
@@ -183,9 +183,9 @@ func (repository *MCPRepository) Delete(ctx context.Context, principalID, server
 func (repository *MCPRepository) ReplaceTools(ctx context.Context, principalID, serverID string, tools []mcp.Tool, protocol string) (mcp.Server, error) {
 	err := repository.database.WithContext(ctx).Transaction(func(transaction *gorm.DB) error {
 		result := exec(transaction, `
-			UPDATE mcp_servers SET status='connected', protocol_version=$3, last_error=NULL,
+			UPDATE mcp_servers SET status='connected', protocol_version=@p3, last_error=NULL,
 			       last_checked_at=now(), updated_at=now()
-			WHERE owner_principal_id=$1 AND id=$2`, principalID, serverID, protocol)
+			WHERE owner_principal_id=@p1 AND id=@p2`, principalID, serverID, protocol)
 		if result.Error != nil {
 			return fmt.Errorf("mark MCP server connected: %w", result.Error)
 		}
@@ -197,7 +197,7 @@ func (repository *MCPRepository) ReplaceTools(ctx context.Context, principalID, 
 			names = append(names, tool.Name)
 			result = exec(transaction, `
 				INSERT INTO mcp_tools (id, server_id, name, description, input_schema, risk_level)
-				VALUES ($1, $2, $3, $4, $5, $6)
+				VALUES (@p1, @p2, @p3, @p4, @p5, @p6)
 				ON CONFLICT (server_id, name) DO UPDATE
 				SET description=EXCLUDED.description, input_schema=EXCLUDED.input_schema,
 				    discovered_at=now(), updated_at=now()`,
@@ -207,7 +207,7 @@ func (repository *MCPRepository) ReplaceTools(ctx context.Context, principalID, 
 			}
 		}
 		if len(names) == 0 {
-			result = exec(transaction, `DELETE FROM mcp_tools WHERE server_id=$1`, serverID)
+			result = exec(transaction, `DELETE FROM mcp_tools WHERE server_id=@p1`, serverID)
 		} else {
 			result = transaction.Exec(`DELETE FROM mcp_tools WHERE server_id = ? AND name NOT IN ?`, serverID, names)
 		}
@@ -224,8 +224,8 @@ func (repository *MCPRepository) ReplaceTools(ctx context.Context, principalID, 
 
 func (repository *MCPRepository) MarkError(ctx context.Context, principalID, serverID, message string) error {
 	result := exec(repository.database.WithContext(ctx), `
-		UPDATE mcp_servers SET status='error', last_error=$3, last_checked_at=now(), updated_at=now()
-		WHERE owner_principal_id=$1 AND id=$2`, principalID, serverID, message)
+		UPDATE mcp_servers SET status='error', last_error=@p3, last_checked_at=now(), updated_at=now()
+		WHERE owner_principal_id=@p1 AND id=@p2`, principalID, serverID, message)
 	if result.Error != nil {
 		return fmt.Errorf("mark MCP server error: %w", result.Error)
 	}
@@ -235,10 +235,10 @@ func (repository *MCPRepository) MarkError(ctx context.Context, principalID, ser
 func (repository *MCPRepository) UpdateToolRisk(ctx context.Context, principalID, serverID, toolID string, risk mcp.RiskLevel) (mcp.Server, error) {
 	err := repository.database.WithContext(ctx).Transaction(func(transaction *gorm.DB) error {
 		result := exec(transaction, `
-			UPDATE mcp_tools tools SET risk_level=$4, updated_at=now()
+			UPDATE mcp_tools tools SET risk_level=@p4, updated_at=now()
 			FROM mcp_servers servers
-			WHERE tools.server_id=servers.id AND servers.owner_principal_id=$1
-			  AND servers.id=$2 AND tools.id=$3`, principalID, serverID, toolID, risk)
+			WHERE tools.server_id=servers.id AND servers.owner_principal_id=@p1
+			  AND servers.id=@p2 AND tools.id=@p3`, principalID, serverID, toolID, risk)
 		if result.Error != nil {
 			return fmt.Errorf("update MCP tool risk: %w", result.Error)
 		}
@@ -246,7 +246,7 @@ func (repository *MCPRepository) UpdateToolRisk(ctx context.Context, principalID
 			return err
 		}
 		if risk != mcp.ReadOnly {
-			result = exec(transaction, `UPDATE agent_mcp_tools SET enabled=false, updated_at=now() WHERE tool_id=$1`, toolID)
+			result = exec(transaction, `UPDATE agent_mcp_tools SET enabled=false, updated_at=now() WHERE tool_id=@p1`, toolID)
 			if result.Error != nil {
 				return fmt.Errorf("disable risky MCP tool bindings: %w", result.Error)
 			}
@@ -265,7 +265,7 @@ func (repository *MCPRepository) BindTool(ctx context.Context, principalID, agen
 		err := scanOne(transaction, &row, `
 			SELECT tools.server_id FROM mcp_tools tools
 			JOIN mcp_servers servers ON servers.id=tools.server_id
-			WHERE tools.id=$2 AND servers.owner_principal_id=$1`, principalID, toolID)
+			WHERE tools.id=@p2 AND servers.owner_principal_id=@p1`, principalID, toolID)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return mcp.ErrNotFound
 		}
@@ -274,14 +274,14 @@ func (repository *MCPRepository) BindTool(ctx context.Context, principalID, agen
 		}
 		result := exec(transaction, `
 			INSERT INTO agent_mcp_servers (owner_principal_id, agent_id, server_id, enabled)
-			VALUES ($1, $2, $3, true)
+			VALUES (@p1, @p2, @p3, true)
 			ON CONFLICT (agent_id, server_id) DO UPDATE SET enabled=true, updated_at=now()`, principalID, agentID, row.ServerID)
 		if result.Error != nil {
 			return fmt.Errorf("ensure MCP server binding: %w", result.Error)
 		}
 		result = exec(transaction, `
 			INSERT INTO agent_mcp_tools (owner_principal_id, agent_id, server_id, tool_id, enabled)
-			VALUES ($1, $2, $3, $4, true)
+			VALUES (@p1, @p2, @p3, @p4, true)
 			ON CONFLICT (agent_id, tool_id) DO UPDATE SET enabled=true, updated_at=now()`, principalID, agentID, row.ServerID, toolID)
 		if result.Error != nil {
 			return fmt.Errorf("bind MCP tool: %w", result.Error)
@@ -297,7 +297,7 @@ func (repository *MCPRepository) BindTool(ctx context.Context, principalID, agen
 
 func (repository *MCPRepository) UnbindTool(ctx context.Context, principalID, agentID, toolID string) error {
 	result := exec(repository.database.WithContext(ctx), `
-		DELETE FROM agent_mcp_tools WHERE owner_principal_id=$1 AND agent_id=$2 AND tool_id=$3`, principalID, agentID, toolID)
+		DELETE FROM agent_mcp_tools WHERE owner_principal_id=@p1 AND agent_id=@p2 AND tool_id=@p3`, principalID, agentID, toolID)
 	if result.Error != nil {
 		return fmt.Errorf("unbind MCP tool: %w", result.Error)
 	}
@@ -343,7 +343,7 @@ func (row mcpServerToolRow) values() (mcp.Server, mcp.Tool) {
 
 func (repository *MCPRepository) GetToolForAgent(ctx context.Context, principalID, agentID, toolID string) (mcp.Server, mcp.Tool, error) {
 	var row mcpServerToolRow
-	err := scanOne(repository.database.WithContext(ctx), &row, mcpServerToolQuery(`servers.owner_principal_id=$1 AND tools.id=$3`), principalID, agentID, toolID)
+	err := scanOne(repository.database.WithContext(ctx), &row, mcpServerToolQuery(`servers.owner_principal_id=@p1 AND tools.id=@p3`), principalID, agentID, toolID)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return mcp.Server{}, mcp.Tool{}, mcp.ErrNotFound
 	}
@@ -360,10 +360,10 @@ func (repository *MCPRepository) RuntimeTools(ctx context.Context, principalID, 
 		SELECT tools.id AS tool_id, servers.id AS server_id, servers.name AS server_name,
 		       tools.name, tools.description, tools.input_schema
 		FROM mcp_servers servers
-		JOIN agent_mcp_servers server_bindings ON server_bindings.server_id=servers.id AND server_bindings.agent_id=$2
+		JOIN agent_mcp_servers server_bindings ON server_bindings.server_id=servers.id AND server_bindings.agent_id=@p2
 		JOIN mcp_tools tools ON tools.server_id=servers.id
-		JOIN agent_mcp_tools tool_bindings ON tool_bindings.tool_id=tools.id AND tool_bindings.agent_id=$2
-		WHERE servers.owner_principal_id=$1 AND server_bindings.enabled AND servers.status='connected'
+		JOIN agent_mcp_tools tool_bindings ON tool_bindings.tool_id=tools.id AND tool_bindings.agent_id=@p2
+		WHERE servers.owner_principal_id=@p1 AND server_bindings.enabled AND servers.status='connected'
 		  AND tool_bindings.enabled AND tools.risk_level='read-only'
 		ORDER BY servers.name, tools.name`, principalID, agentID).Scan(&items)
 	if result.Error != nil {
@@ -391,8 +391,8 @@ func (repository *MCPRepository) loadTools(database *gorm.DB, serverID, agentID 
 		SELECT tools.id, tools.server_id, tools.name, tools.description, tools.input_schema,
 		       COALESCE(bindings.enabled, false) AS enabled, tools.risk_level
 		FROM mcp_tools tools
-		LEFT JOIN agent_mcp_tools bindings ON bindings.tool_id=tools.id AND bindings.agent_id=NULLIF($2, '')
-		WHERE tools.server_id=$1 ORDER BY tools.name`, serverID, agentID).Scan(&items)
+		LEFT JOIN agent_mcp_tools bindings ON bindings.tool_id=tools.id AND bindings.agent_id=NULLIF(@p2, '')
+		WHERE tools.server_id=@p1 ORDER BY tools.name`, serverID, agentID).Scan(&items)
 	if result.Error != nil {
 		return nil, fmt.Errorf("list MCP tools: %w", result.Error)
 	}
@@ -425,8 +425,8 @@ func mcpServerToolQuery(condition string) string {
 		       COALESCE(tool_bindings.enabled, false) AS tool_enabled, tools.risk_level
 		FROM mcp_tools tools
 		JOIN mcp_servers servers ON servers.id=tools.server_id
-		LEFT JOIN agent_mcp_servers server_bindings ON server_bindings.server_id=servers.id AND server_bindings.agent_id=$2
-		LEFT JOIN agent_mcp_tools tool_bindings ON tool_bindings.tool_id=tools.id AND tool_bindings.agent_id=$2
+		LEFT JOIN agent_mcp_servers server_bindings ON server_bindings.server_id=servers.id AND server_bindings.agent_id=@p2
+		LEFT JOIN agent_mcp_tools tool_bindings ON tool_bindings.tool_id=tools.id AND tool_bindings.agent_id=@p2
 		WHERE ` + condition
 }
 
@@ -441,7 +441,7 @@ const mcpRuntimeToolQuery = `
 	       tools.description AS tool_description, tools.input_schema,
 	       tool_bindings.enabled AS tool_enabled, tools.risk_level
 	FROM mcp_servers servers
-	JOIN agent_mcp_servers server_bindings ON server_bindings.server_id=servers.id AND server_bindings.agent_id=$2
+	JOIN agent_mcp_servers server_bindings ON server_bindings.server_id=servers.id AND server_bindings.agent_id=@p2
 	JOIN mcp_tools tools ON tools.server_id=servers.id
-	JOIN agent_mcp_tools tool_bindings ON tool_bindings.tool_id=tools.id AND tool_bindings.agent_id=$2
-	WHERE servers.owner_principal_id=$1 AND servers.id=$3 AND tools.name=$4`
+	JOIN agent_mcp_tools tool_bindings ON tool_bindings.tool_id=tools.id AND tool_bindings.agent_id=@p2
+	WHERE servers.owner_principal_id=@p1 AND servers.id=@p3 AND tools.name=@p4`

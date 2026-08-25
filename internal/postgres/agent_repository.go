@@ -15,15 +15,15 @@ type AgentRepository struct {
 
 var _ agent.Repository = (*AgentRepository)(nil)
 
-func NewAgentRepository(database *gorm.DB) *AgentRepository {
-	return &AgentRepository{database: database}
+func NewAgentRepository(database *Database) *AgentRepository {
+	return &AgentRepository{database: database.connection}
 }
 
 func (repository *AgentRepository) List(ctx context.Context, ownerID string) ([]agent.Agent, error) {
 	items := make([]agent.Agent, 0)
 	result := raw(repository.database.WithContext(ctx), `
 		SELECT id, owner_principal_id, name, description, system_prompt, created_at, updated_at
-		FROM agents WHERE owner_principal_id=$1 ORDER BY created_at`, ownerID).Scan(&items)
+		FROM agents WHERE owner_principal_id=@p1 ORDER BY created_at`, ownerID).Scan(&items)
 	if result.Error != nil {
 		return nil, fmt.Errorf("list agents: %w", result.Error)
 	}
@@ -34,7 +34,7 @@ func (repository *AgentRepository) Default(ctx context.Context, ownerID string) 
 	var item agent.Agent
 	err := scanOne(repository.database.WithContext(ctx), &item, `
 		SELECT id, owner_principal_id, name, description, system_prompt, created_at, updated_at
-		FROM agents WHERE owner_principal_id=$1 ORDER BY created_at, id LIMIT 1`, ownerID)
+		FROM agents WHERE owner_principal_id=@p1 ORDER BY created_at, id LIMIT 1`, ownerID)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return agent.Agent{}, agent.ErrNotFound
 	}
@@ -48,7 +48,7 @@ func (repository *AgentRepository) Get(ctx context.Context, ownerID, id string) 
 	var item agent.Agent
 	err := scanOne(repository.database.WithContext(ctx), &item, `
 		SELECT id, owner_principal_id, name, description, system_prompt, created_at, updated_at
-		FROM agents WHERE id=$1 AND owner_principal_id=$2`, id, ownerID)
+		FROM agents WHERE id=@p1 AND owner_principal_id=@p2`, id, ownerID)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return agent.Agent{}, agent.ErrNotFound
 	}

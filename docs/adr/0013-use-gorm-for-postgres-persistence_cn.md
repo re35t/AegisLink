@@ -11,7 +11,7 @@ Go 后端的 Repository 原先分散使用 `database/sql` 与 pgx 特定错误�
 ## 决策
 
 - `internal/postgres` 下所有运行时数据库操作统一使用 GORM。
-- Repository 构造函数接收 `*gorm.DB`；GORM model 与 clause 仅存在于 PostgreSQL adapter 内。
+- `internal/postgres.Database` 负责持有 GORM 连接并构造 Repository；`*gorm.DB`、GORM model 与 clause 不得越过 PostgreSQL adapter 边界。
 - 复杂 JOIN、锁、PostgreSQL 数组、CTE 与 `RETURNING` 操作，在 Query Builder 会掩盖约束时可以使用 GORM `Raw` 或 `Exec`。
 - Repository 方法必须使用 `WithContext(ctx)` 和 GORM 管理的 `Transaction` callback。
 - Domain Service 与 HTTP Handler 不依赖 GORM。

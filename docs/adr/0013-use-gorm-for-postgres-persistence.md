@@ -11,7 +11,7 @@ The Go backend had repository code split across direct `database/sql` calls and 
 ## Decision
 
 - Every runtime database operation under `internal/postgres` uses GORM.
-- Repository constructors accept `*gorm.DB`; GORM-specific models and clauses remain inside the PostgreSQL adapter.
+- `internal/postgres.Database` owns the GORM connection and repository construction; `*gorm.DB`, GORM-specific models, and clauses never cross the PostgreSQL adapter boundary.
 - Complex joins, locking statements, PostgreSQL arrays, CTEs, and `RETURNING` operations may use GORM `Raw` or `Exec` when the query builder would obscure the invariant.
 - Repository methods always use `WithContext(ctx)` and GORM-managed `Transaction` callbacks.
 - Domain services and HTTP handlers remain independent of GORM.

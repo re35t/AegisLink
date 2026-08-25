@@ -17,10 +17,33 @@ type ConversationRepository struct {
 	database *gorm.DB
 }
 
+type runRow struct {
+	ID              string
+	ConversationID  string
+	Status          string
+	FailureCode     *string
+	ExecutionPolicy json.RawMessage
+	CreatedAt       time.Time
+	StartedAt       *time.Time
+	FinishedAt      *time.Time
+}
+
+func (row runRow) value() (conversation.Run, error) {
+	var policy conversation.ExecutionPolicy
+	if err := json.Unmarshal(row.ExecutionPolicy, &policy); err != nil {
+		return conversation.Run{}, fmt.Errorf("decode run execution policy: %w", err)
+	}
+	return conversation.Run{
+		ID: row.ID, ConversationID: row.ConversationID, Status: row.Status,
+		FailureCode: row.FailureCode, ExecutionPolicy: policy, CreatedAt: row.CreatedAt,
+		StartedAt: row.StartedAt, FinishedAt: row.FinishedAt,
+	}, nil
+}
+
 var _ conversation.Repository = (*ConversationRepository)(nil)
 
-func NewConversationRepository(database *gorm.DB) *ConversationRepository {
-	return &ConversationRepository{database: database}
+func NewConversationRepository(database *Database) *ConversationRepository {
+	return &ConversationRepository{database: database.connection}
 }
 
 func (repository *ConversationRepository) Ping(ctx context.Context) error {
@@ -35,7 +58,7 @@ func (repository *ConversationRepository) ListConversations(ctx context.Context,
 	items := make([]conversation.Conversation, 0)
 	result := raw(repository.database.WithContext(ctx), `
 		SELECT id, owner_principal_id, agent_id, title, created_at, updated_at
-		FROM conversations WHERE owner_principal_id=$1 ORDER BY updated_at DESC`, ownerID).Scan(&items)
+		FROM conversations WHERE owner_principal_id=@p1 ORDER BY updated_at DESC`, ownerID).Scan(&items)
 	if result.Error != nil {
 		return nil, fmt.Errorf("list conversations: %w", result.Error)
 	}
@@ -49,7 +72,7 @@ func (repository *ConversationRepository) CreateConversation(ctx context.Context
 		UpdatedAt time.Time
 	}
 	err := scanOne(repository.database.WithContext(ctx), &timestamps, `
-		INSERT INTO conversations (id, owner_principal_id, agent_id, title) VALUES ($1, $2, $3, $4)
+		INSERT INTO conversations (id, owner_principal_id, agent_id, title) VALUES (@p1, @p2, @p3, @p4)
 		RETURNING created_at, updated_at`, item.ID, item.OwnerPrincipalID, item.AgentID, item.Title)
 	if err != nil {
 		return conversation.Conversation{}, fmt.Errorf("create conversation: %w", err)
@@ -63,7 +86,7 @@ func (repository *ConversationRepository) GetConversation(ctx context.Context, o
 	var detail conversation.Detail
 	err := scanOne(repository.database.WithContext(ctx), &detail.Conversation, `
 		SELECT id, owner_principal_id, agent_id, title, created_at, updated_at
-		FROM conversations WHERE id=$1 AND owner_principal_id=$2`, id, ownerID)
+		FROM conversations WHERE id=@p1 AND owner_principal_id=@p2`, id, ownerID)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return conversation.Detail{}, conversation.ErrNotFound
 	}
@@ -73,15 +96,19 @@ func (repository *ConversationRepository) GetConversation(ctx context.Context, o
 	detail.Messages = make([]conversation.Message, 0)
 	result := raw(repository.database.WithContext(ctx), `
 		SELECT id, conversation_id, run_id, role, content, sequence, created_at
-		FROM messages WHERE conversation_id=$1 ORDER BY sequence`, id).Scan(&detail.Messages)
+		FROM messages WHERE conversation_id=@p1 ORDER BY sequence`, id).Scan(&detail.Messages)
 	if result.Error != nil {
 		return conversation.Detail{}, fmt.Errorf("list messages: %w", result.Error)
 	}
-	var active conversation.Run
-	err = scanOne(repository.database.WithContext(ctx), &active, `
+	var activeRow runRow
+	err = scanOne(repository.database.WithContext(ctx), &activeRow, `
 		SELECT id, conversation_id, status, failure_code, execution_policy, created_at, started_at, finished_at
-		FROM runs WHERE conversation_id=$1 AND status IN ('queued', 'running')`, id)
+		FROM runs WHERE conversation_id=@p1 AND status IN ('queued', 'running')`, id)
 	if err == nil {
+		active, decodeErr := activeRow.value()
+		if decodeErr != nil {
+			return conversation.Detail{}, decodeErr
+		}
 		detail.ActiveRun = &active
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return conversation.Detail{}, fmt.Errorf("get active run: %w", err)
@@ -94,7 +121,7 @@ func (repository *ConversationRepository) CreateMessageRun(ctx context.Context, 
 	var run conversation.Run
 	err := repository.database.WithContext(ctx).Transaction(func(transaction *gorm.DB) error {
 		var locked struct{ Title string }
-		err := scanOne(transaction, &locked, `SELECT title FROM conversations WHERE id=$1 AND owner_principal_id=$2 FOR UPDATE`, conversationID, ownerID)
+		err := scanOne(transaction, &locked, `SELECT title FROM conversations WHERE id=@p1 AND owner_principal_id=@p2 FOR UPDATE`, conversationID, ownerID)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return conversation.ErrNotFound
 		}
@@ -109,7 +136,7 @@ func (repository *ConversationRepository) CreateMessageRun(ctx context.Context, 
 		}
 		if err := scanOne(transaction, &messageResult, `
 			INSERT INTO messages (id, conversation_id, role, content, sequence)
-			VALUES ($1, $2, 'user', $3, COALESCE((SELECT MAX(sequence)+1 FROM messages WHERE conversation_id=$2), 1))
+			VALUES (@p1, @p2, 'user', @p3, COALESCE((SELECT MAX(sequence)+1 FROM messages WHERE conversation_id=@p2), 1))
 			RETURNING sequence, created_at`, messageID, conversationID, content); err != nil {
 			return fmt.Errorf("insert user message: %w", err)
 		}
@@ -123,7 +150,7 @@ func (repository *ConversationRepository) CreateMessageRun(ctx context.Context, 
 		run = conversation.Run{ID: runID, ConversationID: conversationID, Status: "queued", ExecutionPolicy: policy}
 		var runResult struct{ CreatedAt time.Time }
 		if err := scanOne(transaction, &runResult, `
-			INSERT INTO runs (id, conversation_id, input_message_id, status, execution_policy) VALUES ($1, $2, $3, 'queued', $4)
+			INSERT INTO runs (id, conversation_id, input_message_id, status, execution_policy) VALUES (@p1, @p2, @p3, 'queued', @p4)
 			RETURNING created_at`, runID, conversationID, messageID, policyJSON); err != nil {
 			if isUniqueViolation(err) {
 				return conversation.ErrActiveRun
@@ -133,9 +160,9 @@ func (repository *ConversationRepository) CreateMessageRun(ctx context.Context, 
 		run.CreatedAt = runResult.CreatedAt
 		var result *gorm.DB
 		if locked.Title == "New conversation" {
-			result = exec(transaction, `UPDATE conversations SET title=$2, updated_at=now() WHERE id=$1`, conversationID, messageTitle(content))
+			result = exec(transaction, `UPDATE conversations SET title=@p2, updated_at=now() WHERE id=@p1`, conversationID, messageTitle(content))
 		} else {
-			result = exec(transaction, `UPDATE conversations SET updated_at=now() WHERE id=$1`, conversationID)
+			result = exec(transaction, `UPDATE conversations SET updated_at=now() WHERE id=@p1`, conversationID)
 		}
 		if result.Error != nil {
 			return fmt.Errorf("touch conversation: %w", result.Error)

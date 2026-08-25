@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -19,7 +18,6 @@ import (
 	"github.com/re35t/AegisLink/internal/postgres"
 	agentruntime "github.com/re35t/AegisLink/internal/runtime"
 	"github.com/re35t/AegisLink/internal/skills"
-	"gorm.io/gorm"
 )
 
 const authCookieName = "aegislink_session"
@@ -27,8 +25,8 @@ const authCookieName = "aegislink_session"
 type Application struct {
 	Server *http.Server
 
-	database *gorm.DB
-	cancel   context.CancelFunc
+	closeDatabase func() error
+	cancel        context.CancelFunc
 }
 
 func New(parent context.Context, cfg config.Config, logger *slog.Logger) (*Application, error) {
@@ -38,14 +36,13 @@ func New(parent context.Context, cfg config.Config, logger *slog.Logger) (*Appli
 		cancel()
 		return nil, err
 	}
+	closeDatabase := database.Close
 	closeOnError := func(err error) (*Application, error) {
-		if sqlDatabase, databaseError := database.DB(); databaseError == nil {
-			_ = sqlDatabase.Close()
-		}
+		_ = closeDatabase()
 		cancel()
 		return nil, err
 	}
-	if err := postgres.Migrate(database); err != nil {
+	if err := database.Migrate(); err != nil {
 		return closeOnError(err)
 	}
 	accountRepository := postgres.NewAccountRepository(database)
@@ -122,17 +119,10 @@ func New(parent context.Context, cfg config.Config, logger *slog.Logger) (*Appli
 		IdleTimeout:       75 * time.Second,
 		WriteTimeout:      0,
 	}
-	return &Application{Server: server, database: database, cancel: cancel}, nil
+	return &Application{Server: server, closeDatabase: closeDatabase, cancel: cancel}, nil
 }
 
 func (application *Application) Close() error {
 	application.cancel()
-	sqlDatabase, err := application.database.DB()
-	if err != nil {
-		return fmt.Errorf("access database connection pool: %w", err)
-	}
-	if err := sqlDatabase.Close(); err != nil {
-		return fmt.Errorf("close database: %w", err)
-	}
-	return nil
+	return application.closeDatabase()
 }

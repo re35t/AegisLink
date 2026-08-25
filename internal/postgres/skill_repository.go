@@ -41,8 +41,8 @@ func (row skillRow) skill() skills.Skill {
 
 var _ skills.Repository = (*SkillRepository)(nil)
 
-func NewSkillRepository(database *gorm.DB) *SkillRepository {
-	return &SkillRepository{database: database}
+func NewSkillRepository(database *Database) *SkillRepository {
+	return &SkillRepository{database: database.connection}
 }
 
 func (repository *SkillRepository) List(ctx context.Context, principalID, agentID string) ([]skills.Skill, error) {
@@ -66,8 +66,8 @@ func (repository *SkillRepository) list(ctx context.Context, principalID, agentI
 		JOIN skill_versions versions
 		  ON versions.id=bindings.version_id AND versions.package_id=bindings.package_id
 		 AND versions.owner_principal_id=bindings.owner_principal_id
-		WHERE bindings.owner_principal_id=$1 AND bindings.agent_id=$2
-		  AND (NOT $3 OR bindings.enabled)
+		WHERE bindings.owner_principal_id=@p1 AND bindings.agent_id=@p2
+		  AND (NOT @p3 OR bindings.enabled)
 		ORDER BY packages.name`, principalID, agentID, enabledOnly).Scan(&rows)
 	if result.Error != nil {
 		return nil, fmt.Errorf("list skills: %w", result.Error)
@@ -93,7 +93,7 @@ func (repository *SkillRepository) Install(ctx context.Context, item skills.Skil
 		}
 		if err := scanOne(transaction, &packageResult, `
 			INSERT INTO skill_packages (id, owner_principal_id, name)
-			VALUES ($1, $2, $3)
+			VALUES (@p1, @p2, @p3)
 			ON CONFLICT (owner_principal_id, name) DO UPDATE SET name=EXCLUDED.name
 			RETURNING id, created_at`, item.ID, item.OwnerPrincipalID, item.Name); err != nil {
 			return fmt.Errorf("create or resolve skill package: %w", err)
@@ -108,7 +108,7 @@ func (repository *SkillRepository) Install(ctx context.Context, item skills.Skil
 				id, package_id, owner_principal_id, version, description,
 				manifest_content, content_hash, source_type
 			)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8)
 			ON CONFLICT DO NOTHING
 			RETURNING id`,
 			requestedVersionID, item.ID, item.OwnerPrincipalID, item.Version, item.Description,
@@ -129,7 +129,7 @@ func (repository *SkillRepository) Install(ctx context.Context, item skills.Skil
 				result := exec(transaction, `
 					INSERT INTO skill_version_files (
 						version_id, path, media_type, size_bytes, content_hash, text_readable, content
-					) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+					) VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7)`,
 					item.VersionID, file.Path, file.MediaType, file.SizeBytes,
 					file.ContentHash, file.TextReadable, file.Content)
 				if result.Error != nil {
@@ -144,7 +144,7 @@ func (repository *SkillRepository) Install(ctx context.Context, item skills.Skil
 		}
 		if err := scanOne(transaction, &bindingResult, `
 			INSERT INTO agent_skills (owner_principal_id, agent_id, package_id, version_id, enabled)
-			VALUES ($1, $2, $3, $4, true)
+			VALUES (@p1, @p2, @p3, @p4, true)
 			ON CONFLICT (agent_id, package_id) DO UPDATE
 			SET version_id=EXCLUDED.version_id, enabled=true, updated_at=now()
 			RETURNING enabled, updated_at`,
@@ -168,9 +168,9 @@ func resolveExistingSkillVersion(transaction *gorm.DB, item *skills.Skill) error
 		SELECT id AS version_id, version, description, source_type,
 		       manifest_content AS content, content_hash
 		FROM skill_versions
-		WHERE package_id=$1 AND owner_principal_id=$2
-		  AND (version=$3 OR content_hash=$4)
-		ORDER BY CASE WHEN content_hash=$4 THEN 0 ELSE 1 END, created_at, id
+		WHERE package_id=@p1 AND owner_principal_id=@p2
+		  AND (version=@p3 OR content_hash=@p4)
+		ORDER BY CASE WHEN content_hash=@p4 THEN 0 ELSE 1 END, created_at, id
 		LIMIT 1`, item.ID, item.OwnerPrincipalID, item.Version, item.ContentHash)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return skills.ErrConflict
@@ -195,9 +195,9 @@ func (repository *SkillRepository) SetEnabled(ctx context.Context, principalID, 
 	var row skillRow
 	err := scanOne(repository.database.WithContext(ctx), &row, `
 		UPDATE agent_skills bindings
-		SET enabled=$4, updated_at=now()
+		SET enabled=@p4, updated_at=now()
 		FROM skill_packages packages, skill_versions versions
-		WHERE bindings.owner_principal_id=$1 AND bindings.agent_id=$2 AND bindings.package_id=$3
+		WHERE bindings.owner_principal_id=@p1 AND bindings.agent_id=@p2 AND bindings.package_id=@p3
 		  AND packages.id=bindings.package_id AND packages.owner_principal_id=bindings.owner_principal_id
 		  AND versions.id=bindings.version_id AND versions.package_id=bindings.package_id
 		  AND versions.owner_principal_id=bindings.owner_principal_id
@@ -223,7 +223,7 @@ func (repository *SkillRepository) SetEnabled(ctx context.Context, principalID, 
 func (repository *SkillRepository) Uninstall(ctx context.Context, principalID, agentID, skillID string) error {
 	result := exec(repository.database.WithContext(ctx), `
 		DELETE FROM agent_skills
-		WHERE owner_principal_id=$1 AND agent_id=$2 AND package_id=$3`, principalID, agentID, skillID)
+		WHERE owner_principal_id=@p1 AND agent_id=@p2 AND package_id=@p3`, principalID, agentID, skillID)
 	if result.Error != nil {
 		return fmt.Errorf("unbind skill package: %w", result.Error)
 	}
@@ -240,8 +240,8 @@ func (repository *SkillRepository) ReadFile(ctx context.Context, principalID, ag
 		       files.text_readable, files.content
 		FROM agent_skills bindings
 		JOIN skill_version_files files ON files.version_id=bindings.version_id
-		WHERE bindings.owner_principal_id=$1 AND bindings.agent_id=$2
-		  AND bindings.package_id=$3 AND bindings.enabled AND files.path=$4`,
+		WHERE bindings.owner_principal_id=@p1 AND bindings.agent_id=@p2
+		  AND bindings.package_id=@p3 AND bindings.enabled AND files.path=@p4`,
 		principalID, agentID, skillID, filePath)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return skills.File{}, skills.ErrNotFound
@@ -257,7 +257,7 @@ func listSkillFiles(database *gorm.DB, versionID string) ([]skills.File, error) 
 	result := raw(database, `
 		SELECT path, media_type, size_bytes, content_hash, text_readable
 		FROM skill_version_files
-		WHERE version_id=$1
+		WHERE version_id=@p1
 		ORDER BY path`, versionID).Scan(&files)
 	if result.Error != nil {
 		return nil, fmt.Errorf("list Skill bundle files: %w", result.Error)

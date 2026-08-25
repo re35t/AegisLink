@@ -17,15 +17,15 @@ type AgentProfileRepository struct {
 
 var _ agent.ProfileRepository = (*AgentProfileRepository)(nil)
 
-func NewAgentProfileRepository(database *gorm.DB) *AgentProfileRepository {
-	return &AgentProfileRepository{database: database}
+func NewAgentProfileRepository(database *Database) *AgentProfileRepository {
+	return &AgentProfileRepository{database: database.connection}
 }
 
 func (repository *AgentProfileRepository) GetProfile(ctx context.Context, principalID, agentID string) (agent.ProfileRecord, error) {
 	var item agent.ProfileRecord
 	err := scanOne(repository.database.WithContext(ctx), &item, `
 		SELECT agent_id, owner_principal_id, avatar_url, version, created_at, updated_at
-		FROM agent_profiles WHERE owner_principal_id=$1 AND agent_id=$2`, principalID, agentID)
+		FROM agent_profiles WHERE owner_principal_id=@p1 AND agent_id=@p2`, principalID, agentID)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return agent.ProfileRecord{}, agent.ErrNotFound
 	}
@@ -53,7 +53,7 @@ func (repository *AgentProfileRepository) ListProfileFacts(ctx context.Context, 
 	result := raw(repository.database.WithContext(ctx), `
 		SELECT id, namespace, fact_key, value_json, source, confidence, valid_from, valid_until, created_at, updated_at
 		FROM agent_profile_facts
-		WHERE owner_principal_id=$1 AND agent_id=$2
+		WHERE owner_principal_id=@p1 AND agent_id=@p2
 		ORDER BY namespace, fact_key, created_at, id`, principalID, agentID).Scan(&rows)
 	if result.Error != nil {
 		return nil, fmt.Errorf("list agent profile facts: %w", result.Error)
@@ -96,7 +96,7 @@ func (repository *AgentProfileRepository) ListMemoryProjections(ctx context.Cont
 		FROM agent_memory_projections projections
 		LEFT JOIN agent_memory_projection_sources sources
 		  ON sources.projection_id=projections.id
-		WHERE projections.owner_principal_id=$1 AND projections.agent_id=$2
+		WHERE projections.owner_principal_id=@p1 AND projections.agent_id=@p2
 		GROUP BY projections.id
 		ORDER BY projections.generated_at DESC, projections.id`, principalID, agentID).Scan(&rows)
 	if result.Error != nil {
@@ -131,7 +131,7 @@ func (repository *AgentProfileRepository) ListDisclosurePolicies(ctx context.Con
 		SELECT subject_type, subject_id, visibility, array_to_json(channels) AS channels,
 		       indexable, array_to_json(audiences) AS audiences
 		FROM agent_profile_disclosure_policies
-		WHERE owner_principal_id=$1 AND agent_id=$2`, principalID, agentID).Scan(&rows)
+		WHERE owner_principal_id=@p1 AND agent_id=@p2`, principalID, agentID).Scan(&rows)
 	if result.Error != nil {
 		return nil, fmt.Errorf("list agent profile disclosure policies: %w", result.Error)
 	}
@@ -156,14 +156,14 @@ func (repository *AgentProfileRepository) UpdateProfileIdentity(ctx context.Cont
 		}
 		if result := exec(transaction, `
 			UPDATE agents
-			SET name=COALESCE($3::text, name), description=COALESCE($4::text, description), updated_at=now()
-			WHERE owner_principal_id=$1 AND id=$2`, principalID, agentID, update.Name, update.Description); result.Error != nil {
+			SET name=COALESCE(CAST(@p3 AS text), name), description=COALESCE(CAST(@p4 AS text), description), updated_at=now()
+			WHERE owner_principal_id=@p1 AND id=@p2`, principalID, agentID, update.Name, update.Description); result.Error != nil {
 			return fmt.Errorf("update agent identity: %w", result.Error)
 		}
 		if result := exec(transaction, `
 			UPDATE agent_profiles
-			SET avatar_url=COALESCE($3::text, avatar_url), version=version+1, updated_at=now()
-			WHERE owner_principal_id=$1 AND agent_id=$2`, principalID, agentID, update.AvatarURL); result.Error != nil {
+			SET avatar_url=COALESCE(CAST(@p3 AS text), avatar_url), version=version+1, updated_at=now()
+			WHERE owner_principal_id=@p1 AND agent_id=@p2`, principalID, agentID, update.AvatarURL); result.Error != nil {
 			return fmt.Errorf("advance agent profile identity: %w", result.Error)
 		}
 		return nil
@@ -188,9 +188,9 @@ func (repository *AgentProfileRepository) UpdateDisclosurePolicies(ctx context.C
 				INSERT INTO agent_profile_disclosure_policies (
 					owner_principal_id, agent_id, subject_type, subject_id, visibility, channels, indexable, audiences
 				) VALUES (
-					$1, $2, $3, $4, $5,
-					ARRAY(SELECT jsonb_array_elements_text($6::jsonb)), $7,
-					ARRAY(SELECT jsonb_array_elements_text($8::jsonb))
+					@p1, @p2, @p3, @p4, @p5,
+					ARRAY(SELECT jsonb_array_elements_text(CAST(@p6 AS jsonb))), @p7,
+					ARRAY(SELECT jsonb_array_elements_text(CAST(@p8 AS jsonb)))
 				)
 				ON CONFLICT (agent_id, subject_type, subject_id) DO UPDATE
 				SET visibility=EXCLUDED.visibility, channels=EXCLUDED.channels,
@@ -204,7 +204,7 @@ func (repository *AgentProfileRepository) UpdateDisclosurePolicies(ctx context.C
 		}
 		result := exec(transaction, `
 			UPDATE agent_profiles SET version=version+1, updated_at=now()
-			WHERE owner_principal_id=$1 AND agent_id=$2`, principalID, agentID)
+			WHERE owner_principal_id=@p1 AND agent_id=@p2`, principalID, agentID)
 		if result.Error != nil {
 			return fmt.Errorf("advance agent profile policy version: %w", result.Error)
 		}
@@ -216,7 +216,7 @@ func lockProfileVersion(transaction *gorm.DB, principalID, agentID string, expec
 	var row struct{ Version int64 }
 	err := scanOne(transaction, &row, `
 		SELECT version FROM agent_profiles
-		WHERE owner_principal_id=$1 AND agent_id=$2
+		WHERE owner_principal_id=@p1 AND agent_id=@p2
 		FOR UPDATE`, principalID, agentID)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return agent.ErrNotFound
