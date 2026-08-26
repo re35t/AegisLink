@@ -36,7 +36,7 @@ internal/runtime (Eino)
           │
      Model Provider
 
-PostgreSQL persists conversations, runs, events, traces, and configuration metadata.
+PostgreSQL persists conversations, runs, events, and configuration metadata. Trace storage is not implemented.
 ```
 
 - AG-UI wire types must not enter conversation domain interfaces. The HTTP adapter maps them to and from internal run events.
@@ -50,6 +50,6 @@ PostgreSQL persists conversations, runs, events, traces, and configuration metad
 - The backend now provides `POST /api/v1/ag-ui` and maps internal Run Events to AG-UI lifecycle and text events.
 - The Web application now uses `@assistant-ui/react`, `@assistant-ui/react-ag-ui`, and `@ag-ui/client`; assistant-ui primitives own the normal chat thread.
 - PostgreSQL history continues to load through REST. Historical messages in an AG-UI request are not trusted as authoritative history. The legacy Run Event SSE remains available for active-run replay after a page refresh during migration.
-- The first slice covers text streaming, successful and failed terminal events, and request cancellation. Structured tool events, approvals, attachments, state, and native AG-UI reconnect/resume remain incremental work.
-- Browser acceptance must cover text streaming, tool calls, approval, cancellation, reconnect, and event replay.
+- The implemented slice covers text streaming, successful and failed terminal events, request cancellation, and AG-UI Tool-call start/arguments/result events backed by persisted Run Events. Approvals, attachments, state, and native AG-UI reconnect/resume remain incremental work.
+- Browser acceptance covers text streaming, tool calls, cancellation, reconnect, and event replay; approval flows become mandatory only when the server can persist and resume approvals.
 - CopilotKit, Next.js, and Multi-Agent/A2A are outside this decision.

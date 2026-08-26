@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   Brain,
@@ -36,6 +36,30 @@ export function AppShell({
   onCloseNavigation,
 }: AppShellProps) {
   const { t } = useInterfacePreferences();
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
+  const previousNavigationOpenRef = useRef(false);
+
+  useEffect(() => {
+    const wasOpen = previousNavigationOpenRef.current;
+    previousNavigationOpenRef.current = navigationOpen;
+    if (navigationOpen && !wasOpen) {
+      if (document.activeElement instanceof HTMLElement) {
+        returnFocusRef.current = document.activeElement;
+      }
+      closeButtonRef.current?.focus();
+    } else if (!navigationOpen && wasOpen) {
+      returnFocusRef.current?.focus();
+      returnFocusRef.current = null;
+    }
+    if (!navigationOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onCloseNavigation();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [navigationOpen, onCloseNavigation]);
+
   return (
     <main className="app-shell">
       <aside
@@ -86,6 +110,7 @@ export function AppShell({
 
         <section className="navigation-panel">
           <button
+            ref={closeButtonRef}
             type="button"
             className="icon-button navigation-close"
             onClick={onCloseNavigation}
@@ -107,7 +132,13 @@ export function AppShell({
         />
       )}
 
-      <section className="workspace-main">{children}</section>
+      <section
+        className="workspace-main"
+        inert={navigationOpen ? true : undefined}
+        aria-hidden={navigationOpen ? true : undefined}
+      >
+        {children}
+      </section>
     </main>
   );
 }

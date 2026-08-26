@@ -2813,13 +2813,18 @@ select:focus-visible {
     z-index: 30;
     inset: 0 auto 0 0;
     width: min(88vw, 344px);
+    visibility: hidden;
     transform: translateX(-100%);
     box-shadow: var(--shadow-floating);
-    transition: transform 180ms ease;
+    transition:
+      transform 180ms ease,
+      visibility 0s linear 180ms;
   }
 
   .navigation-shell.navigation-shell-open {
+    visibility: visible;
     transform: translateX(0);
+    transition-delay: 0s;
   }
 
   .navigation-panel > .navigation-close {
@@ -3809,6 +3814,38 @@ select:focus-visible {
   margin-top: auto;
 }
 
+.agent-profile-sections {
+  display: grid;
+  gap: 3px;
+}
+
+.agent-profile-sections a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 38px;
+  padding: 0 10px;
+  border-radius: 7px;
+  color: var(--color-text-secondary);
+  text-decoration: none;
+}
+
+.agent-profile-sections a:hover,
+.agent-profile-sections a.active {
+  color: var(--color-text);
+  background: var(--color-surface-subtle);
+}
+
+.agent-profile-sections a span {
+  min-width: 22px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: #40531d;
+  background: color-mix(in srgb, var(--color-accent) 24%, transparent);
+  text-align: center;
+  font-size: 10px;
+}
+
 .agent-profile-content {
   display: grid;
   gap: 40px;
@@ -3818,6 +3855,138 @@ select:focus-visible {
   min-width: 0;
   padding-bottom: 40px;
   border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.profile-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 22px;
+}
+
+.profile-metric {
+  display: grid;
+  gap: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.profile-metric strong {
+  font-size: 22px;
+}
+.profile-metric span {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+.profile-object-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+.profile-object-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: start;
+  padding: 16px 0;
+  border-top: 1px solid var(--color-border-subtle);
+}
+.profile-object-row > div:first-child,
+.profile-object-copy {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+.profile-object-row p,
+.profile-object-row small {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+.profile-object-row pre,
+.publication-preview {
+  max-width: 100%;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  border-radius: 7px;
+  background: var(--color-surface-subtle);
+  font-size: 11px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.profile-row-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.profile-editable-row textarea,
+.profile-json-editor {
+  width: 100%;
+  min-height: 112px;
+  resize: vertical;
+}
+.candidate-identity-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+}
+.candidate-identity-fields label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.candidate-identity-fields label > span {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+.profile-filter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+}
+.profile-filter select {
+  min-width: 160px;
+}
+.publication-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: end;
+  margin-top: 22px;
+}
+.publication-grid label,
+.publication-grid > div {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+.publication-grid code,
+.one-time-secret code {
+  overflow-wrap: anywhere;
+}
+.token-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 10px;
+}
+.one-time-secret {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid #c99c42;
+  border-radius: 7px;
+  background: color-mix(in srgb, #e2b75e 14%, var(--color-surface));
+}
+.disclosure-legend.warning {
+  border-color: #c99c42;
+  background: color-mix(in srgb, #e2b75e 12%, var(--color-surface));
 }
 
 .agent-profile-section-heading {
@@ -4136,6 +4305,20 @@ select:focus-visible {
 
   .agent-profile-identity-form {
     padding-left: 0;
+  }
+
+  .profile-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .profile-object-row,
+  .publication-grid,
+  .token-form,
+  .one-time-secret,
+  .candidate-identity-fields {
+    grid-template-columns: 1fr;
+  }
+  .profile-row-actions {
+    width: 100%;
   }
 
   .disclosure-controls {

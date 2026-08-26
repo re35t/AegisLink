@@ -10,9 +10,8 @@ import (
 func TestProfileServiceAggregatesCapabilitiesAndPolicies(t *testing.T) {
 	now := time.Now()
 	repository := &profileRepositoryStub{
-		record:      ProfileRecord{AgentID: "agent-1", OwnerPrincipalID: "owner-1", Version: 3, CreatedAt: now, UpdatedAt: now},
-		facts:       []ProfileFact{{ID: "fact-1", Namespace: "interest", Key: "topic", Value: map[string]any{"name": "security"}}},
-		projections: []MemoryProjection{{ID: "projection-1", Type: "interest", Summary: "Security research", Status: "candidate"}},
+		record: ProfileRecord{AgentID: "agent-1", OwnerPrincipalID: "owner-1", Version: 3, CreatedAt: now, UpdatedAt: now},
+		facts:  []ConfirmedFact{{ID: "fact-1", Subject: FactSubjectUser, Namespace: "interest", Key: "topic", Value: map[string]any{"name": "security"}}},
 		policies: map[PolicyKey]DisclosurePolicy{
 			{SubjectType: SubjectCapability, SubjectID: "skill:one"}: {
 				Visibility: VisibilityPublic, Channels: []DisclosureChannel{ChannelAgentFacts}, Indexable: true, Audiences: []string{},
@@ -36,8 +35,8 @@ func TestProfileServiceAggregatesCapabilitiesAndPolicies(t *testing.T) {
 	if profile.Capabilities[0].Disclosure.Audiences == nil {
 		t.Fatal("empty disclosure audiences must serialize as an array")
 	}
-	if profile.Facts[0].Disclosure.Visibility != VisibilityPrivate || len(profile.Facts[0].Disclosure.Channels) != 1 {
-		t.Fatalf("default policy not applied: %#v", profile.Facts[0].Disclosure)
+	if profile.ConfirmedFacts[0].Disclosure.Visibility != VisibilityPrivate || len(profile.ConfirmedFacts[0].Disclosure.Channels) != 1 {
+		t.Fatalf("default policy not applied: %#v", profile.ConfirmedFacts[0].Disclosure)
 	}
 }
 
@@ -99,7 +98,7 @@ func TestProfileServiceValidatesAndSavesDisclosureChanges(t *testing.T) {
 	}
 }
 
-func TestDisclosurePolicyAndProjectionFiltering(t *testing.T) {
+func TestDisclosurePolicyFiltering(t *testing.T) {
 	public := DisclosurePolicy{Visibility: VisibilityPublic, Channels: []DisclosureChannel{ChannelAgentFacts}}
 	if !public.Allows(ChannelAgentFacts, "", false) || public.Allows(ChannelAgentCard, "", false) {
 		t.Fatal("public channel filtering is incorrect")
@@ -107,14 +106,6 @@ func TestDisclosurePolicyAndProjectionFiltering(t *testing.T) {
 	restricted := DisclosurePolicy{Visibility: VisibilityRestricted, Channels: []DisclosureChannel{ChannelAgentCard}, Audiences: []string{"team-1"}}
 	if !restricted.Allows(ChannelAgentCard, "team-1", true) || restricted.Allows(ChannelAgentCard, "team-2", true) {
 		t.Fatal("restricted audience filtering is incorrect")
-	}
-	projection := MemoryProjection{Status: "candidate", Disclosure: public}
-	if projection.Disclosable(ChannelAgentFacts, "", false) {
-		t.Fatal("candidate projection must not be externally disclosable")
-	}
-	projection.Status = "accepted"
-	if !projection.Disclosable(ChannelAgentFacts, "", false) {
-		t.Fatal("accepted projection should follow its disclosure policy")
 	}
 }
 
@@ -138,8 +129,7 @@ func (provider capabilityProviderStub) ProfileCapabilities(context.Context, stri
 
 type profileRepositoryStub struct {
 	record         ProfileRecord
-	facts          []ProfileFact
-	projections    []MemoryProjection
+	facts          []ConfirmedFact
 	policies       map[PolicyKey]DisclosurePolicy
 	identityUpdate ProfileUpdate
 	policyChanges  []PolicyChange
@@ -156,11 +146,8 @@ func newProfileRepositoryStub() *profileRepositoryStub {
 func (repository *profileRepositoryStub) GetProfile(context.Context, string, string) (ProfileRecord, error) {
 	return repository.record, nil
 }
-func (repository *profileRepositoryStub) ListProfileFacts(context.Context, string, string) ([]ProfileFact, error) {
+func (repository *profileRepositoryStub) ListConfirmedFacts(context.Context, string, string, bool) ([]ConfirmedFact, error) {
 	return repository.facts, nil
-}
-func (repository *profileRepositoryStub) ListMemoryProjections(context.Context, string, string) ([]MemoryProjection, error) {
-	return repository.projections, nil
 }
 func (repository *profileRepositoryStub) ListDisclosurePolicies(context.Context, string, string) (map[PolicyKey]DisclosurePolicy, error) {
 	return repository.policies, nil
@@ -176,5 +163,11 @@ func (repository *profileRepositoryStub) UpdateDisclosurePolicies(_ context.Cont
 		repository.policies[PolicyKey{SubjectType: change.SubjectType, SubjectID: change.SubjectID}] = change.Policy
 	}
 	repository.record.Version++
+	return nil
+}
+func (repository *profileRepositoryStub) ConfirmFact(context.Context, string, string, string, int64, int64, ConfirmFactUpdate) error {
+	return nil
+}
+func (repository *profileRepositoryStub) RevokeFact(context.Context, string, string, string, int64) error {
 	return nil
 }

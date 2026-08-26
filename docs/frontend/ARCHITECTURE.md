@@ -34,6 +34,7 @@ web/src/
 │   └── preferences.tsx          Query-backed language/theme resolution and document application
 ├── features/agent/
 │   ├── AgentProfilePage.tsx     Agent selection, stable identity editing, and Profile query coordination
+│   ├── AgentProfileSections.tsx Overview, Impression review, Fact inbox, and Publication workflows
 │   └── DisclosurePolicyEditor.tsx per-item disclosure drafts and validation-aware controls
 └── styles.css              current global styles and component classes
 ```
@@ -84,11 +85,13 @@ Do not let a component both render a large surface and implement fetch/SSE parsi
 
 ## State model
 
-Use TanStack Query for server state: Agent bootstrap data, Conversations, Messages, Runs, Memory, Skills, MCP Servers, and Mention Catalog projections. Invalidate or update query caches after mutations; do not duplicate them into React context or a general store.
+Use TanStack Query for server state: Agent bootstrap data, Conversations, Messages, Runs, Memory, Skills, MCP Servers, Mention Catalog projections, Agent Profile revisions, Impressions, Fact Candidates, and Publication state. Invalidate or update query caches after mutations; do not duplicate them into React context or a general store.
 
 The selected capability Mention is ephemeral local Composer state. MCP Tool, Skill, and Discovery selections keep distinct `kind` and `action` values. It is cleared only after AG-UI emits `RUN_STARTED`; validation and network failures retain it for retry. Durable authority remains the typed Run `executionPolicy` snapshot on the server.
 
 Use local React state for transient presentation state such as an open drawer, selected tab, draft-only filter, or expanded tool row. State that must survive reload, be shared across clients, authorize an external effect, or support event replay belongs on the server.
+
+The Agent Profile section is encoded in route search (`overview|impressions|facts|publication`) and the selected Agent is encoded as `agentId`. Identity and Disclosure mutations use Profile `version`; Impression updates use `contextRevision`; Fact confirmation checks both Profile and Candidate versions. The responsive navigation drawer removes hidden controls from the tab order, makes the workspace inert while open, supports Escape, and restores focus to the opener.
 
 Durable interface preferences use the `account-settings` TanStack Query. `InterfacePreferencesProvider` derives the effective system language/theme and applies them to the document; it does not create a second writable settings store. Unsaved form values remain local drafts until a mutation succeeds.
 

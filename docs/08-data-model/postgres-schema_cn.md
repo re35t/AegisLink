@@ -1,25 +1,45 @@
-# PostgreSQL Schema
+# PostgreSQL Schema 指南
 
-PostgreSQL 是 Account、Human Principal、Agent、Agent Profile、Conversation、Message、Run、可回放 Run Event、Memory、Skill 与 MCP 配置的权威存储。
+权威 Schema 是 [`../../migrations`](../../migrations) 下的有序 SQL。本文只说明所有权和表职责，不重复每个 Column 或 Constraint。
 
-## 所有权与身份
+## Account 与 Agent 所有权
 
-- `human_principals` 是个人数据的授权根。
-- `user_accounts`、`account_sessions`、`user_preferences` 保存登录与 Human Account 状态。
-- `agents` 归属于 Human Principal，并继续作为 Agent 名称、描述和 system prompt 的唯一来源。
+- `human_principals` 是授权与所有权根。
+- `user_accounts` 保存邮箱密码登录状态；`account_sessions` 保存 Session Token Hash；`user_preferences` 保存显式 Language/Theme。
+- `agents` 归属于一个 Human Principal，并作为 Agent Name、Description 与 System Prompt 的权威来源。
+- 注册在同一事务中创建 Account、Principal、默认 Agent、Preferences 与 Agent Profile。
 
 ## Agent Profile
 
-- `agent_profiles` 与 `agents` 一对一，保存头像和用于乐观并发控制的 `version`。
-- `agent_profile_facts` 保存带来源的结构化 JSON Fact。
-- `agent_memory_projections` 与 `agent_memory_projection_sources` 保存派生摘要及其原始 Memory 溯源关系。
-- `agent_profile_disclosure_policies` 按 identity、capability、fact、projection subject 保存披露意图。
+- `agent_profiles` 是以 `agent_id` 为 Key 的一对一扩展；`version` 跟踪 Identity、Confirmed Fact 与 Policy，`context_revision` 跟踪 Impression 与 Candidate。
+- `agent_impressions` 永久保存短期观察历史，`agent_impression_evidence` 保存证据链；Freshness 由观察时间、过期时间和半衰期动态计算。
+- `agent_fact_candidates` 与 source 表组成 Owner 收件箱；`agent_confirmed_facts` 保存独立的确认、有效期与撤销状态。
+- `agent_profile_jobs` 是持久 PostgreSQL Curator 队列，使用 lease 与 `FOR UPDATE SKIP LOCKED`。
+- `agent_profile_disclosure_policies` 只按 Identity、Capability、Confirmed Fact 与 Endpoint Subject 保存策略。
+- 有效 Capability 从 Runtime、Skill 与 MCP 权威状态实时聚合，不复制到第二张 Capability 表。
 
-## Runtime 与集成
+## AgentFacts 发布
 
-- `conversations`、`messages`、`runs`、`run_events` 组成可回放的对话账本。
-- `memories` 保存 Agent 范围内的 semantic/episodic Memory。
-- Skill package/version/file 表保存不可变 Skill 内容，Agent binding 选择并启用版本。
-- MCP server、tool 与 Agent binding 表保存发现结果和逐 Agent 启用状态。
+- `agent_publication_settings` 保存唯一非空 Hostname、DNS Challenge 与 TTL。
+- `agent_signing_keys` 保存 Ed25519 Public Key 和 AES-256-GCM 加密的 Private Key。
+- `agent_access_tokens` 只保存 SHA-256 Token Hash 与精确 Audience。
+- `agent_facts_publications` 保存不可变 Payload、Digest、JWS、过期、替换与撤销状态。
 
-数据库结构只能通过 `migrations/` 下按序执行的 Goose migration 演进。`internal/postgres` 的运行时 Repository 统一使用 GORM，禁止调用 `AutoMigrate`。
+## Conversation Ledger
+
+- `conversations` 同时归属于 Principal 与 Agent。
+- `messages` 保存有序持久 Transcript。
+- `runs` 保存 Lifecycle、Failure、下一事件 Sequence，以及不可变 JSON Execution Policy Snapshot。
+- `run_events` 在单个 Run 内有序并支持 SSE 回放，但不能替代 Audit Log。
+
+## Memory、Skills 与 MCP
+
+- `memories` 直接属于 Agent，并支持 Active/Forgotten Lifecycle。
+- `skill_packages` 属于 Principal；`skill_versions` 与 `skill_version_files` 保存不可变内容；`agent_skills` 为每个 Agent 选择并启用一个 Version。
+- `mcp_servers` 与 `mcp_tools` 组成 Principal Library；`agent_mcp_servers` 与 `agent_mcp_tools` 保存每个 Agent 的独立启用状态。
+
+## 演进与访问
+
+Schema 变更必须新增 Goose migration，不能重写已应用 migration。运行时通过 `internal/postgres.Database` 与 GORM 访问；GORM 类型不得越过 PostgreSQL Adapter，并禁止 `AutoMigrate`。
+
+破坏性 Repository 集成测试必须使用数据库名以 `_test` 结尾的专用数据库。

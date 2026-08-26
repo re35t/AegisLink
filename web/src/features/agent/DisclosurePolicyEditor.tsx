@@ -18,6 +18,7 @@ interface PolicySubject {
   detail: string;
   metadata: string;
   policy: DisclosurePolicy;
+  externalAllowed: boolean;
 }
 
 interface DisclosurePolicyEditorProps {
@@ -77,8 +78,8 @@ export function DisclosurePolicyEditor({
           </h2>
           <p>
             {t(
-              "Choose where each Profile item may be projected. Public Agent Card and Agent Facts publishing are not enabled yet.",
-              "选择每项 Profile 信息将来可被投影到哪里。公开 Agent Card 与 Agent Facts 发布当前尚未启用。",
+              "Choose where confirmed Profile items may be used. Impressions always remain internal.",
+              "选择已确认的 Profile 信息可在哪里使用。Impression 始终只保留在内部。",
             )}
           </p>
         </div>
@@ -140,7 +141,9 @@ export function DisclosurePolicyEditor({
                       const external = option.value !== "runtime-context";
                       const disabled =
                         pending ||
-                        (policy.visibility === "private" && external);
+                        (external &&
+                          (policy.visibility === "private" ||
+                            !subject.externalAllowed));
                       return (
                         <label key={option.value}>
                           <input
@@ -217,8 +220,8 @@ export function DisclosurePolicyEditor({
           <Database size={18} />
           <span>
             {t(
-              "Capabilities appear after Skills or MCP Tools are bound. Facts and Memory Projections remain empty until a reviewed derivation workflow is added.",
-              "绑定 Skills 或 MCP Tools 后会显示能力；在加入可审查的派生流程前，Facts 与 Memory Projections 保持为空。",
+              "Capabilities appear after Skills or MCP Tools are bound. Confirmed Facts appear after you review model-generated candidates.",
+              "绑定 Skills 或 MCP Tools 后会显示能力；确认模型生成的候选后才会出现 Confirmed Fact。",
             )}
           </span>
         </div>
@@ -272,6 +275,7 @@ function profileSubjects(
         ? t("Linked to its Human Principal", "已关联 Human Principal")
         : t("Not human-linked", "未关联 Human Principal"),
       policy: profile.identity.disclosure,
+      externalAllowed: true,
     },
     ...profile.capabilities.map((capability) => ({
       type: "capability" as const,
@@ -280,22 +284,28 @@ function profileSubjects(
       detail: capability.description,
       metadata: `${capability.kind} · ${capability.source} · ${Math.round(capability.confidence * 100)}% · ${capability.callable ? t("callable", "可调用") : t("unavailable", "不可用")}`,
       policy: capability.disclosure,
+      externalAllowed: true,
     })),
-    ...profile.facts.map((fact) => ({
-      type: "fact" as const,
+    ...profile.endpoints.map((endpoint) => ({
+      type: "endpoint" as const,
+      id: endpoint.id,
+      label: endpoint.name,
+      detail: endpoint.description,
+      metadata: t(
+        "Published only when its policy allows the selected channel.",
+        "只有策略允许对应 channel 时才会发布。",
+      ),
+      policy: endpoint.disclosure,
+      externalAllowed: true,
+    })),
+    ...profile.confirmedFacts.map((fact) => ({
+      type: "confirmed-fact" as const,
       id: fact.id,
       label: `${fact.namespace}.${fact.key}`,
       detail: JSON.stringify(fact.value),
-      metadata: `${fact.source} · ${Math.round(fact.confidence * 100)}%`,
+      metadata: `${fact.subject} · ${fact.confirmation.method} · ${Math.round(fact.confidence * 100)}%`,
       policy: fact.disclosure,
-    })),
-    ...profile.memoryProjections.map((projection) => ({
-      type: "projection" as const,
-      id: projection.id,
-      label: projection.type,
-      detail: projection.summary,
-      metadata: `${projection.status} · ${Math.round(projection.confidence * 100)}% · ${projection.sourceMemoryIds.length} ${t("sources", "个来源")}`,
-      policy: projection.disclosure,
+      externalAllowed: fact.subject === "agent",
     })),
   ];
 }
@@ -378,9 +388,9 @@ function subjectTypeLabel(
       return t("Identity", "身份");
     case "capability":
       return t("Capability", "能力");
-    case "fact":
-      return "Fact";
-    case "projection":
-      return t("Memory Projection", "记忆投影");
+    case "confirmed-fact":
+      return t("Confirmed Fact", "已确认事实");
+    case "endpoint":
+      return "Endpoint";
   }
 }

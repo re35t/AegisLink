@@ -76,6 +76,7 @@ function profileFixture(): AgentProfile {
   return {
     agentId: "agent-one",
     version: 1,
+    contextRevision: 1,
     identity: {
       id: "agent-one",
       name: "Aegis",
@@ -90,8 +91,10 @@ function profileFixture(): AgentProfile {
       },
     },
     capabilities: [],
-    facts: [],
-    memoryProjections: [],
+    endpoints: [],
+    confirmedFacts: [],
+    impressions: [],
+    pendingFactCount: 0,
     createdAt: timestamp,
     updatedAt: timestamp,
   };

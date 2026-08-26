@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/re35t/AegisLink/internal/conversation"
 	"gorm.io/gorm"
 )
@@ -64,9 +65,12 @@ func (repository *ConversationRepository) AppendRunEvent(ctx context.Context, pr
 func (repository *ConversationRepository) CompleteRun(ctx context.Context, principalID, runID, conversationID, messageID, content string) (conversation.Message, error) {
 	var message conversation.Message
 	err := repository.database.WithContext(ctx).Transaction(func(transaction *gorm.DB) error {
-		var lockedRun struct{ Status string }
+		var lockedRun struct {
+			Status  string
+			AgentID string
+		}
 		if err := scanOne(transaction, &lockedRun, `
-			SELECT runs.status
+			SELECT runs.status, conversations.agent_id
 			FROM runs
 			JOIN conversations ON conversations.id=runs.conversation_id
 			WHERE runs.id=@p2 AND conversations.owner_principal_id=@p1
@@ -104,6 +108,13 @@ func (repository *ConversationRepository) CompleteRun(ctx context.Context, princ
 		}
 		if result := exec(transaction, `UPDATE conversations SET updated_at=now() WHERE id=@p1`, conversationID); result.Error != nil {
 			return fmt.Errorf("touch conversation: %w", result.Error)
+		}
+		job := profileJobModel{
+			ID: ulid.Make().String(), OwnerPrincipalID: principalID, AgentID: lockedRun.AgentID,
+			SourceRunID: runID, JobKind: "curate-run", Status: "pending", AvailableAt: time.Now().UTC(),
+		}
+		if result := transaction.Create(&job); result.Error != nil {
+			return fmt.Errorf("enqueue completed Run curation: %w", result.Error)
 		}
 		return nil
 	})

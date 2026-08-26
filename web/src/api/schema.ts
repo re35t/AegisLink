@@ -222,6 +222,291 @@ export interface paths {
     patch: operations["updateAgentProfileDisclosurePolicies"];
     trace?: never;
   };
+  "/api/v1/agents/{agentId}/impressions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    get: operations["listAgentImpressions"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/agents/{agentId}/impressions/{impressionId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+        impressionId: string;
+      };
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch: operations["updateAgentImpression"];
+    trace?: never;
+  };
+  "/api/v1/agents/{agentId}/fact-candidates": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    get: operations["listAgentFactCandidates"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/agents/{agentId}/fact-candidates/{candidateId}/confirm": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+        candidateId: string;
+      };
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["confirmAgentFactCandidate"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/agents/{agentId}/fact-candidates/{candidateId}/reject": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+        candidateId: string;
+      };
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["rejectAgentFactCandidate"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/agents/{agentId}/confirmed-facts/{factId}/revoke": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+        factId: string;
+      };
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["revokeAgentConfirmedFact"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/agents/{agentId}/publication": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    get: operations["getAgentPublication"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch: operations["updateAgentPublication"];
+    trace?: never;
+  };
+  "/api/v1/agents/{agentId}/publication/verify-hostname": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["verifyAgentPublicationHostname"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/agents/{agentId}/publication/rotate-key": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["rotateAgentPublicationKey"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/agents/{agentId}/access-tokens": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    get: operations["listAgentAccessTokens"];
+    put?: never;
+    post: operations["createAgentAccessToken"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/agents/{agentId}/access-tokens/{tokenId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+        tokenId: string;
+      };
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete: operations["revokeAgentAccessToken"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/agents/{agentId}/agent-card-preview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    get: operations["getAgentCardPreview"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/.well-known/agentfacts.json": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getPublicAgentFacts"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/.well-known/jwks.json": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getAgentFactsJwks"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/.well-known/agentfacts-revocations.json": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getAgentFactsRevocations"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/agentfacts/query": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["queryAgentFacts"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/agents/{agentId}/memories": {
     parameters: {
       query?: never;
@@ -650,52 +935,168 @@ export interface components {
       callable: boolean;
       disclosure: components["schemas"]["DisclosurePolicy"];
     };
-    AgentProfileFact: {
+    AgentProfileEndpoint: {
       id: string;
+      name: string;
+      description: string;
+      disclosure: components["schemas"]["DisclosurePolicy"];
+    };
+    EvidenceReference: {
+      /** @enum {string} */
+      kind:
+        | "message"
+        | "run"
+        | "tool-result"
+        | "memory"
+        | "impression"
+        | "legacy";
+      id: string;
+      digest?: string;
+      /** Format: date-time */
+      observedAt: string;
+    };
+    Impression: {
+      id: string;
+      /** @enum {string} */
+      scope: "user" | "task" | "project" | "environment" | "relationship";
+      /** @enum {string} */
+      kind:
+        | "current-task"
+        | "recent-interest"
+        | "knowledge-exposure"
+        | "acquired-information"
+        | "open-loop"
+        | "temporary-preference"
+        | "working-style-observation"
+        | "recent-decision";
+      summary: string;
+      details: {
+        [key: string]: unknown;
+      };
+      tags: string[];
+      evidence: components["schemas"]["EvidenceReference"][];
+      /** Format: double */
+      confidence: number;
+      /** Format: double */
+      salience: number;
+      /** Format: double */
+      freshness: number;
+      /** Format: date-time */
+      firstObservedAt: string;
+      /** Format: date-time */
+      lastObservedAt: string;
+      /** Format: date-time */
+      expiresAt?: string;
+      /** Format: int64 */
+      decayHalfLifeSeconds: number;
+      /** @enum {string} */
+      status: "active" | "resolved" | "stale" | "superseded" | "dismissed";
+      supersededById?: string;
+      generation: components["schemas"]["GenerationInfo"];
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: date-time */
+      updatedAt: string;
+    };
+    GenerationInfo: {
+      model: string;
+      runId: string;
+      promptVersion: string;
+      /** Format: date-time */
+      generatedAt: string;
+    };
+    UpdateImpressionRequest: {
+      /** Format: int64 */
+      expectedContextRevision: number;
+      summary?: string;
+      details?: {
+        [key: string]: unknown;
+      };
+      /** @enum {string} */
+      status?: "active" | "dismissed";
+    };
+    FactCandidate: {
+      id: string;
+      /** @enum {string} */
+      subject: "agent" | "user" | "project" | "task";
       namespace: string;
       key: string;
       value: {
         [key: string]: unknown;
       };
-      /** @enum {string} */
-      source: "declared" | "memory_projection" | "runtime" | "imported";
+      sourceImpressionIds: string[];
+      rationale: string;
       /** Format: double */
       confidence: number;
+      /** Format: int64 */
+      version: number;
+      /** @enum {string} */
+      status: "pending" | "promoted" | "rejected";
+      /** Format: date-time */
+      proposedAt: string;
+      /** Format: date-time */
+      reviewedAt?: string;
+    };
+    ConfirmedFact: {
+      id: string;
+      /** @enum {string} */
+      subject: "agent" | "user" | "project" | "task";
+      namespace: string;
+      key: string;
+      value: {
+        [key: string]: unknown;
+      };
+      candidateId?: string;
+      /** Format: double */
+      confidence: number;
+      confirmation: components["schemas"]["FactConfirmation"];
       /** Format: date-time */
       validFrom?: string;
       /** Format: date-time */
       validUntil?: string;
       disclosure: components["schemas"]["DisclosurePolicy"];
       /** Format: date-time */
+      revokedAt?: string;
+      /** Format: date-time */
       createdAt: string;
       /** Format: date-time */
       updatedAt: string;
     };
-    AgentMemoryProjection: {
-      id: string;
-      type: string;
-      summary: string;
-      sourceMemoryIds: string[];
-      /** Format: double */
-      confidence: number;
-      /** Format: double */
-      freshness: number;
+    FactConfirmation: {
       /** Format: date-time */
-      generatedAt: string;
-      /** Format: date-time */
-      expiresAt?: string;
+      confirmedAt: string;
       /** @enum {string} */
-      status: "candidate" | "accepted" | "rejected" | "stale";
-      disclosure: components["schemas"]["DisclosurePolicy"];
+      method: "owner-confirmed" | "deterministic-verification";
+    };
+    ConfirmFactCandidateRequest: {
+      /** Format: int64 */
+      expectedVersion: number;
+      /** Format: int64 */
+      expectedCandidateVersion: number;
+      /** @enum {string} */
+      subject?: "agent" | "user" | "project" | "task";
+      namespace?: string;
+      key?: string;
+      value?: {
+        [key: string]: unknown;
+      };
+    };
+    RejectFactCandidateRequest: {
+      /** Format: int64 */
+      expectedCandidateVersion: number;
     };
     AgentProfile: {
       agentId: string;
       /** Format: int64 */
       version: number;
+      /** Format: int64 */
+      contextRevision: number;
       identity: components["schemas"]["AgentProfileIdentity"];
       capabilities: components["schemas"]["AgentProfileCapability"][];
-      facts: components["schemas"]["AgentProfileFact"][];
-      memoryProjections: components["schemas"]["AgentMemoryProjection"][];
+      endpoints: components["schemas"]["AgentProfileEndpoint"][];
+      confirmedFacts: components["schemas"]["ConfirmedFact"][];
+      impressions: components["schemas"]["Impression"][];
+      pendingFactCount: number;
       /** Format: date-time */
       createdAt: string;
       /** Format: date-time */
@@ -710,7 +1111,7 @@ export interface components {
     };
     DisclosurePolicyChange: {
       /** @enum {string} */
-      subjectType: "identity" | "capability" | "fact" | "projection";
+      subjectType: "identity" | "capability" | "confirmed-fact" | "endpoint";
       subjectId: string;
       policy: components["schemas"]["DisclosurePolicy"];
     };
@@ -718,6 +1119,129 @@ export interface components {
       /** Format: int64 */
       expectedVersion: number;
       changes: components["schemas"]["DisclosurePolicyChange"][];
+    };
+    SigningKeySummary: {
+      available: boolean;
+      keyId?: string;
+      fingerprint?: string;
+      /** @enum {string} */
+      status:
+        | "unavailable"
+        | "not-generated"
+        | "active"
+        | "retired"
+        | "revoked";
+    };
+    AgentPublication: {
+      agentId: string;
+      /** Format: int64 */
+      revision: number;
+      enabled: boolean;
+      hostname: string;
+      /** @enum {string} */
+      hostnameStatus: "unconfigured" | "pending" | "verified";
+      dnsChallenge: string;
+      /** Format: int64 */
+      ttlSeconds: number;
+      signingKey: components["schemas"]["SigningKeySummary"];
+      agentFactsReady: boolean;
+      /** Format: date-time */
+      lastPublishedAt?: string;
+      agentFacts?: components["schemas"]["AgentFactsDocument"];
+      agentCard: components["schemas"]["AgentCardPreview"];
+      tokens: components["schemas"]["AgentAccessToken"][];
+    };
+    UpdateAgentPublicationRequest: {
+      /** Format: int64 */
+      expectedRevision: number;
+      hostname?: string;
+      enabled?: boolean;
+      /** Format: int64 */
+      ttlSeconds?: number;
+    };
+    AgentAccessToken: {
+      id: string;
+      label: string;
+      audience: string;
+      scopes: "agent-facts:query"[];
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: date-time */
+      expiresAt: string;
+      /** Format: date-time */
+      lastUsedAt?: string;
+      revoked: boolean;
+    };
+    CreateAgentAccessTokenRequest: {
+      label: string;
+      audience: string;
+      /** Format: date-time */
+      expiresAt?: string;
+    };
+    CreatedAgentAccessToken: {
+      token: components["schemas"]["AgentAccessToken"];
+      secret: string;
+    };
+    AgentCardPreview: {
+      draft: {
+        [key: string]: unknown;
+      };
+      readiness: {
+        publishable: boolean;
+        blockers: string[];
+      };
+    };
+    AgentFactsClaim: {
+      id: string;
+      /** @enum {string} */
+      kind: "identity" | "capability" | "confirmed-fact" | "endpoint";
+      subject: string;
+      namespace?: string;
+      key?: string;
+      value: {
+        [key: string]: unknown;
+      };
+      issuer: string;
+      /** Format: date-time */
+      validFrom: string;
+      /** Format: date-time */
+      validUntil?: string;
+      proofRefs: string[];
+    };
+    AgentFactsDocument: {
+      /** @enum {string} */
+      schemaVersion: "aegislink.agent-facts/1.0-draft";
+      publicationId: string;
+      /** Format: int64 */
+      profileVersion: number;
+      subject: {
+        [key: string]: unknown;
+      };
+      services: {
+        [key: string]: unknown;
+      }[];
+      claims: components["schemas"]["AgentFactsClaim"][];
+      privacy: {
+        [key: string]: unknown;
+      };
+      /** Format: date-time */
+      validFrom: string;
+      /** Format: date-time */
+      validUntil: string;
+      revocation: {
+        [key: string]: unknown;
+      };
+      proof: {
+        [key: string]: unknown;
+      };
+    };
+    AgentFactsQueryRequest: {
+      nonce?: string;
+      selectors: {
+        claimId?: string;
+        namespace?: string;
+        key?: string;
+      }[];
     };
     Memory: {
       id: string;
@@ -1381,6 +1905,476 @@ export interface operations {
       400: components["responses"]["Error"];
       404: components["responses"]["Error"];
       409: components["responses"]["Error"];
+    };
+  };
+  listAgentImpressions: {
+    parameters: {
+      query?: {
+        status?: "active" | "resolved" | "stale" | "superseded" | "dismissed";
+      };
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Model-created, private working impressions for the Agent */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            impressions: components["schemas"]["Impression"][];
+          };
+        };
+      };
+      404: components["responses"]["Error"];
+    };
+  };
+  updateAgentImpression: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+        impressionId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["UpdateImpressionRequest"];
+      };
+    };
+    responses: {
+      /** @description Impression corrected or its lifecycle changed */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Impression"];
+        };
+      };
+      400: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+    };
+  };
+  listAgentFactCandidates: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Fact candidates proposed by the model and awaiting owner review */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            candidates: components["schemas"]["FactCandidate"][];
+          };
+        };
+      };
+      404: components["responses"]["Error"];
+    };
+  };
+  confirmAgentFactCandidate: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+        candidateId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ConfirmFactCandidateRequest"];
+      };
+    };
+    responses: {
+      /** @description Candidate promoted to a confirmed private Fact */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentProfile"];
+        };
+      };
+      400: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+    };
+  };
+  rejectAgentFactCandidate: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+        candidateId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["RejectFactCandidateRequest"];
+      };
+    };
+    responses: {
+      /** @description Candidate rejected */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      400: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+    };
+  };
+  revokeAgentConfirmedFact: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+        factId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          /** Format: int64 */
+          expectedVersion: number;
+        };
+      };
+    };
+    responses: {
+      /** @description Confirmed Fact revoked and Profile version advanced */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentProfile"];
+        };
+      };
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+    };
+  };
+  getAgentPublication: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Owner-only AgentFacts publication state and preview */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentPublication"];
+        };
+      };
+      404: components["responses"]["Error"];
+    };
+  };
+  updateAgentPublication: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["UpdateAgentPublicationRequest"];
+      };
+    };
+    responses: {
+      /** @description Publication settings updated */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentPublication"];
+        };
+      };
+      400: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+    };
+  };
+  verifyAgentPublicationHostname: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description DNS TXT hostname verification result */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentPublication"];
+        };
+      };
+      400: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+    };
+  };
+  rotateAgentPublicationKey: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Agent signing key rotated and active publication rebuilt */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentPublication"];
+        };
+      };
+      400: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+    };
+  };
+  listAgentAccessTokens: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description AgentFacts query tokens without their secret values */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            tokens: components["schemas"]["AgentAccessToken"][];
+          };
+        };
+      };
+      404: components["responses"]["Error"];
+    };
+  };
+  createAgentAccessToken: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateAgentAccessTokenRequest"];
+      };
+    };
+    responses: {
+      /** @description Token created; secret is returned once */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CreatedAgentAccessToken"];
+        };
+      };
+      400: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+    };
+  };
+  revokeAgentAccessToken: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+        tokenId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Agent access token revoked */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      404: components["responses"]["Error"];
+    };
+  };
+  getAgentCardPreview: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Owner-only, non-publishable A2A AgentCard draft */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentCardPreview"];
+        };
+      };
+      404: components["responses"]["Error"];
+    };
+  };
+  getPublicAgentFacts: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Signed public and indexable AgentFacts document selected by Host */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentFactsDocument"];
+        };
+      };
+      404: components["responses"]["Error"];
+      503: components["responses"]["Error"];
+    };
+  };
+  getAgentFactsJwks: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Public signing keys for the Agent selected by Host */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            keys: {
+              [key: string]: unknown;
+            }[];
+          };
+        };
+      };
+      404: components["responses"]["Error"];
+    };
+  };
+  getAgentFactsRevocations: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Revoked AgentFacts publication and signing-key identifiers */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            publicationIds: string[];
+            keyIds: string[];
+            /** Format: date-time */
+            updatedAt: string;
+          };
+        };
+      };
+      404: components["responses"]["Error"];
+    };
+  };
+  queryAgentFacts: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AgentFactsQueryRequest"];
+      };
+    };
+    responses: {
+      /** @description Short-lived signed AgentFacts projection selected by Host and audience */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentFactsDocument"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      404: components["responses"]["Error"];
     };
   };
   listAgentMemories: {

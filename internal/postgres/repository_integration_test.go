@@ -14,6 +14,7 @@ import (
 	"github.com/re35t/AegisLink/internal/account"
 	"github.com/re35t/AegisLink/internal/agent"
 	"github.com/re35t/AegisLink/internal/conversation"
+	"github.com/re35t/AegisLink/internal/impression"
 	"github.com/re35t/AegisLink/internal/mcp"
 	"github.com/re35t/AegisLink/internal/memory"
 	"github.com/re35t/AegisLink/internal/skills"
@@ -68,6 +69,7 @@ func TestRepositoryConversationRunLifecycle(t *testing.T) {
 	mustExec(t, database, `
 		INSERT INTO agents (id, owner_principal_id, name, description, system_prompt)
 		VALUES (@p1, @p2, 'Aegis', '', 'Test prompt')`, agentID, ownerID)
+	mustExec(t, database, `INSERT INTO agent_profiles (agent_id, owner_principal_id) VALUES (@p1, @p2)`, agentID, ownerID)
 	created, err := repository.CreateConversation(t.Context(), ownerID, agentID, "New conversation")
 	if err != nil {
 		t.Fatal(err)
@@ -99,6 +101,26 @@ func TestRepositoryConversationRunLifecycle(t *testing.T) {
 	}
 	if assistant.Sequence != 2 {
 		t.Fatalf("assistant sequence = %d", assistant.Sequence)
+	}
+	impressionRepository := NewImpressionRepository(database)
+	job, err := impressionRepository.ClaimJob(t.Context(), time.Now().UTC(), time.Minute)
+	if err != nil || job.SourceRunID != run.ID {
+		t.Fatalf("curator job = %#v err=%v", job, err)
+	}
+	curation := impression.Curation{Generation: impression.GenerationInfo{Model: "test-curator", PromptVersion: "test-v1", GeneratedAt: time.Now().UTC()}, Impressions: []impression.ImpressionDraft{{Action: "create", TargetID: "new-one", Scope: impression.ScopeTask, Kind: impression.KindCurrentTask, Summary: "Testing the Profile pipeline", Details: map[string]any{"language": "Go"}, Tags: []string{"test"}, Confidence: .9, Salience: .8, SourceMessageIDs: []string{"message-1"}}}, Facts: []impression.FactDraft{{Subject: impression.FactProject, Namespace: "project", Key: "language", Value: map[string]any{"value": "Go"}, Rationale: "Repeated project context", Confidence: .8, SourceImpressionIDs: []string{"new-one"}}}}
+	if err = impressionRepository.ApplyCuration(t.Context(), job, curation); err != nil {
+		t.Fatal(err)
+	}
+	if err = impressionRepository.CompleteJob(t.Context(), job.ID); err != nil {
+		t.Fatal(err)
+	}
+	items, err := impressionRepository.List(t.Context(), ownerID, agentID, "active")
+	if err != nil || len(items) != 1 || items[0].Details["language"] != "Go" || len(items[0].Evidence) != 1 {
+		t.Fatalf("Impressions=%#v err=%v", items, err)
+	}
+	candidates, err := impressionRepository.ListCandidates(t.Context(), ownerID, agentID, "pending")
+	if err != nil || len(candidates) != 1 || len(candidates[0].SourceImpressionIDs) != 1 {
+		t.Fatalf("candidates=%#v err=%v", candidates, err)
 	}
 	storedRun, err := repository.GetRun(t.Context(), ownerID, run.ID)
 	if err != nil {
@@ -405,27 +427,33 @@ func TestAgentProfileRepositoryLifecycleAndIsolation(t *testing.T) {
 		VALUES ('profile-agent', 'profile-owner');
 		INSERT INTO memories (id, owner_principal_id, agent_id, kind, content, confidence, source_uri)
 		VALUES ('profile-memory', 'profile-owner', 'profile-agent', 'semantic', 'Interested in security', 1, 'manual://test');
-		INSERT INTO agent_profile_facts (
-		  id, owner_principal_id, agent_id, namespace, fact_key, value_json, source, confidence
+		INSERT INTO agent_impressions (
+		  id, owner_principal_id, agent_id, scope, impression_kind, summary, details_json, tags,
+		  confidence, salience, first_observed_at, last_observed_at, decay_half_life_seconds,
+		  status, generator_model, generator_run_id, prompt_version, generated_at
 		) VALUES (
-		  'profile-fact', 'profile-owner', 'profile-agent', 'interest', 'topic', '{"name":"security"}', 'memory_projection', 0.9
+		  'profile-impression', 'profile-owner', 'profile-agent', 'user', 'recent-interest',
+		  'Interested in security research', '{}', '["security"]', 0.9, 0.8, now(), now(), 2592000,
+		  'active', 'test-model', '', 'test-v1', now()
 		);
-		INSERT INTO agent_memory_projections (
-		  id, owner_principal_id, agent_id, projection_type, summary, confidence, freshness, generated_at, status
+		INSERT INTO agent_impression_evidence (owner_principal_id, agent_id, impression_id, evidence_kind, evidence_id, observed_at)
+		VALUES ('profile-owner', 'profile-agent', 'profile-impression', 'memory', 'profile-memory', now());
+		INSERT INTO agent_confirmed_facts (
+		  id, owner_principal_id, agent_id, subject_kind, namespace, fact_key, value_json,
+		  confidence, confirmation_method, confirmed_by, confirmed_at
 		) VALUES (
-		  'profile-projection', 'profile-owner', 'profile-agent', 'research_interest', 'Interested in security research', 0.9, 1, now(), 'accepted'
-		);
-		INSERT INTO agent_memory_projection_sources (owner_principal_id, agent_id, projection_id, memory_id)
-		VALUES ('profile-owner', 'profile-agent', 'profile-projection', 'profile-memory')`)
+		  'profile-fact', 'profile-owner', 'profile-agent', 'agent', 'interest', 'topic',
+		  '{"name":"security"}', 0.9, 'owner-confirmed', 'profile-owner', now()
+		)`)
 
 	repository := NewAgentProfileRepository(database)
-	facts, err := repository.ListProfileFacts(t.Context(), "profile-owner", "profile-agent")
+	facts, err := repository.ListConfirmedFacts(t.Context(), "profile-owner", "profile-agent", false)
 	if err != nil || len(facts) != 1 || facts[0].Value["name"] != "security" {
 		t.Fatalf("unexpected Profile facts: facts=%#v err=%v", facts, err)
 	}
-	projections, err := repository.ListMemoryProjections(t.Context(), "profile-owner", "profile-agent")
-	if err != nil || len(projections) != 1 || len(projections[0].SourceMemoryIDs) != 1 || projections[0].SourceMemoryIDs[0] != "profile-memory" {
-		t.Fatalf("unexpected Memory projections: projections=%#v err=%v", projections, err)
+	impressions, err := NewImpressionRepository(database).List(t.Context(), "profile-owner", "profile-agent", "active")
+	if err != nil || len(impressions) != 1 || len(impressions[0].Evidence) != 1 || impressions[0].Evidence[0].ID != "profile-memory" {
+		t.Fatalf("unexpected Impressions: impressions=%#v err=%v", impressions, err)
 	}
 	if _, err := repository.GetProfile(t.Context(), "profile-other", "profile-agent"); !errors.Is(err, agent.ErrNotFound) {
 		t.Fatalf("Profile must not cross Principal scope: %v", err)
@@ -438,7 +466,7 @@ func TestAgentProfileRepositoryLifecycleAndIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := repository.UpdateDisclosurePolicies(t.Context(), "profile-owner", "profile-agent", 2, []agent.PolicyChange{{
-		SubjectType: agent.SubjectFact, SubjectID: "profile-fact",
+		SubjectType: agent.SubjectConfirmedFact, SubjectID: "profile-fact",
 		Policy: agent.DisclosurePolicy{
 			Visibility: agent.VisibilityPublic, Channels: []agent.DisclosureChannel{agent.ChannelAgentFacts}, Indexable: true, Audiences: []string{},
 		},
@@ -450,11 +478,11 @@ func TestAgentProfileRepositoryLifecycleAndIsolation(t *testing.T) {
 		t.Fatalf("unexpected updated Profile record: record=%#v err=%v", record, err)
 	}
 	policies, err := repository.ListDisclosurePolicies(t.Context(), "profile-owner", "profile-agent")
-	if err != nil || !policies[agent.PolicyKey{SubjectType: agent.SubjectFact, SubjectID: "profile-fact"}].Indexable {
+	if err != nil || !policies[agent.PolicyKey{SubjectType: agent.SubjectConfirmedFact, SubjectID: "profile-fact"}].Indexable {
 		t.Fatalf("unexpected disclosure policies: policies=%#v err=%v", policies, err)
 	}
 	if err := repository.UpdateDisclosurePolicies(t.Context(), "profile-owner", "profile-agent", 2, []agent.PolicyChange{{
-		SubjectType: agent.SubjectFact, SubjectID: "profile-fact", Policy: agent.DefaultDisclosurePolicy(),
+		SubjectType: agent.SubjectConfirmedFact, SubjectID: "profile-fact", Policy: agent.DefaultDisclosurePolicy(),
 	}}); !errors.Is(err, agent.ErrProfileConflict) {
 		t.Fatalf("stale Profile update should conflict: %v", err)
 	}
@@ -498,6 +526,23 @@ func TestAgentProfileMigrationBackfillsExistingAgents(t *testing.T) {
 		SELECT version FROM agent_profiles WHERE agent_id='backfill-agent' AND owner_principal_id='backfill-owner'`)
 	if profileVersion.Version != 1 {
 		t.Fatalf("existing Agent was not backfilled: version=%d", profileVersion.Version)
+	}
+	mustExec(t, database, `INSERT INTO memories (id, owner_principal_id, agent_id, kind, content, confidence, source_uri) VALUES ('legacy-memory','backfill-owner','backfill-agent','semantic','Legacy evidence',0.8,'manual://test')`)
+	mustExec(t, database, `INSERT INTO agent_memory_projections (id,owner_principal_id,agent_id,projection_type,summary,confidence,freshness,generated_at,status) VALUES ('legacy-projection','backfill-owner','backfill-agent','current_task','Legacy current task',0.8,1,now(),'accepted')`)
+	mustExec(t, database, `INSERT INTO agent_memory_projection_sources (owner_principal_id,agent_id,projection_id,memory_id) VALUES ('backfill-owner','backfill-agent','legacy-projection','legacy-memory')`)
+	mustExec(t, database, `INSERT INTO agent_profile_facts (id,owner_principal_id,agent_id,namespace,fact_key,value_json,source,confidence) VALUES ('legacy-fact','backfill-owner','backfill-agent','legacy','topic','{"value":"security"}','memory_projection',0.9)`)
+	mustExec(t, database, `INSERT INTO agent_profile_disclosure_policies (owner_principal_id,agent_id,subject_type,subject_id,visibility,channels,indexable,audiences) VALUES ('backfill-owner','backfill-agent','fact','legacy-fact','public',ARRAY['agent-facts'],true,ARRAY[]::text[])`)
+	if err := gooseUpTo(database, 9); err != nil {
+		t.Fatal(err)
+	}
+	var migrated struct {
+		CandidateCount  int
+		ImpressionCount int
+		PolicyCount     int
+	}
+	mustScan(t, database, &migrated, `SELECT (SELECT count(*) FROM agent_fact_candidates WHERE id='legacy-fact' AND subject_kind='user' AND status='pending') AS candidate_count,(SELECT count(*) FROM agent_impressions WHERE id='legacy-projection' AND status='active') AS impression_count,(SELECT count(*) FROM agent_profile_disclosure_policies WHERE subject_id='legacy-fact') AS policy_count`)
+	if migrated.CandidateCount != 1 || migrated.ImpressionCount != 1 || migrated.PolicyCount != 0 {
+		t.Fatalf("migration downgrade=%#v", migrated)
 	}
 }
 

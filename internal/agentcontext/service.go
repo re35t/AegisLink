@@ -2,10 +2,14 @@ package agentcontext
 
 import (
 	"context"
+	"encoding/json"
+	"sort"
 	"strings"
 
+	"github.com/re35t/AegisLink/internal/agent"
 	"github.com/re35t/AegisLink/internal/catalog"
 	"github.com/re35t/AegisLink/internal/conversation"
+	"github.com/re35t/AegisLink/internal/impression"
 	"github.com/re35t/AegisLink/internal/mcp"
 	"github.com/re35t/AegisLink/internal/memory"
 	"github.com/re35t/AegisLink/internal/skills"
@@ -25,6 +29,14 @@ type MCPRuntime interface {
 	RuntimeTools(context.Context, string, string) ([]mcp.RuntimeTool, error)
 	ResolveMention(context.Context, string, string, string) (mcp.RuntimeTool, error)
 	Invoke(context.Context, string, string, string, string, string) (string, error)
+}
+
+type FactReader interface {
+	RuntimeFacts(context.Context, string, string) ([]agent.ConfirmedFact, error)
+}
+
+type ImpressionReader interface {
+	List(context.Context, string, string, string) ([]impression.Impression, error)
 }
 
 func (service *Service) ResolveSelection(ctx context.Context, principalID, agentID string, selection conversation.RunSelection) (conversation.ExecutionPolicy, error) {
@@ -77,16 +89,24 @@ func (service *Service) ResolveSelection(ctx context.Context, principalID, agent
 }
 
 type Service struct {
-	memories MemoryReader
-	skills   SkillReader
-	mcp      MCPRuntime
+	memories    MemoryReader
+	skills      SkillReader
+	mcp         MCPRuntime
+	facts       FactReader
+	impressions ImpressionReader
 }
 
 func NewService(memories MemoryReader, skillReader SkillReader, mcpRuntime MCPRuntime) *Service {
 	return &Service{memories: memories, skills: skillReader, mcp: mcpRuntime}
 }
 
-func (service *Service) Resolve(ctx context.Context, principalID, agentID string) (conversation.AgentContext, error) {
+func (service *Service) WithProfileContext(facts FactReader, impressions ImpressionReader) *Service {
+	service.facts = facts
+	service.impressions = impressions
+	return service
+}
+
+func (service *Service) Resolve(ctx context.Context, principalID, agentID string, request conversation.ContextRequest) (conversation.AgentContext, error) {
 	memories, err := service.memories.Context(ctx, principalID, agentID)
 	if err != nil {
 		return conversation.AgentContext{}, err
@@ -101,8 +121,35 @@ func (service *Service) Resolve(ctx context.Context, principalID, agentID string
 	}
 	resolved := conversation.AgentContext{
 		Memories: make([]conversation.RuntimeMemory, 0, len(memories)),
-		Skills:   make([]conversation.RuntimeSkill, 0, len(enabledSkills)),
-		Tools:    make([]conversation.RuntimeTool, 0, len(mcpTools)),
+		Facts:    []conversation.RuntimeFact{}, Impressions: []conversation.RuntimeImpression{},
+		Skills: make([]conversation.RuntimeSkill, 0, len(enabledSkills)),
+		Tools:  make([]conversation.RuntimeTool, 0, len(mcpTools)),
+	}
+	if service.facts != nil {
+		facts, err := service.facts.RuntimeFacts(ctx, principalID, agentID)
+		if err != nil {
+			return conversation.AgentContext{}, err
+		}
+		for _, fact := range facts {
+			encoded, _ := json.Marshal(fact.Value)
+			resolved.Facts = append(resolved.Facts, conversation.RuntimeFact{ID: fact.ID, Subject: string(fact.Subject), Namespace: fact.Namespace, Key: fact.Key, Value: string(encoded)})
+		}
+	}
+	if service.impressions != nil {
+		items, err := service.impressions.List(ctx, principalID, agentID, string(impression.StatusActive))
+		if err != nil {
+			return conversation.AgentContext{}, err
+		}
+		query := strings.ToLower(request.CurrentMessage)
+		sort.SliceStable(items, func(i, j int) bool {
+			return impressionScore(items[i], query) > impressionScore(items[j], query)
+		})
+		for _, item := range items {
+			if item.Freshness <= 0 || len(resolved.Impressions) >= 12 {
+				continue
+			}
+			resolved.Impressions = append(resolved.Impressions, conversation.RuntimeImpression{ID: item.ID, Kind: string(item.Kind), Summary: item.Summary, Confidence: item.Confidence})
+		}
 	}
 	for _, item := range memories {
 		resolved.Memories = append(resolved.Memories, conversation.RuntimeMemory{
@@ -141,4 +188,16 @@ func (service *Service) Resolve(ctx context.Context, principalID, agentID string
 		})
 	}
 	return resolved, nil
+}
+
+func impressionScore(item impression.Impression, query string) float64 {
+	score := item.Confidence * item.Salience * item.Freshness
+	if query != "" {
+		for _, token := range strings.Fields(strings.ToLower(item.Summary)) {
+			if len(token) >= 3 && strings.Contains(query, token) {
+				return score + 1
+			}
+		}
+	}
+	return score
 }

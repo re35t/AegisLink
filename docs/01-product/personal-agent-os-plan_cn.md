@@ -1,5 +1,7 @@
 # Personal Agent OS 阶段实施规划
 
+> 状态：阶段规划记录。本文同时保留已完成、计划中与远期内容，不是当前 API 或 Schema 规范。当前实现以根 README、OpenAPI、Goose migrations 和已接受 ADR 为准；产品优先级以同目录 `roadmap_cn.md` 为准。
+
 状态：当前阶段的产品与架构基线
 
 更新时间：2026-08-23
@@ -236,6 +238,23 @@ AegisLink
 
 - 名称、头像、Instructions、模型和可解释的自主级别。
 - Model Provider 配置与 Agent Profile 分离，API key 不进入 Profile 返回值。
+
+当前已实现从内部认知到 AgentFacts 的披露链路；AgentCard 只提供 Owner Draft。中央 Index 与公开 AgentCard/A2A endpoint 仍未实现。
+
+```mermaid
+flowchart TD
+    sources["Memory / Conversation / Run"] --> impression["Impression"]
+    impression --> candidate["Fact Candidate"]
+    candidate -->|"Owner confirms"| profile["AgentProfile"]
+    profile --> disclosure["Disclosure Engine"]
+    disclosure --> discovery["Discovery Projection"]
+    disclosure --> a2a["A2A Projection"]
+    discovery --> facts["AgentFacts"]
+    a2a --> card["AgentCard"]
+    facts --> factsEndpoint["facts endpoint"]
+    card --> blocker["Owner preview only:<br/>A2A endpoint missing"]
+    factsEndpoint --> index["Future Index adapter"]
+```
 
 ### Memory
 

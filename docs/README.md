@@ -1,20 +1,54 @@
-# Documentation status
+# AegisLink technical documentation
+
+This directory documents the current Go/React Personal Agent OS. It is organized by authority so implemented behavior is not confused with planning material.
+
+For a fast orientation, read in this order:
+
+1. [Architecture overview](./00-overview/architecture-overview.md) / [中文](./00-overview/architecture-overview_cn.md): deployable units, four primary paths, module ownership, and repository map.
+2. [Cognitive Profile and publication](./02-architecture/cognitive-profile-and-publication.md) / [中文](./02-architecture/cognitive-profile-and-publication_cn.md): Memory -> Impression -> Confirmed Fact -> Profile -> AgentFacts/AgentCard.
+3. [Security boundary](./06-security/security-boundary.md) / [中文](./06-security/security-boundary_cn.md): trust, ownership, Tool, Curator, signing, and publication constraints.
+4. [HTTP and streaming boundaries](./07-api/http-api.md) / [中文](./07-api/http-api_cn.md): REST, AG-UI, durable events, and Host-scoped public routes.
+5. [PostgreSQL schema guide](./08-data-model/postgres-schema.md) / [中文](./08-data-model/postgres-schema_cn.md): authoritative storage ownership and revisions.
+
+## Sources of truth
+
+1. [`../contracts/http/v1/openapi.yaml`](../contracts/http/v1/openapi.yaml) defines the public REST contract.
+2. [`../migrations`](../migrations) defines the PostgreSQL schema and migration order.
+3. [`../internal`](../internal) and [`../web/src`](../web/src) define runtime behavior.
+4. Accepted [ADRs](./adr) explain architectural decisions; later ADRs override earlier ones when they say so explicitly.
+5. This documentation explains the implementation but must not redefine contracts or schema independently.
+
+## Current system reference
+
+- [Architecture overview](./00-overview/architecture-overview.md) / [中文](./00-overview/architecture-overview_cn.md)
+- [Cognitive Profile and publication](./02-architecture/cognitive-profile-and-publication.md) / [中文](./02-architecture/cognitive-profile-and-publication_cn.md)
+- [Glossary](./00-overview/glossary.md) / [中文](./00-overview/glossary_cn.md)
+- [Product roadmap](./01-product/roadmap.md) / [中文](./01-product/roadmap_cn.md)
+- [HTTP and streaming boundaries](./07-api/http-api.md) / [中文](./07-api/http-api_cn.md)
+- [PostgreSQL schema guide](./08-data-model/postgres-schema.md) / [中文](./08-data-model/postgres-schema_cn.md)
+- [Security boundary](./06-security/security-boundary.md) / [中文](./06-security/security-boundary_cn.md)
+- [Local development](./10-ops/local-dev.md) / [中文](./10-ops/local-dev_cn.md)
+- [Docker Compose](./10-ops/docker-compose.md) / [中文](./10-ops/docker-compose_cn.md)
+- [CI](./10-ops/ci-cd.md) / [中文](./10-ops/ci-cd_cn.md)
+
+The architectural summary is intentionally centralized in the overview and cognitive/publication documents. API, schema, and security guides describe only their own authority boundaries instead of copying a second full system design.
 
 ## Frontend engineering
 
-- [`frontend/PRODUCT.md`](frontend/PRODUCT.md): Personal Agent Console object model, workflows, and product principles.
-- [`frontend/DESIGN.md`](frontend/DESIGN.md): concrete layout, token, hierarchy, responsive, interaction-state, and visual-QA rules.
-- [`frontend/ARCHITECTURE.md`](frontend/ARCHITECTURE.md): current React/Vite boundaries and incremental feature organization.
-- [`frontend/COMPONENTS.md`](frontend/COMPONENTS.md): current component inventory and reuse policy.
-- [`frontend/INTERACTIONS.md`](frontend/INTERACTIONS.md): Run, tool, approval, streaming, recovery, empty, and error conventions.
-- [`frontend/references/lobehub.md`](frontend/references/lobehub.md): read-only product/design engineering reference and AegisLink adaptations.
+- [`frontend/PRODUCT.md`](frontend/PRODUCT.md): product objects, workflows, and maturity criteria.
+- [`frontend/DESIGN.md`](frontend/DESIGN.md): layout, tokens, hierarchy, responsive behavior, and visual QA.
+- [`frontend/ARCHITECTURE.md`](frontend/ARCHITECTURE.md): React/Vite ownership and state boundaries.
+- [`frontend/COMPONENTS.md`](frontend/COMPONENTS.md): component inventory and reuse policy.
+- [`frontend/INTERACTIONS.md`](frontend/INTERACTIONS.md): Run, Tool, recovery, error, and Agent Profile interactions.
+- [`frontend/references/lobehub.md`](frontend/references/lobehub.md): non-authoritative product/design reference.
 
-The repository-owned Codex workflow is [`../skills/frontend-engineering/SKILL.md`](../skills/frontend-engineering/SKILL.md). Root `AGENTS.md` requires it for substantial frontend changes.
+Substantial frontend work also follows [`../skills/frontend-engineering/SKILL.md`](../skills/frontend-engineering/SKILL.md).
 
-The current implementation baseline is ADR 0004, ADR 0005, ADR 0006, ADR 0013, and the root README. [ADR 0013](./adr/0013-use-gorm-for-postgres-persistence.md) records GORM as the runtime PostgreSQL persistence boundary while Goose remains authoritative for schema migrations.
+## Decisions and plans
 
-Except for the current phase plan linked below, documents under `00-overview` through `10-ops` were written for the original TypeScript prototype. They remain as product and security research, but capability routing, Ed25519 identity, RAG, Chroma, WebSocket, gRPC, integrations, and production deployment described there are not implemented in the current Go release unless the root README says otherwise.
+- ADR 0001 is explicitly superseded by ADR 0004.
+- ADR 0002 is superseded by ADR 0014, which limits Ed25519 signing to AgentFacts publication rather than pretending it is a general Agent identity protocol.
+- ADR 0003–0014 record accepted decisions. ADR 0011 revises the MCP ownership statement in ADR 0007.
+- [`01-product/personal-agent-os-plan_cn.md`](./01-product/personal-agent-os-plan_cn.md) is a planning record. Its implemented/deferred checklists are useful context, but current code, contracts, migrations, and ADRs take precedence.
 
-The current product direction is the Chinese [Personal Agent OS phase plan](./01-product/personal-agent-os-plan_cn.md). The accepted target stack is Go/Gin, an in-process Eino runtime, PostgreSQL, AG-UI, and React/Vite with `assistant-ui`. The next releases focus on Web, Memory, Skills, and MCP for one personal agent. Network, Group, A2A, and multi-agent orchestration remain out of scope. [ADR 0005](./adr/0005-use-ag-ui-and-assistant-ui.md) records the implemented first AG-UI and `assistant-ui` slice; tool events, approvals, attachments, and native protocol resumption remain incremental work.
-
-[ADR 0006](./adr/0006-use-model-provider-registry-and-react-runtime.md) records the implemented model-provider registry and base Eino ReAct loop. DeepSeek is the current active provider; multiple selectable model profiles remain future work.
+The removed prototype documents described a TypeScript CLI, `soul.md`, JSONL history, Chroma/RAG, agent routing, organizations, gRPC, WebSocket, IM adapters, and Kubernetes services that do not exist in this repository. They were short placeholders rather than maintained specifications; Git history remains the archive if that research is needed.

@@ -13,10 +13,13 @@ import (
 	"testing"
 	"time"
 
+	internala2a "github.com/re35t/AegisLink/internal/a2a"
 	"github.com/re35t/AegisLink/internal/account"
 	"github.com/re35t/AegisLink/internal/agent"
 	"github.com/re35t/AegisLink/internal/catalog"
 	"github.com/re35t/AegisLink/internal/conversation"
+	"github.com/re35t/AegisLink/internal/discovery"
+	"github.com/re35t/AegisLink/internal/impression"
 	"github.com/re35t/AegisLink/internal/mcp"
 	"github.com/re35t/AegisLink/internal/memory"
 	"github.com/re35t/AegisLink/internal/skills"
@@ -40,6 +43,34 @@ func TestErrorResponseIncludesStableCodeAndRequestID(t *testing.T) {
 	}
 	if body.Code != "resource_not_found" || body.RequestID != "request-123" {
 		t.Fatalf("unexpected error response: %#v", body)
+	}
+}
+
+func TestImpressionRouteUsesOwnerSession(t *testing.T) {
+	router := newTestRouter(&fakeService{}, ModelInfo{})
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/agents/agent-1/impressions?status=active", nil)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated status = %d", response.Code)
+	}
+	request = httptest.NewRequest(http.MethodGet, "/api/v1/agents/agent-1/impressions?status=active", nil)
+	authorize(request)
+	response = httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"impressions"`) {
+		t.Fatalf("response = %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestPublicAgentFactsUsesRealHost(t *testing.T) {
+	router := newTestRouter(&fakeService{}, ModelInfo{})
+	request := httptest.NewRequest(http.MethodGet, "http://agent.example.test/.well-known/agentfacts.json", nil)
+	request.Host = "agent.example.test"
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || response.Header().Get("ETag") == "" {
+		t.Fatalf("response = %d headers=%v", response.Code, response.Header())
 	}
 }
 
@@ -391,6 +422,16 @@ func (fake *fakeService) UpdatePolicies(_ context.Context, _, _ string, _ int64,
 	profile.Version++
 	return profile, nil
 }
+func (fake *fakeService) ConfirmCandidate(context.Context, string, string, string, int64, int64, agent.ConfirmFactUpdate) (agent.Profile, error) {
+	profile := testAgentProfile()
+	profile.Version++
+	return profile, fake.profileError
+}
+func (fake *fakeService) RevokeFact(context.Context, string, string, string, int64) (agent.Profile, error) {
+	profile := testAgentProfile()
+	profile.Version++
+	return profile, fake.profileError
+}
 func (fake *fakeService) ListConversations(context.Context, string) ([]conversation.Conversation, error) {
 	return nil, nil
 }
@@ -505,6 +546,7 @@ func newTestRouterWithSkills(service *fakeService, model ModelInfo, skillService
 	return NewRouter(
 		Dependencies{
 			Accounts: service, Agents: service, Profiles: service, Conversations: service,
+			Impressions: &fakeImpressionService{}, Discovery: &fakeDiscoveryService{}, AgentCards: &fakeAgentCardService{},
 			Memories: &fakeMemoryService{}, Skills: skillService, MCP: &fakeMCPService{}, Catalog: &fakeCatalogService{},
 		},
 		"http://127.0.0.1:5173",
@@ -512,6 +554,58 @@ func newTestRouterWithSkills(service *fakeService, model ModelInfo, skillService
 		model,
 		discardLogger(),
 	)
+}
+
+type fakeImpressionService struct{}
+
+func (*fakeImpressionService) List(context.Context, string, string, string) ([]impression.Impression, error) {
+	return []impression.Impression{}, nil
+}
+func (*fakeImpressionService) ListCandidates(context.Context, string, string, string) ([]impression.FactCandidate, error) {
+	return []impression.FactCandidate{}, nil
+}
+func (*fakeImpressionService) Update(context.Context, string, string, string, impression.Update) (impression.Impression, error) {
+	return impression.Impression{}, nil
+}
+func (*fakeImpressionService) RejectCandidate(context.Context, string, string, string, int64) error {
+	return nil
+}
+
+type fakeDiscoveryService struct{}
+
+func (*fakeDiscoveryService) Get(context.Context, string, string) (discovery.Publication, error) {
+	return discovery.Publication{Tokens: []discovery.AccessToken{}}, nil
+}
+func (*fakeDiscoveryService) Update(context.Context, string, string, discovery.SettingsUpdate) (discovery.Publication, error) {
+	return discovery.Publication{}, nil
+}
+func (*fakeDiscoveryService) VerifyHostname(context.Context, string, string) (discovery.Publication, error) {
+	return discovery.Publication{}, nil
+}
+func (*fakeDiscoveryService) RotateKey(context.Context, string, string) (discovery.Publication, error) {
+	return discovery.Publication{}, nil
+}
+func (*fakeDiscoveryService) CreateToken(context.Context, string, string, discovery.TokenRequest) (discovery.CreatedAccessToken, error) {
+	return discovery.CreatedAccessToken{}, nil
+}
+func (*fakeDiscoveryService) RevokeToken(context.Context, string, string, string) error { return nil }
+func (*fakeDiscoveryService) PublicDocument(context.Context, string) (discovery.Document, string, int64, error) {
+	return discovery.Document{SchemaVersion: "aegislink.agent-facts/1.0-draft", Services: []map[string]any{}, Claims: []discovery.Claim{}}, "sha256:test", 3600, nil
+}
+func (*fakeDiscoveryService) Query(context.Context, string, string, discovery.QueryRequest) (discovery.Document, error) {
+	return discovery.Document{}, nil
+}
+func (*fakeDiscoveryService) JWKS(context.Context, string) (map[string]any, error) {
+	return map[string]any{"keys": []any{}}, nil
+}
+func (*fakeDiscoveryService) Revocations(context.Context, string) (map[string]any, error) {
+	return map[string]any{"publicationIds": []string{}, "keyIds": []string{}}, nil
+}
+
+type fakeAgentCardService struct{}
+
+func (*fakeAgentCardService) Preview(context.Context, string, string) (internala2a.Preview, error) {
+	return internala2a.Preview{}, nil
 }
 
 func testAgentProfile() agent.Profile {
@@ -522,7 +616,7 @@ func testAgentProfile() agent.Profile {
 			ID: "agent-1", Name: "Aegis", Description: "Personal Agent", HumanLinked: true,
 			Disclosure: agent.DefaultDisclosurePolicy(),
 		},
-		Capabilities: []agent.ProfileCapability{}, Facts: []agent.ProfileFact{}, MemoryProjections: []agent.MemoryProjection{},
+		Capabilities: []agent.ProfileCapability{}, ConfirmedFacts: []agent.ConfirmedFact{}, Impressions: []impression.Impression{},
 	}
 }
 

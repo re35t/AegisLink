@@ -68,7 +68,10 @@ export function SettingsPage() {
           <Monitor size={16} />
           {t("General", "通用")}
         </a>
-        <Link to="/settings/agent-profile" search={{ agentId: undefined }}>
+        <Link
+          to="/settings/agent-profile"
+          search={{ agentId: undefined, section: "overview" }}
+        >
           <Bot size={16} />
           {t("Agent Profile", "Agent Profile")}
         </Link>

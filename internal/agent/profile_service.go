@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/re35t/AegisLink/internal/impression"
 )
 
 const (
@@ -21,13 +23,19 @@ type ProfileAgentReader interface {
 }
 
 type ProfileService struct {
-	repository ProfileRepository
-	agents     ProfileAgentReader
-	providers  []CapabilityProvider
+	repository  ProfileRepository
+	agents      ProfileAgentReader
+	providers   []CapabilityProvider
+	impressions ImpressionReader
 }
 
 func NewProfileService(repository ProfileRepository, agents ProfileAgentReader, providers ...CapabilityProvider) *ProfileService {
 	return &ProfileService{repository: repository, agents: agents, providers: providers}
+}
+
+func (service *ProfileService) WithImpressions(reader ImpressionReader) *ProfileService {
+	service.impressions = reader
+	return service
 }
 
 func (service *ProfileService) Get(ctx context.Context, principalID, agentID string) (Profile, error) {
@@ -39,13 +47,22 @@ func (service *ProfileService) Get(ctx context.Context, principalID, agentID str
 	if err != nil {
 		return Profile{}, err
 	}
-	facts, err := service.repository.ListProfileFacts(ctx, principalID, agentID)
+	facts, err := service.repository.ListConfirmedFacts(ctx, principalID, agentID, false)
 	if err != nil {
 		return Profile{}, err
 	}
-	projections, err := service.repository.ListMemoryProjections(ctx, principalID, agentID)
-	if err != nil {
-		return Profile{}, err
+	activeImpressions := []impression.Impression{}
+	pendingFactCount := 0
+	if service.impressions != nil {
+		activeImpressions, err = service.impressions.List(ctx, principalID, agentID, string(impression.StatusActive))
+		if err != nil {
+			return Profile{}, err
+		}
+		candidates, candidateErr := service.impressions.ListCandidates(ctx, principalID, agentID, "pending")
+		if candidateErr != nil {
+			return Profile{}, candidateErr
+		}
+		pendingFactCount = len(candidates)
 	}
 	policies, err := service.repository.ListDisclosurePolicies(ctx, principalID, agentID)
 	if err != nil {
@@ -80,16 +97,14 @@ func (service *ProfileService) Get(ctx context.Context, principalID, agentID str
 	})
 
 	for index := range facts {
-		facts[index].Disclosure = policyFor(policies, SubjectFact, facts[index].ID)
+		facts[index].Disclosure = policyFor(policies, SubjectConfirmedFact, facts[index].ID)
 	}
-	for index := range projections {
-		projections[index].SourceMemoryIDs = nonNilStrings(projections[index].SourceMemoryIDs)
-		projections[index].Disclosure = policyFor(policies, SubjectProjection, projections[index].ID)
-	}
+	endpoints := []ProfileEndpoint{{ID: "agent-facts-query", Name: "AgentFacts query", Description: "Privacy-preserving POST query endpoint.", Disclosure: policyFor(policies, SubjectEndpoint, "agent-facts-query")}}
 
 	return Profile{
-		AgentID: agentID,
-		Version: record.Version,
+		AgentID:         agentID,
+		Version:         record.Version,
+		ContextRevision: record.ContextRevision,
 		Identity: ProfileIdentity{
 			ID:          agentRecord.ID,
 			Name:        agentRecord.Name,
@@ -98,11 +113,13 @@ func (service *ProfileService) Get(ctx context.Context, principalID, agentID str
 			HumanLinked: true,
 			Disclosure:  policyFor(policies, SubjectIdentity, agentRecord.ID),
 		},
-		Capabilities:      capabilities,
-		Facts:             facts,
-		MemoryProjections: projections,
-		CreatedAt:         record.CreatedAt,
-		UpdatedAt:         record.UpdatedAt,
+		Capabilities:     capabilities,
+		Endpoints:        endpoints,
+		ConfirmedFacts:   facts,
+		Impressions:      activeImpressions,
+		PendingFactCount: pendingFactCount,
+		CreatedAt:        record.CreatedAt,
+		UpdatedAt:        record.UpdatedAt,
 	}, nil
 }
 
@@ -165,6 +182,9 @@ func (service *ProfileService) UpdatePolicies(ctx context.Context, principalID, 
 			return Profile{}, ErrInvalidProfile
 		}
 		changes[index].Policy = policy
+		if key.SubjectType == SubjectConfirmedFact && hasExternalPolicy(policy) && !agentFactSubject(profile, key.SubjectID) {
+			return Profile{}, ErrInvalidProfile
+		}
 	}
 	if err := service.repository.UpdateDisclosurePolicies(ctx, principalID, agentID, expectedVersion, changes); err != nil {
 		return Profile{}, err
@@ -179,13 +199,82 @@ func profileSubjects(profile Profile) map[PolicyKey]struct{} {
 	for _, capability := range profile.Capabilities {
 		items[PolicyKey{SubjectType: SubjectCapability, SubjectID: capability.ID}] = struct{}{}
 	}
-	for _, fact := range profile.Facts {
-		items[PolicyKey{SubjectType: SubjectFact, SubjectID: fact.ID}] = struct{}{}
+	for _, fact := range profile.ConfirmedFacts {
+		items[PolicyKey{SubjectType: SubjectConfirmedFact, SubjectID: fact.ID}] = struct{}{}
 	}
-	for _, projection := range profile.MemoryProjections {
-		items[PolicyKey{SubjectType: SubjectProjection, SubjectID: projection.ID}] = struct{}{}
+	for _, endpoint := range profile.Endpoints {
+		items[PolicyKey{SubjectType: SubjectEndpoint, SubjectID: endpoint.ID}] = struct{}{}
 	}
 	return items
+}
+
+func (service *ProfileService) ConfirmCandidate(ctx context.Context, principalID, agentID, candidateID string, expectedVersion, expectedCandidateVersion int64, update ConfirmFactUpdate) (Profile, error) {
+	if expectedVersion < 1 || expectedCandidateVersion < 1 {
+		return Profile{}, ErrInvalidProfile
+	}
+	if update.Namespace != nil {
+		value := strings.TrimSpace(*update.Namespace)
+		if value == "" || utf8.RuneCountInString(value) > 80 {
+			return Profile{}, ErrInvalidProfile
+		}
+		update.Namespace = &value
+	}
+	if update.Key != nil {
+		value := strings.TrimSpace(*update.Key)
+		if value == "" || utf8.RuneCountInString(value) > 120 {
+			return Profile{}, ErrInvalidProfile
+		}
+		update.Key = &value
+	}
+	if update.Subject != nil && *update.Subject != FactSubjectAgent && *update.Subject != FactSubjectUser && *update.Subject != FactSubjectProject && *update.Subject != FactSubjectTask {
+		return Profile{}, ErrInvalidProfile
+	}
+	if err := service.repository.ConfirmFact(ctx, principalID, agentID, candidateID, expectedVersion, expectedCandidateVersion, update); err != nil {
+		return Profile{}, err
+	}
+	return service.Get(ctx, principalID, agentID)
+}
+
+func (service *ProfileService) RevokeFact(ctx context.Context, principalID, agentID, factID string, expectedVersion int64) (Profile, error) {
+	if expectedVersion < 1 {
+		return Profile{}, ErrInvalidProfile
+	}
+	if err := service.repository.RevokeFact(ctx, principalID, agentID, factID, expectedVersion); err != nil {
+		return Profile{}, err
+	}
+	return service.Get(ctx, principalID, agentID)
+}
+
+func (service *ProfileService) RuntimeFacts(ctx context.Context, principalID, agentID string) ([]ConfirmedFact, error) {
+	facts, err := service.repository.ListConfirmedFacts(ctx, principalID, agentID, false)
+	if err != nil {
+		return nil, err
+	}
+	policies, err := service.repository.ListDisclosurePolicies(ctx, principalID, agentID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]ConfirmedFact, 0, len(facts))
+	for _, fact := range facts {
+		fact.Disclosure = policyFor(policies, SubjectConfirmedFact, fact.ID)
+		if fact.Disclosure.Allows(ChannelRuntimeContext, "", true) {
+			result = append(result, fact)
+		}
+	}
+	return result, nil
+}
+
+func hasExternalPolicy(policy DisclosurePolicy) bool {
+	return hasChannel(policy.Channels, ChannelAgentFacts) || hasChannel(policy.Channels, ChannelAgentCard)
+}
+
+func agentFactSubject(profile Profile, id string) bool {
+	for _, fact := range profile.ConfirmedFacts {
+		if fact.ID == id {
+			return fact.Subject == FactSubjectAgent
+		}
+	}
+	return false
 }
 
 func normalizePolicy(policy DisclosurePolicy) (DisclosurePolicy, bool) {

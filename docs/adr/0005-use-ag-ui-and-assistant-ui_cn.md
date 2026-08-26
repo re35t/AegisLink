@@ -36,7 +36,7 @@ internal/runtime (Eino)
           │
      Model Provider
 
-PostgreSQL 保存 Conversation、Run、Event、Trace 和配置元数据。
+PostgreSQL 保存 Conversation、Run、Event 和配置元数据；尚未实现 Trace 存储。
 ```
 
 - AG-UI wire type 不能进入 Conversation 领域接口，由 HTTP adapter 与内部 Run Event 互相映射。
@@ -50,6 +50,6 @@ PostgreSQL 保存 Conversation、Run、Event、Trace 和配置元数据。
 - 后端已新增 `POST /api/v1/ag-ui` 和内部 Run Event 到 AG-UI lifecycle/text event 的映射层。
 - Web 已安装 `@assistant-ui/react`、`@assistant-ui/react-ag-ui` 与 `@ag-ui/client`，并用 assistant-ui primitives 替换正常 Chat Thread。
 - PostgreSQL 历史继续通过 REST 加载；AG-UI 请求中的旧消息不作为可信历史。旧 Run Event SSE 在迁移期继续负责页面刷新后的活动 Run 回放。
-- 第一阶段覆盖文本流、正常终态、失败终态和请求取消。结构化工具事件、Approval、附件、State、原生 AG-UI 重连/恢复仍待增量实现。
-- 自动化验收必须覆盖文本流、工具调用、审批、取消、断线重连和事件回放。
+- 已实现文本流、正常/失败终态、请求取消，以及由持久化 Run Event 支撑的 AG-UI Tool Call Start/Arguments/Result Event。Approval、附件、State 和原生 AG-UI 重连/恢复仍待增量实现。
+- 自动化验收覆盖文本流、工具调用、取消、断线重连和事件回放；只有服务端能够持久化并恢复 Approval 后，审批流程才成为强制验收项。
 - CopilotKit、Next.js 和 Multi-Agent/A2A 不属于本次决策。

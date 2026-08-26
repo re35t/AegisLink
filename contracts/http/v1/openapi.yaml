@@ -251,6 +251,387 @@ paths:
           $ref: "#/components/responses/Error"
         "409":
           $ref: "#/components/responses/Error"
+  /api/v1/agents/{agentId}/impressions:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+    get:
+      operationId: listAgentImpressions
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [active, resolved, stale, superseded, dismissed]
+      responses:
+        "200":
+          description: Model-created, private working impressions for the Agent
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [impressions]
+                properties:
+                  impressions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Impression"
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/v1/agents/{agentId}/impressions/{impressionId}:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+      - in: path
+        name: impressionId
+        required: true
+        schema:
+          type: string
+    patch:
+      operationId: updateAgentImpression
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateImpressionRequest"
+      responses:
+        "200":
+          description: Impression corrected or its lifecycle changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Impression"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /api/v1/agents/{agentId}/fact-candidates:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+    get:
+      operationId: listAgentFactCandidates
+      responses:
+        "200":
+          description: Fact candidates proposed by the model and awaiting owner review
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [candidates]
+                properties:
+                  candidates:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/FactCandidate"
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/v1/agents/{agentId}/fact-candidates/{candidateId}/confirm:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+      - in: path
+        name: candidateId
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: confirmAgentFactCandidate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmFactCandidateRequest"
+      responses:
+        "200":
+          description: Candidate promoted to a confirmed private Fact
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentProfile"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /api/v1/agents/{agentId}/fact-candidates/{candidateId}/reject:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+      - in: path
+        name: candidateId
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: rejectAgentFactCandidate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RejectFactCandidateRequest"
+      responses:
+        "204":
+          description: Candidate rejected
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /api/v1/agents/{agentId}/confirmed-facts/{factId}/revoke:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+      - in: path
+        name: factId
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: revokeAgentConfirmedFact
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedVersion]
+              properties:
+                expectedVersion:
+                  type: integer
+                  format: int64
+                  minimum: 1
+      responses:
+        "200":
+          description: Confirmed Fact revoked and Profile version advanced
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentProfile"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /api/v1/agents/{agentId}/publication:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+    get:
+      operationId: getAgentPublication
+      responses:
+        "200":
+          description: Owner-only AgentFacts publication state and preview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentPublication"
+        "404":
+          $ref: "#/components/responses/Error"
+    patch:
+      operationId: updateAgentPublication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAgentPublicationRequest"
+      responses:
+        "200":
+          description: Publication settings updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentPublication"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /api/v1/agents/{agentId}/publication/verify-hostname:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+    post:
+      operationId: verifyAgentPublicationHostname
+      responses:
+        "200":
+          description: DNS TXT hostname verification result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentPublication"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/v1/agents/{agentId}/publication/rotate-key:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+    post:
+      operationId: rotateAgentPublicationKey
+      responses:
+        "200":
+          description: Agent signing key rotated and active publication rebuilt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentPublication"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/v1/agents/{agentId}/access-tokens:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+    get:
+      operationId: listAgentAccessTokens
+      responses:
+        "200":
+          description: AgentFacts query tokens without their secret values
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tokens]
+                properties:
+                  tokens:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AgentAccessToken"
+        "404":
+          $ref: "#/components/responses/Error"
+    post:
+      operationId: createAgentAccessToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAgentAccessTokenRequest"
+      responses:
+        "201":
+          description: Token created; secret is returned once
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatedAgentAccessToken"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/v1/agents/{agentId}/access-tokens/{tokenId}:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+      - in: path
+        name: tokenId
+        required: true
+        schema:
+          type: string
+    delete:
+      operationId: revokeAgentAccessToken
+      responses:
+        "204":
+          description: Agent access token revoked
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/v1/agents/{agentId}/agent-card-preview:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+    get:
+      operationId: getAgentCardPreview
+      responses:
+        "200":
+          description: Owner-only, non-publishable A2A AgentCard draft
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentCardPreview"
+        "404":
+          $ref: "#/components/responses/Error"
+  /.well-known/agentfacts.json:
+    get:
+      operationId: getPublicAgentFacts
+      security: []
+      responses:
+        "200":
+          description: Signed public and indexable AgentFacts document selected by Host
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentFactsDocument"
+        "404":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+  /.well-known/jwks.json:
+    get:
+      operationId: getAgentFactsJwks
+      security: []
+      responses:
+        "200":
+          description: Public signing keys for the Agent selected by Host
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [keys]
+                properties:
+                  keys:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+        "404":
+          $ref: "#/components/responses/Error"
+  /.well-known/agentfacts-revocations.json:
+    get:
+      operationId: getAgentFactsRevocations
+      security: []
+      responses:
+        "200":
+          description: Revoked AgentFacts publication and signing-key identifiers
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [publicationIds, keyIds, updatedAt]
+                properties:
+                  publicationIds:
+                    type: array
+                    items:
+                      type: string
+                  keyIds:
+                    type: array
+                    items:
+                      type: string
+                  updatedAt:
+                    type: string
+                    format: date-time
+        "404":
+          $ref: "#/components/responses/Error"
+  /agentfacts/query:
+    post:
+      operationId: queryAgentFacts
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentFactsQueryRequest"
+      responses:
+        "200":
+          description: Short-lived signed AgentFacts projection selected by Host and audience
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentFactsDocument"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
   /api/v1/agents/{agentId}/memories:
     parameters:
       - $ref: "#/components/parameters/AgentId"
@@ -1025,56 +1406,64 @@ components:
           type: boolean
         disclosure:
           $ref: "#/components/schemas/DisclosurePolicy"
-    AgentProfileFact:
+    AgentProfileEndpoint:
       type: object
-      required: [id, namespace, key, value, source, confidence, disclosure, createdAt, updatedAt]
+      required: [id, name, description, disclosure]
       properties:
         id:
           type: string
-        namespace:
+        name:
           type: string
-        key:
+        description:
           type: string
-        value:
+        disclosure:
+          $ref: "#/components/schemas/DisclosurePolicy"
+    EvidenceReference:
+      type: object
+      required: [kind, id, observedAt]
+      properties:
+        kind:
+          type: string
+          enum: [message, run, tool-result, memory, impression, legacy]
+        id:
+          type: string
+        digest:
+          type: string
+        observedAt:
+          type: string
+          format: date-time
+    Impression:
+      type: object
+      required:
+        [id, scope, kind, summary, details, tags, evidence, confidence, salience, freshness, firstObservedAt, lastObservedAt, decayHalfLifeSeconds, status, generation, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        scope:
+          type: string
+          enum: [user, task, project, environment, relationship]
+        kind:
+          type: string
+          enum: [current-task, recent-interest, knowledge-exposure, acquired-information, open-loop, temporary-preference, working-style-observation, recent-decision]
+        summary:
+          type: string
+        details:
           type: object
           additionalProperties: true
-        source:
-          type: string
-          enum: [declared, memory_projection, runtime, imported]
+        tags:
+          type: array
+          items:
+            type: string
+        evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvidenceReference"
         confidence:
           type: number
           format: double
           minimum: 0
           maximum: 1
-        validFrom:
-          type: string
-          format: date-time
-        validUntil:
-          type: string
-          format: date-time
-        disclosure:
-          $ref: "#/components/schemas/DisclosurePolicy"
-        createdAt:
-          type: string
-          format: date-time
-        updatedAt:
-          type: string
-          format: date-time
-    AgentMemoryProjection:
-      type: object
-      required: [id, type, summary, sourceMemoryIds, confidence, freshness, generatedAt, status, disclosure]
-      properties:
-        id:
-          type: string
-        type:
-          type: string
-        summary:
-          type: string
-        sourceMemoryIds:
-          type: array
-          items:
-            type: string
-        confidence:
+        salience:
           type: number
           format: double
           minimum: 0
@@ -1084,24 +1473,198 @@ components:
           format: double
           minimum: 0
           maximum: 1
-        generatedAt:
+        firstObservedAt:
+          type: string
+          format: date-time
+        lastObservedAt:
           type: string
           format: date-time
         expiresAt:
           type: string
           format: date-time
+        decayHalfLifeSeconds:
+          type: integer
+          format: int64
+          minimum: 1
         status:
           type: string
-          enum: [candidate, accepted, rejected, stale]
+          enum: [active, resolved, stale, superseded, dismissed]
+        supersededById:
+          type: string
+        generation:
+          $ref: "#/components/schemas/GenerationInfo"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    GenerationInfo:
+      type: object
+      required: [model, runId, promptVersion, generatedAt]
+      properties:
+        model:
+          type: string
+        runId:
+          type: string
+        promptVersion:
+          type: string
+        generatedAt:
+          type: string
+          format: date-time
+    UpdateImpressionRequest:
+      type: object
+      required: [expectedContextRevision]
+      minProperties: 2
+      properties:
+        expectedContextRevision:
+          type: integer
+          format: int64
+          minimum: 1
+        summary:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        details:
+          type: object
+          additionalProperties: true
+        status:
+          type: string
+          enum: [active, dismissed]
+    FactCandidate:
+      type: object
+      required: [id, subject, namespace, key, value, sourceImpressionIds, rationale, confidence, version, status, proposedAt]
+      properties:
+        id:
+          type: string
+        subject:
+          type: string
+          enum: [agent, user, project, task]
+        namespace:
+          type: string
+        key:
+          type: string
+        value:
+          type: object
+          additionalProperties: true
+        sourceImpressionIds:
+          type: array
+          minItems: 1
+          items:
+            type: string
+        rationale:
+          type: string
+        confidence:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        status:
+          type: string
+          enum: [pending, promoted, rejected]
+        proposedAt:
+          type: string
+          format: date-time
+        reviewedAt:
+          type: string
+          format: date-time
+    ConfirmedFact:
+      type: object
+      required: [id, subject, namespace, key, value, confidence, confirmation, disclosure, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        subject:
+          type: string
+          enum: [agent, user, project, task]
+        namespace:
+          type: string
+        key:
+          type: string
+        value:
+          type: object
+          additionalProperties: true
+        candidateId:
+          type: string
+        confidence:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        confirmation:
+          $ref: "#/components/schemas/FactConfirmation"
+        validFrom:
+          type: string
+          format: date-time
+        validUntil:
+          type: string
+          format: date-time
         disclosure:
           $ref: "#/components/schemas/DisclosurePolicy"
+        revokedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    FactConfirmation:
+      type: object
+      required: [confirmedAt, method]
+      properties:
+        confirmedAt:
+          type: string
+          format: date-time
+        method:
+          type: string
+          enum: [owner-confirmed, deterministic-verification]
+    ConfirmFactCandidateRequest:
+      type: object
+      required: [expectedVersion, expectedCandidateVersion]
+      properties:
+        expectedVersion:
+          type: integer
+          format: int64
+          minimum: 1
+        expectedCandidateVersion:
+          type: integer
+          format: int64
+          minimum: 1
+        subject:
+          type: string
+          enum: [agent, user, project, task]
+        namespace:
+          type: string
+        key:
+          type: string
+        value:
+          type: object
+          additionalProperties: true
+    RejectFactCandidateRequest:
+      type: object
+      required: [expectedCandidateVersion]
+      properties:
+        expectedCandidateVersion:
+          type: integer
+          format: int64
+          minimum: 1
     AgentProfile:
       type: object
-      required: [agentId, version, identity, capabilities, facts, memoryProjections, createdAt, updatedAt]
+      required: [agentId, version, contextRevision, identity, capabilities, endpoints, confirmedFacts, impressions, pendingFactCount, createdAt, updatedAt]
       properties:
         agentId:
           type: string
         version:
+          type: integer
+          format: int64
+          minimum: 1
+        contextRevision:
           type: integer
           format: int64
           minimum: 1
@@ -1111,14 +1674,21 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AgentProfileCapability"
-        facts:
+        endpoints:
           type: array
           items:
-            $ref: "#/components/schemas/AgentProfileFact"
-        memoryProjections:
+            $ref: "#/components/schemas/AgentProfileEndpoint"
+        confirmedFacts:
           type: array
           items:
-            $ref: "#/components/schemas/AgentMemoryProjection"
+            $ref: "#/components/schemas/ConfirmedFact"
+        impressions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Impression"
+        pendingFactCount:
+          type: integer
+          minimum: 0
         createdAt:
           type: string
           format: date-time
@@ -1150,7 +1720,7 @@ components:
       properties:
         subjectType:
           type: string
-          enum: [identity, capability, fact, projection]
+          enum: [identity, capability, confirmed-fact, endpoint]
         subjectId:
           type: string
           minLength: 1
@@ -1171,6 +1741,232 @@ components:
           maxItems: 200
           items:
             $ref: "#/components/schemas/DisclosurePolicyChange"
+    SigningKeySummary:
+      type: object
+      required: [available, status]
+      properties:
+        available:
+          type: boolean
+        keyId:
+          type: string
+        fingerprint:
+          type: string
+        status:
+          type: string
+          enum: [unavailable, not-generated, active, retired, revoked]
+    AgentPublication:
+      type: object
+      required: [agentId, revision, enabled, hostname, hostnameStatus, dnsChallenge, ttlSeconds, signingKey, agentFactsReady, agentCard, tokens]
+      properties:
+        agentId:
+          type: string
+        revision:
+          type: integer
+          format: int64
+          minimum: 1
+        enabled:
+          type: boolean
+        hostname:
+          type: string
+        hostnameStatus:
+          type: string
+          enum: [unconfigured, pending, verified]
+        dnsChallenge:
+          type: string
+        ttlSeconds:
+          type: integer
+          format: int64
+          minimum: 3600
+          maximum: 2592000
+        signingKey:
+          $ref: "#/components/schemas/SigningKeySummary"
+        agentFactsReady:
+          type: boolean
+        lastPublishedAt:
+          type: string
+          format: date-time
+        agentFacts:
+          $ref: "#/components/schemas/AgentFactsDocument"
+        agentCard:
+          $ref: "#/components/schemas/AgentCardPreview"
+        tokens:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentAccessToken"
+    UpdateAgentPublicationRequest:
+      type: object
+      required: [expectedRevision]
+      minProperties: 2
+      properties:
+        expectedRevision:
+          type: integer
+          format: int64
+          minimum: 1
+        hostname:
+          type: string
+          maxLength: 253
+        enabled:
+          type: boolean
+        ttlSeconds:
+          type: integer
+          format: int64
+          minimum: 3600
+          maximum: 2592000
+    AgentAccessToken:
+      type: object
+      required: [id, label, audience, scopes, createdAt, expiresAt, revoked]
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        audience:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+            enum: [agent-facts:query]
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type: string
+          format: date-time
+        revoked:
+          type: boolean
+    CreateAgentAccessTokenRequest:
+      type: object
+      required: [label, audience]
+      properties:
+        label:
+          type: string
+          minLength: 1
+          maxLength: 80
+        audience:
+          type: string
+          minLength: 1
+          maxLength: 120
+        expiresAt:
+          type: string
+          format: date-time
+    CreatedAgentAccessToken:
+      type: object
+      required: [token, secret]
+      properties:
+        token:
+          $ref: "#/components/schemas/AgentAccessToken"
+        secret:
+          type: string
+    AgentCardPreview:
+      type: object
+      required: [draft, readiness]
+      properties:
+        draft:
+          type: object
+          additionalProperties: true
+        readiness:
+          type: object
+          required: [publishable, blockers]
+          properties:
+            publishable:
+              type: boolean
+            blockers:
+              type: array
+              items:
+                type: string
+    AgentFactsClaim:
+      type: object
+      required: [id, kind, subject, value, issuer, validFrom, proofRefs]
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum: [identity, capability, confirmed-fact, endpoint]
+        subject:
+          type: string
+        namespace:
+          type: string
+        key:
+          type: string
+        value:
+          type: object
+          additionalProperties: true
+        issuer:
+          type: string
+        validFrom:
+          type: string
+          format: date-time
+        validUntil:
+          type: string
+          format: date-time
+        proofRefs:
+          type: array
+          items:
+            type: string
+    AgentFactsDocument:
+      type: object
+      required: [schemaVersion, publicationId, profileVersion, subject, services, claims, privacy, validFrom, validUntil, revocation, proof]
+      properties:
+        schemaVersion:
+          type: string
+          enum: [aegislink.agent-facts/1.0-draft]
+        publicationId:
+          type: string
+        profileVersion:
+          type: integer
+          format: int64
+        subject:
+          type: object
+          additionalProperties: true
+        services:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        claims:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentFactsClaim"
+        privacy:
+          type: object
+          additionalProperties: true
+        validFrom:
+          type: string
+          format: date-time
+        validUntil:
+          type: string
+          format: date-time
+        revocation:
+          type: object
+          additionalProperties: true
+        proof:
+          type: object
+          additionalProperties: true
+    AgentFactsQueryRequest:
+      type: object
+      required: [selectors]
+      properties:
+        nonce:
+          type: string
+          maxLength: 256
+        selectors:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: object
+            properties:
+              claimId:
+                type: string
+              namespace:
+                type: string
+              key:
+                type: string
     Memory:
       type: object
       required:

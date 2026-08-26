@@ -31,9 +31,30 @@ type RuntimeInput struct {
 }
 
 type AgentContext struct {
-	Memories []RuntimeMemory
-	Skills   []RuntimeSkill
-	Tools    []RuntimeTool
+	Memories    []RuntimeMemory
+	Facts       []RuntimeFact
+	Impressions []RuntimeImpression
+	Skills      []RuntimeSkill
+	Tools       []RuntimeTool
+}
+
+type RuntimeFact struct {
+	ID        string
+	Subject   string
+	Namespace string
+	Key       string
+	Value     string
+}
+
+type RuntimeImpression struct {
+	ID         string
+	Kind       string
+	Summary    string
+	Confidence float64
+}
+
+type ContextRequest struct {
+	CurrentMessage string
 }
 
 type RuntimeMemory struct {
@@ -101,7 +122,7 @@ type Runtime interface {
 }
 
 type ContextProvider interface {
-	Resolve(context.Context, string, string) (AgentContext, error)
+	Resolve(context.Context, string, string, ContextRequest) (AgentContext, error)
 	ResolveSelection(context.Context, string, string, RunSelection) (ExecutionPolicy, error)
 }
 

@@ -1,5 +1,5 @@
-# AegisLink Vision
+# AegisLink vision
 
-AegisLink gives each user a personal agent with reviewable long-term memory, private retrieval, and secure collaboration with other agents.
+AegisLink is a Personal Agent OS: each user controls a persistent Agent with durable Conversations, reviewable Memory, installable Skills, explicit Tool permissions, and an editable Profile.
 
-The center server is responsible for directory, routing, organization structure, permission policy, and audit. Individual agents keep their own memory and only expose data through signed, least-privilege requests.
+The current product is local-first and single-owner. AgentFacts uses signing, expiry, and revocation for one explicit Discovery/Trust boundary; this is not a general Agent identity protocol. Secure cross-Agent collaboration remains a possible future direction, but it must not introduce a central directory, organizations, cross-Agent routing, or distributed-system abstractions before a real workflow requires them.

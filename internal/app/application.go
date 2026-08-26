@@ -4,15 +4,19 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
+	internala2a "github.com/re35t/AegisLink/internal/a2a"
 	"github.com/re35t/AegisLink/internal/account"
 	"github.com/re35t/AegisLink/internal/agent"
 	"github.com/re35t/AegisLink/internal/agentcontext"
 	"github.com/re35t/AegisLink/internal/catalog"
 	"github.com/re35t/AegisLink/internal/config"
 	"github.com/re35t/AegisLink/internal/conversation"
+	"github.com/re35t/AegisLink/internal/discovery"
 	"github.com/re35t/AegisLink/internal/httpapi"
+	"github.com/re35t/AegisLink/internal/impression"
 	"github.com/re35t/AegisLink/internal/mcp"
 	"github.com/re35t/AegisLink/internal/memory"
 	"github.com/re35t/AegisLink/internal/postgres"
@@ -27,6 +31,7 @@ type Application struct {
 
 	closeDatabase func() error
 	cancel        context.CancelFunc
+	workers       sync.WaitGroup
 }
 
 func New(parent context.Context, cfg config.Config, logger *slog.Logger) (*Application, error) {
@@ -48,6 +53,8 @@ func New(parent context.Context, cfg config.Config, logger *slog.Logger) (*Appli
 	accountRepository := postgres.NewAccountRepository(database)
 	agentRepository := postgres.NewAgentRepository(database)
 	agentProfileRepository := postgres.NewAgentProfileRepository(database)
+	impressionRepository := postgres.NewImpressionRepository(database)
+	discoveryRepository := postgres.NewDiscoveryRepository(database)
 	conversationRepository := postgres.NewConversationRepository(database)
 	memoryRepository := postgres.NewMemoryRepository(database)
 	skillRepository := postgres.NewSkillRepository(database)
@@ -59,12 +66,17 @@ func New(parent context.Context, cfg config.Config, logger *slog.Logger) (*Appli
 	if err != nil {
 		return closeOnError(err)
 	}
+	curator, err := agentruntime.NewCurator(root, cfg.EffectiveCurator(), agentruntime.DefaultModelRegistry())
+	if err != nil {
+		return closeOnError(err)
+	}
 	accountService, err := account.NewService(accountRepository, cfg.Auth.SessionTTL)
 	if err != nil {
 		return closeOnError(err)
 	}
 	agentService := agent.NewService(agentRepository)
 	memoryService := memory.NewService(memoryRepository, agentService)
+	impressionService := impression.NewService(impressionRepository)
 	skillService := skills.NewService(skillRepository, agentService)
 	mcpClient := mcp.NewOfficialClient(cfg.MCP.Timeout, cfg.MCP.AllowPrivateNetworks)
 	mcpService := mcp.NewService(mcpRepository, agentService, mcpClient)
@@ -87,9 +99,14 @@ func New(parent context.Context, cfg config.Config, logger *slog.Logger) (*Appli
 				Source: agent.CapabilitySourceRuntime, Confidence: 1, Callable: true,
 			},
 		}},
-	)
+	).WithImpressions(impressionService)
+	agentCardService := internala2a.NewService(profileService)
+	discoveryService, err := discovery.NewService(discoveryRepository, profileService, agentCardService, discovery.NetResolver{}, cfg.Security.AgentKeyEncryptionKey)
+	if err != nil {
+		return closeOnError(err)
+	}
 	catalogService := catalog.NewService(agentService, mcpService, skillService)
-	contextService := agentcontext.NewService(memoryService, skillService, mcpService)
+	contextService := agentcontext.NewService(memoryService, skillService, mcpService).WithProfileContext(profileService, impressionService)
 	conversationService := conversation.NewService(
 		root,
 		conversationRepository,
@@ -102,6 +119,9 @@ func New(parent context.Context, cfg config.Config, logger *slog.Logger) (*Appli
 		Accounts:      accountService,
 		Agents:        agentService,
 		Profiles:      profileService,
+		Impressions:   impressionService,
+		Discovery:     discoveryService,
+		AgentCards:    agentCardService,
 		Conversations: conversationService,
 		Memories:      memoryService,
 		Skills:        skillService,
@@ -119,10 +139,18 @@ func New(parent context.Context, cfg config.Config, logger *slog.Logger) (*Appli
 		IdleTimeout:       75 * time.Second,
 		WriteTimeout:      0,
 	}
-	return &Application{Server: server, closeDatabase: closeDatabase, cancel: cancel}, nil
+	application := &Application{Server: server, closeDatabase: closeDatabase, cancel: cancel}
+	worker := impression.NewWorker(impressionRepository, curator, logger)
+	application.workers.Add(1)
+	go func() {
+		defer application.workers.Done()
+		worker.Run(root)
+	}()
+	return application, nil
 }
 
 func (application *Application) Close() error {
 	application.cancel()
+	application.workers.Wait()
 	return application.closeDatabase()
 }

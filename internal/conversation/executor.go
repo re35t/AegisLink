@@ -27,7 +27,11 @@ func (service *Service) execute(ctx context.Context, principalID string, run Run
 		service.finishFailed(principalID, run.ID, "agent_load_failed", false)
 		return
 	}
-	agentContext, err := service.context.Resolve(ctx, principalID, agentRecord.ID)
+	currentMessage := ""
+	if len(detail.Messages) > 0 {
+		currentMessage = detail.Messages[len(detail.Messages)-1].Content
+	}
+	agentContext, err := service.context.Resolve(ctx, principalID, agentRecord.ID, ContextRequest{CurrentMessage: currentMessage})
 	if err != nil {
 		service.logger.Error("resolve agent context", "runId", run.ID, "error", err)
 		service.finishFailed(principalID, run.ID, "agent_context_load_failed", false)

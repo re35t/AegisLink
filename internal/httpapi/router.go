@@ -8,10 +8,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/oklog/ulid/v2"
+	internala2a "github.com/re35t/AegisLink/internal/a2a"
 	"github.com/re35t/AegisLink/internal/account"
 	"github.com/re35t/AegisLink/internal/agent"
 	"github.com/re35t/AegisLink/internal/catalog"
 	"github.com/re35t/AegisLink/internal/conversation"
+	"github.com/re35t/AegisLink/internal/discovery"
+	"github.com/re35t/AegisLink/internal/impression"
 	"github.com/re35t/AegisLink/internal/mcp"
 	"github.com/re35t/AegisLink/internal/memory"
 	"github.com/re35t/AegisLink/internal/skills"
@@ -38,6 +41,32 @@ type AgentProfileService interface {
 	Get(context.Context, string, string) (agent.Profile, error)
 	Update(context.Context, string, string, agent.ProfileUpdate) (agent.Profile, error)
 	UpdatePolicies(context.Context, string, string, int64, []agent.PolicyChange) (agent.Profile, error)
+	ConfirmCandidate(context.Context, string, string, string, int64, int64, agent.ConfirmFactUpdate) (agent.Profile, error)
+	RevokeFact(context.Context, string, string, string, int64) (agent.Profile, error)
+}
+
+type ImpressionService interface {
+	List(context.Context, string, string, string) ([]impression.Impression, error)
+	ListCandidates(context.Context, string, string, string) ([]impression.FactCandidate, error)
+	Update(context.Context, string, string, string, impression.Update) (impression.Impression, error)
+	RejectCandidate(context.Context, string, string, string, int64) error
+}
+
+type DiscoveryService interface {
+	Get(context.Context, string, string) (discovery.Publication, error)
+	Update(context.Context, string, string, discovery.SettingsUpdate) (discovery.Publication, error)
+	VerifyHostname(context.Context, string, string) (discovery.Publication, error)
+	RotateKey(context.Context, string, string) (discovery.Publication, error)
+	CreateToken(context.Context, string, string, discovery.TokenRequest) (discovery.CreatedAccessToken, error)
+	RevokeToken(context.Context, string, string, string) error
+	PublicDocument(context.Context, string) (discovery.Document, string, int64, error)
+	Query(context.Context, string, string, discovery.QueryRequest) (discovery.Document, error)
+	JWKS(context.Context, string) (map[string]any, error)
+	Revocations(context.Context, string) (map[string]any, error)
+}
+
+type AgentCardService interface {
+	Preview(context.Context, string, string) (internala2a.Preview, error)
 }
 
 type ConversationService interface {
@@ -90,6 +119,9 @@ type Dependencies struct {
 	Accounts      AccountService
 	Agents        AgentService
 	Profiles      AgentProfileService
+	Impressions   ImpressionService
+	Discovery     DiscoveryService
+	AgentCards    AgentCardService
 	Conversations ConversationService
 	Memories      MemoryService
 	Skills        SkillService
@@ -120,6 +152,9 @@ func NewRouter(dependencies Dependencies, webOrigin string, auth AuthConfig, mod
 		accounts:      dependencies.Accounts,
 		agents:        dependencies.Agents,
 		profiles:      dependencies.Profiles,
+		impressions:   dependencies.Impressions,
+		discovery:     dependencies.Discovery,
+		agentCards:    dependencies.AgentCards,
 		conversations: dependencies.Conversations,
 		memories:      dependencies.Memories,
 		skills:        dependencies.Skills,
@@ -132,6 +167,10 @@ func NewRouter(dependencies Dependencies, webOrigin string, auth AuthConfig, mod
 
 	router.GET("/healthz", handler.health)
 	router.GET("/readyz", handler.ready)
+	router.GET("/.well-known/agentfacts.json", handler.getPublicAgentFacts)
+	router.GET("/.well-known/jwks.json", handler.getAgentFactsJWKS)
+	router.GET("/.well-known/agentfacts-revocations.json", handler.getAgentFactsRevocations)
+	router.POST("/agentfacts/query", handler.queryAgentFacts)
 	api := router.Group("/api/v1")
 	api.POST("/auth/register", handler.register)
 	api.POST("/auth/login", handler.login)
@@ -149,6 +188,20 @@ func NewRouter(dependencies Dependencies, webOrigin string, auth AuthConfig, mod
 	protected.GET("/agents/:agentId/profile", handler.getAgentProfile)
 	protected.PATCH("/agents/:agentId/profile", handler.updateAgentProfile)
 	protected.PATCH("/agents/:agentId/profile/disclosure-policies", handler.updateAgentProfileDisclosurePolicies)
+	protected.GET("/agents/:agentId/impressions", handler.listAgentImpressions)
+	protected.PATCH("/agents/:agentId/impressions/:impressionId", handler.updateAgentImpression)
+	protected.GET("/agents/:agentId/fact-candidates", handler.listAgentFactCandidates)
+	protected.POST("/agents/:agentId/fact-candidates/:candidateId/confirm", handler.confirmAgentFactCandidate)
+	protected.POST("/agents/:agentId/fact-candidates/:candidateId/reject", handler.rejectAgentFactCandidate)
+	protected.POST("/agents/:agentId/confirmed-facts/:factId/revoke", handler.revokeAgentConfirmedFact)
+	protected.GET("/agents/:agentId/publication", handler.getAgentPublication)
+	protected.PATCH("/agents/:agentId/publication", handler.updateAgentPublication)
+	protected.POST("/agents/:agentId/publication/verify-hostname", handler.verifyAgentPublicationHostname)
+	protected.POST("/agents/:agentId/publication/rotate-key", handler.rotateAgentPublicationKey)
+	protected.GET("/agents/:agentId/access-tokens", handler.listAgentAccessTokens)
+	protected.POST("/agents/:agentId/access-tokens", handler.createAgentAccessToken)
+	protected.DELETE("/agents/:agentId/access-tokens/:tokenId", handler.revokeAgentAccessToken)
+	protected.GET("/agents/:agentId/agent-card-preview", handler.getAgentCardPreview)
 	protected.GET("/agents/:agentId/memories", handler.listMemories)
 	protected.POST("/agents/:agentId/memories", handler.createMemory)
 	protected.PATCH("/agents/:agentId/memories/:memoryId", handler.updateMemory)

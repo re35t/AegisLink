@@ -22,8 +22,26 @@ import { queryClient } from "../../app/queryClient";
 import { AppShell } from "../../components/layout/AppShell";
 import { useInterfacePreferences } from "../settings/preferences";
 import { DisclosurePolicyEditor } from "./DisclosurePolicyEditor";
+import {
+  FactsSection,
+  ImpressionsSection,
+  OverviewSection,
+  PublicationSection,
+} from "./AgentProfileSections";
 
-export function AgentProfilePage({ agentId }: { agentId?: string }) {
+export type AgentProfileSection =
+  | "overview"
+  | "impressions"
+  | "facts"
+  | "publication";
+
+export function AgentProfilePage({
+  agentId,
+  section = "overview",
+}: {
+  agentId?: string;
+  section?: AgentProfileSection;
+}) {
   const navigate = useNavigate();
   const { t } = useInterfacePreferences();
   const [navigationOpen, setNavigationOpen] = useState(false);
@@ -41,11 +59,11 @@ export function AgentProfilePage({ agentId }: { agentId?: string }) {
     if (!agentId && selectedAgentId) {
       void navigate({
         to: "/settings/agent-profile",
-        search: { agentId: selectedAgentId },
+        search: { agentId: selectedAgentId, section },
         replace: true,
       });
     }
-  }, [agentId, navigate, selectedAgentId]);
+  }, [agentId, navigate, section, selectedAgentId]);
 
   const profile = useQuery({
     queryKey: ["agent-profile", selectedAgentId],
@@ -64,7 +82,7 @@ export function AgentProfilePage({ agentId }: { agentId?: string }) {
   const selectAgent = (nextAgentId: string) => {
     void navigate({
       to: "/settings/agent-profile",
-      search: { agentId: nextAgentId },
+      search: { agentId: nextAgentId, section },
     });
   };
 
@@ -102,6 +120,32 @@ export function AgentProfilePage({ agentId }: { agentId?: string }) {
           </small>
         )}
       </label>
+      <nav
+        className="agent-profile-sections"
+        aria-label={t("Agent Profile sections", "Agent Profile 分区")}
+      >
+        {(["overview", "impressions", "facts", "publication"] as const).map(
+          (item) => (
+            <Link
+              key={item}
+              to="/settings/agent-profile"
+              search={{ agentId: selectedAgentId, section: item }}
+              className={section === item ? "active" : ""}
+            >
+              {item === "overview"
+                ? t("Overview", "概览")
+                : item === "impressions"
+                  ? "Impressions"
+                  : item === "facts"
+                    ? t("Facts", "事实")
+                    : t("Publication", "发布")}
+              {item === "facts" && profile.data?.pendingFactCount ? (
+                <span>{profile.data.pendingFactCount}</span>
+              ) : null}
+            </Link>
+          ),
+        )}
+      </nav>
       <div className="capability-scope">
         <ShieldCheck size={17} />
         <span>
@@ -189,6 +233,7 @@ export function AgentProfilePage({ agentId }: { agentId?: string }) {
             <AgentProfileContent
               agentId={selectedAgentId}
               profile={profile.data}
+              section={section}
               onReload={() => void profile.refetch()}
             />
           )}
@@ -201,10 +246,12 @@ export function AgentProfilePage({ agentId }: { agentId?: string }) {
 function AgentProfileContent({
   agentId,
   profile,
+  section,
   onReload,
 }: {
   agentId: string;
   profile: AgentProfile;
+  section: AgentProfileSection;
   onReload(): void;
 }) {
   const { t } = useInterfacePreferences();
@@ -231,23 +278,37 @@ function AgentProfileContent({
 
   return (
     <div className="agent-profile-content">
-      <IdentityEditor
-        profile={profile}
-        pending={identity.isPending}
-        error={profileError(identity.error, t)}
-        onSave={(input) => identity.mutate(input)}
-      />
-      <DisclosurePolicyEditor
-        profile={profile}
-        pending={disclosure.isPending}
-        error={profileError(disclosure.error, t)}
-        conflict={
-          disclosure.error instanceof APIError &&
-          disclosure.error.code === "profile_version_conflict"
-        }
-        onReload={onReload}
-        onSave={(changes) => disclosure.mutate(changes)}
-      />
+      {section === "overview" && (
+        <>
+          <IdentityEditor
+            profile={profile}
+            pending={identity.isPending}
+            error={profileError(identity.error, t)}
+            onSave={(input) => identity.mutate(input)}
+          />
+          <OverviewSection profile={profile} />
+        </>
+      )}
+      {section === "impressions" && (
+        <ImpressionsSection agentId={agentId} profile={profile} />
+      )}
+      {section === "facts" && (
+        <>
+          <FactsSection agentId={agentId} profile={profile} />
+          <DisclosurePolicyEditor
+            profile={profile}
+            pending={disclosure.isPending}
+            error={profileError(disclosure.error, t)}
+            conflict={
+              disclosure.error instanceof APIError &&
+              disclosure.error.code === "profile_version_conflict"
+            }
+            onReload={onReload}
+            onSave={(changes) => disclosure.mutate(changes)}
+          />
+        </>
+      )}
+      {section === "publication" && <PublicationSection agentId={agentId} />}
     </div>
   );
 }

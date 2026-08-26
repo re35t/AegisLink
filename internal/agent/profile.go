@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	"github.com/re35t/AegisLink/internal/impression"
 )
 
 var (
@@ -79,6 +81,7 @@ type ProfileRecord struct {
 	OwnerPrincipalID string
 	AvatarURL        string
 	Version          int64
+	ContextRevision  int64
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 }
@@ -121,55 +124,65 @@ type ProfileCapability struct {
 	Disclosure  DisclosurePolicy `json:"disclosure"`
 }
 
-type ProfileFact struct {
-	ID         string           `json:"id"`
-	Namespace  string           `json:"namespace"`
-	Key        string           `json:"key"`
-	Value      map[string]any   `json:"value"`
-	Source     string           `json:"source"`
-	Confidence float64          `json:"confidence"`
-	ValidFrom  *time.Time       `json:"validFrom,omitempty"`
-	ValidUntil *time.Time       `json:"validUntil,omitempty"`
-	Disclosure DisclosurePolicy `json:"disclosure"`
-	CreatedAt  time.Time        `json:"createdAt"`
-	UpdatedAt  time.Time        `json:"updatedAt"`
+type ProfileEndpoint struct {
+	ID          string           `json:"id"`
+	Name        string           `json:"name"`
+	Description string           `json:"description"`
+	Disclosure  DisclosurePolicy `json:"disclosure"`
 }
 
-type MemoryProjection struct {
-	ID              string           `json:"id"`
-	Type            string           `json:"type"`
-	Summary         string           `json:"summary"`
-	SourceMemoryIDs []string         `json:"sourceMemoryIds"`
-	Confidence      float64          `json:"confidence"`
-	Freshness       float64          `json:"freshness"`
-	GeneratedAt     time.Time        `json:"generatedAt"`
-	ExpiresAt       *time.Time       `json:"expiresAt,omitempty"`
-	Status          string           `json:"status"`
-	Disclosure      DisclosurePolicy `json:"disclosure"`
+type FactSubject string
+
+const (
+	FactSubjectAgent   FactSubject = "agent"
+	FactSubjectUser    FactSubject = "user"
+	FactSubjectProject FactSubject = "project"
+	FactSubjectTask    FactSubject = "task"
+)
+
+type FactConfirmation struct {
+	ConfirmedAt time.Time `json:"confirmedAt"`
+	Method      string    `json:"method"`
 }
 
-func (projection MemoryProjection) Disclosable(channel DisclosureChannel, audience string, authenticated bool) bool {
-	return projection.Status == "accepted" && projection.Disclosure.Allows(channel, audience, authenticated)
+type ConfirmedFact struct {
+	ID           string           `json:"id"`
+	Subject      FactSubject      `json:"subject"`
+	Namespace    string           `json:"namespace"`
+	Key          string           `json:"key"`
+	Value        map[string]any   `json:"value"`
+	CandidateID  *string          `json:"candidateId,omitempty"`
+	Confidence   float64          `json:"confidence"`
+	Confirmation FactConfirmation `json:"confirmation"`
+	ValidFrom    *time.Time       `json:"validFrom,omitempty"`
+	ValidUntil   *time.Time       `json:"validUntil,omitempty"`
+	RevokedAt    *time.Time       `json:"revokedAt,omitempty"`
+	Disclosure   DisclosurePolicy `json:"disclosure"`
+	CreatedAt    time.Time        `json:"createdAt"`
+	UpdatedAt    time.Time        `json:"updatedAt"`
 }
 
 type Profile struct {
-	AgentID           string              `json:"agentId"`
-	Version           int64               `json:"version"`
-	Identity          ProfileIdentity     `json:"identity"`
-	Capabilities      []ProfileCapability `json:"capabilities"`
-	Facts             []ProfileFact       `json:"facts"`
-	MemoryProjections []MemoryProjection  `json:"memoryProjections"`
-	CreatedAt         time.Time           `json:"createdAt"`
-	UpdatedAt         time.Time           `json:"updatedAt"`
+	AgentID          string                  `json:"agentId"`
+	Version          int64                   `json:"version"`
+	ContextRevision  int64                   `json:"contextRevision"`
+	Identity         ProfileIdentity         `json:"identity"`
+	Capabilities     []ProfileCapability     `json:"capabilities"`
+	Endpoints        []ProfileEndpoint       `json:"endpoints"`
+	ConfirmedFacts   []ConfirmedFact         `json:"confirmedFacts"`
+	Impressions      []impression.Impression `json:"impressions"`
+	PendingFactCount int                     `json:"pendingFactCount"`
+	CreatedAt        time.Time               `json:"createdAt"`
+	UpdatedAt        time.Time               `json:"updatedAt"`
 }
 
 type ProfileSubjectType string
 
 const (
-	SubjectIdentity   ProfileSubjectType = "identity"
-	SubjectCapability ProfileSubjectType = "capability"
-	SubjectFact       ProfileSubjectType = "fact"
-	SubjectProjection ProfileSubjectType = "projection"
+	SubjectIdentity      ProfileSubjectType = "identity"
+	SubjectCapability    ProfileSubjectType = "capability"
+	SubjectConfirmedFact ProfileSubjectType = "confirmed-fact"
+	SubjectEndpoint      ProfileSubjectType = "endpoint"
 )
 
 type PolicyKey struct {
@@ -192,11 +205,24 @@ type ProfileUpdate struct {
 
 type ProfileRepository interface {
 	GetProfile(context.Context, string, string) (ProfileRecord, error)
-	ListProfileFacts(context.Context, string, string) ([]ProfileFact, error)
-	ListMemoryProjections(context.Context, string, string) ([]MemoryProjection, error)
+	ListConfirmedFacts(context.Context, string, string, bool) ([]ConfirmedFact, error)
 	ListDisclosurePolicies(context.Context, string, string) (map[PolicyKey]DisclosurePolicy, error)
 	UpdateProfileIdentity(context.Context, string, string, ProfileUpdate) error
 	UpdateDisclosurePolicies(context.Context, string, string, int64, []PolicyChange) error
+	ConfirmFact(context.Context, string, string, string, int64, int64, ConfirmFactUpdate) error
+	RevokeFact(context.Context, string, string, string, int64) error
+}
+
+type ImpressionReader interface {
+	List(context.Context, string, string, string) ([]impression.Impression, error)
+	ListCandidates(context.Context, string, string, string) ([]impression.FactCandidate, error)
+}
+
+type ConfirmFactUpdate struct {
+	Subject   *FactSubject   `json:"subject,omitempty"`
+	Namespace *string        `json:"namespace,omitempty"`
+	Key       *string        `json:"key,omitempty"`
+	Value     map[string]any `json:"value,omitempty"`
 }
 
 type CapabilityProvider interface {

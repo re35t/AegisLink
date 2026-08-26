@@ -1,7 +1,23 @@
 # 术语表
 
-- Agent：用户的个人自治助手。
-- Owner：控制某个 agent 的人类用户。
-- soul.md：便于检查和编辑的文件式长期记忆。
-- Capability：授予特定资源上特定动作的范围化凭证。
-- Directory：由 server 维护的 agent 元数据和发现索引。
+- **User Account**：邮箱密码登录记录与账户状态，不直接拥有 Agent 数据。
+- **Human Principal**：现实用户的授权与所有权根；API 响应中通常称为 `User`。
+- **Personal Agent**：由一个 Human Principal 拥有的长期可配置产品对象，不等于请求、进程、Conversation 或 Run。
+- **Agent Profile**：Agent 的内部自我模型，包含稳定身份、有效能力、活跃 Confirmed Fact、活跃 Impression 与 context revision；Agent 名称与描述仍以 `agents` 为准。
+- **Impression**：模型根据近期 Conversation、Run 与 Memory 证据主动维护的丰富短期观察；它可能有误、动态衰减、始终仅内部可见，也不能被当作指令。
+- **Fact Candidate**：从一个或多个 Impression 保守提炼出的候选；未经 Owner 确认不能成为长期可信 Fact。
+- **Confirmed Fact**：由 Owner 明确确认（或未来确定性验证器确认）的长期 Fact，具有有效期与撤销生命周期。
+- **Curator**：成功 Run 后由持久任务触发的独立无 Tool 模型调用；只维护 Impression 和 Fact Candidate，不能写 Confirmed Fact。
+- **Profile Version / Context Revision**：`version` 保护 Identity、Confirmed Fact 与 Disclosure Policy 的乐观并发；`contextRevision` 保护 Impression 与 Fact Candidate 变化。确认 Candidate 会同时推进两者。
+- **AgentFacts**：Disclosure Engine 根据允许披露的 Profile subject 生成的签名外部信任/发现清单，不等于 Agent 的私有自我模型。
+- **AgentFacts Publication**：某个已验证 Hostname 下不可变、带 TTL/JWS 且可撤销的 AgentFacts 版本。
+- **AgentCard**：A2A 通信清单。当前只提供 Owner Draft；由于没有 A2A endpoint，发布就绪检查固定阻塞。
+- **Conversation**：绑定一个 Agent 的持久化对话线程。
+- **Run**：Conversation 内的一次执行尝试，包含不可变的 execution-policy snapshot。
+- **Run Event**：保存在 PostgreSQL 中、用于流式传输、检查和回放的有序事件。
+- **Memory**：显式维护、长期持久的 semantic/episodic Agent 上下文与证据源；尚未实现长期 Memory 自动提取和向量检索。
+- **Skill Package / Version**：Principal 所有且内容版本不可变的 Skill；每个 Agent 通过 Binding 选择并启用一个 Version。
+- **MCP Library**：Principal 所有的 MCP Server 与发现得到的 Tool。
+- **MCP Binding**：每个 Agent 独立的 Server/Tool 启用状态，是 Runtime 可用权限的权威来源。
+- **Mention Catalog**：供 `@` 与 Composer 能力菜单使用的服务端投影，不是公开 Agent Directory。
+- **Disclosure Policy**：控制 identity、capability、Confirmed Fact 与 endpoint 的 visibility、channel、indexing 与 audience 的权威规则；Impression 永远不是披露 subject。

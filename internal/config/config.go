@@ -17,9 +17,11 @@ type Config struct {
 	Database Database
 	Auth     Auth
 	Model    Model
+	Curator  Model
 	Runtime  AgentRuntime
 	MCP      MCP
 	Web      Web
+	Security Security
 }
 
 type Server struct {
@@ -59,6 +61,10 @@ type Web struct {
 	Origin string
 }
 
+type Security struct {
+	AgentKeyEncryptionKey string
+}
+
 func Load() (Config, error) {
 	_ = godotenv.Load()
 	timeout, err := durationEnv("MODEL_TIMEOUT", 2*time.Minute)
@@ -93,6 +99,14 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	curatorTimeout, err := optionalDurationEnv("CURATOR_MODEL_TIMEOUT", timeout)
+	if err != nil {
+		return Config{}, err
+	}
+	curatorMaxTokens, err := optionalIntEnv("CURATOR_MODEL_MAX_TOKENS", min(maxTokens, 2048))
+	if err != nil {
+		return Config{}, err
+	}
 
 	driver := strings.TrimSpace(env("MODEL_DRIVER", "deepseek"))
 	cfg := Config{
@@ -111,11 +125,21 @@ func Load() (Config, error) {
 			Timeout:   timeout,
 			MaxTokens: maxTokens,
 		},
+		Curator: Model{
+			ID:        nonBlankEnv("CURATOR_MODEL_ID", strings.TrimSpace(env("MODEL_ID", "deepseek-primary"))+"-curator"),
+			Driver:    nonBlankEnv("CURATOR_MODEL_DRIVER", driver),
+			BaseURL:   nonBlankEnv("CURATOR_MODEL_BASE_URL", strings.TrimSpace(env("MODEL_BASE_URL", defaultBaseURL(driver)))),
+			APIKey:    nonBlankEnv("CURATOR_MODEL_API_KEY", strings.TrimSpace(os.Getenv("MODEL_API_KEY"))),
+			Name:      nonBlankEnv("CURATOR_MODEL_NAME", strings.TrimSpace(env("MODEL_NAME", defaultModelName(driver)))),
+			Timeout:   curatorTimeout,
+			MaxTokens: curatorMaxTokens,
+		},
 		Runtime: AgentRuntime{MaxIterations: maxIterations},
 		MCP: MCP{
 			Timeout: mcpTimeout, AllowPrivateNetworks: mcpAllowPrivateNetworks,
 		},
-		Web: Web{Origin: strings.TrimSpace(env("WEB_ORIGIN", "http://127.0.0.1:5173"))},
+		Web:      Web{Origin: strings.TrimSpace(env("WEB_ORIGIN", "http://127.0.0.1:5173"))},
+		Security: Security{AgentKeyEncryptionKey: strings.TrimSpace(os.Getenv("AGENT_KEY_ENCRYPTION_KEY"))},
 	}
 	if err := cfg.Validate(); err != nil {
 		return Config{}, err
@@ -124,6 +148,7 @@ func Load() (Config, error) {
 }
 
 func (cfg Config) Validate() error {
+	curator := cfg.EffectiveCurator()
 	var problems []error
 	if strings.TrimSpace(cfg.Server.Address) == "" {
 		problems = append(problems, errors.New("SERVER_ADDRESS is required"))
@@ -152,6 +177,9 @@ func (cfg Config) Validate() error {
 	if cfg.Model.Timeout <= 0 {
 		problems = append(problems, errors.New("MODEL_TIMEOUT must be positive"))
 	}
+	if curator.ID == "" || curator.Driver == "" || curator.APIKey == "" || curator.Name == "" || curator.MaxTokens < 1 || curator.Timeout <= 0 {
+		problems = append(problems, errors.New("CURATOR_MODEL_* must resolve to a complete positive model configuration"))
+	}
 	if cfg.Runtime.MaxIterations < 1 {
 		problems = append(problems, errors.New("AGENT_MAX_ITERATIONS must be positive"))
 	}
@@ -161,10 +189,20 @@ func (cfg Config) Validate() error {
 	if err := validateURL("MODEL_BASE_URL", cfg.Model.BaseURL); err != nil {
 		problems = append(problems, err)
 	}
+	if err := validateURL("CURATOR_MODEL_BASE_URL", curator.BaseURL); err != nil {
+		problems = append(problems, err)
+	}
 	if err := validateURL("WEB_ORIGIN", cfg.Web.Origin); err != nil {
 		problems = append(problems, err)
 	}
 	return errors.Join(problems...)
+}
+
+func (cfg Config) EffectiveCurator() Model {
+	if cfg.Curator.ID == "" && cfg.Curator.Driver == "" && cfg.Curator.BaseURL == "" && cfg.Curator.APIKey == "" && cfg.Curator.Name == "" && cfg.Curator.Timeout == 0 && cfg.Curator.MaxTokens == 0 {
+		return cfg.Model
+	}
+	return cfg.Curator
 }
 
 func env(key, fallback string) string {
@@ -172,6 +210,13 @@ func env(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func nonBlankEnv(key, fallback string) string {
+	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+		return value
+	}
+	return strings.TrimSpace(fallback)
 }
 
 func durationEnv(key string, fallback time.Duration) (time.Duration, error) {
@@ -183,6 +228,13 @@ func durationEnv(key string, fallback time.Duration) (time.Duration, error) {
 	return parsed, nil
 }
 
+func optionalDurationEnv(key string, fallback time.Duration) (time.Duration, error) {
+	if strings.TrimSpace(os.Getenv(key)) == "" {
+		return fallback, nil
+	}
+	return durationEnv(key, fallback)
+}
+
 func intEnv(key string, fallback int) (int, error) {
 	value := strings.TrimSpace(env(key, strconv.Itoa(fallback)))
 	parsed, err := strconv.Atoi(value)
@@ -190,6 +242,13 @@ func intEnv(key string, fallback int) (int, error) {
 		return 0, fmt.Errorf("%s must be an integer: %w", key, err)
 	}
 	return parsed, nil
+}
+
+func optionalIntEnv(key string, fallback int) (int, error) {
+	if strings.TrimSpace(os.Getenv(key)) == "" {
+		return fallback, nil
+	}
+	return intEnv(key, fallback)
 }
 
 func boolEnv(key string, fallback bool) (bool, error) {

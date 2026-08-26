@@ -1,25 +1,45 @@
-# PostgreSQL Schema
+# PostgreSQL schema guide
 
-PostgreSQL is authoritative for Accounts, Human Principals, Agents, Agent Profiles, Conversations, Messages, Runs, replayable Run Events, Memories, Skills, and MCP configuration.
+The authoritative schema is the ordered SQL under [`../../migrations`](../../migrations). This guide describes ownership and table responsibilities without duplicating every column or constraint.
 
-## Ownership and identity
+## Account and Agent ownership
 
-- `human_principals` is the authorization root for personal data.
-- `user_accounts`, `account_sessions`, and `user_preferences` hold login and Human Account state.
-- `agents` belongs to a Human Principal and remains the canonical source for Agent name, description, and system prompt.
+- `human_principals` is the authorization and ownership root.
+- `user_accounts` owns email/password login state; `account_sessions` stores hashed session tokens; `user_preferences` stores explicit language/theme values.
+- `agents` belongs to one Human Principal and is canonical for Agent name, description, and system prompt.
+- Registration creates Account, Principal, default Agent, preferences, and Agent Profile in one transaction.
 
 ## Agent Profile
 
-- `agent_profiles` is a one-to-one extension of `agents` and owns the optimistic `version` and avatar URL.
-- `agent_profile_facts` stores structured, attributed JSON facts.
-- `agent_memory_projections` and `agent_memory_projection_sources` retain derived summaries and their source-Memory lineage.
-- `agent_profile_disclosure_policies` stores per-subject disclosure intent for identity, capability, fact, and projection subjects.
+- `agent_profiles` is a one-to-one extension keyed by `agent_id`; `version` tracks identity/Confirmed Fact/policy changes and `context_revision` tracks Impression/candidate changes.
+- `agent_impressions` stores permanent short-term observation history; `agent_impression_evidence` preserves provenance. Active items become stale dynamically from observation time, expiry, and decay half-life rather than a stored freshness value.
+- `agent_fact_candidates` and `agent_fact_candidate_sources` form the owner review inbox. `agent_confirmed_facts` is the separate trusted state with confirmation, validity, and revocation metadata.
+- `agent_profile_jobs` is a durable PostgreSQL work queue. Successful Runs enqueue one idempotent `curate-run` job; workers use leases and `FOR UPDATE SKIP LOCKED`.
+- `agent_profile_disclosure_policies` stores rules only for identity, capability, Confirmed Fact, and endpoint subjects.
+- Effective capabilities are aggregated from Runtime, Skill, and MCP authority rather than copied into another capability table.
 
-## Runtime and integrations
+## AgentFacts publication
 
-- `conversations`, `messages`, `runs`, and `run_events` are the replayable conversation ledger.
-- `memories` stores Agent-scoped semantic and episodic Memory.
-- Skill package/version/file tables preserve immutable Skill content; Agent bindings select enabled versions.
-- MCP server, tool, and Agent binding tables preserve discovered tool metadata and per-Agent enablement.
+- `agent_publication_settings` binds one verified hostname and DNS challenge to an Agent.
+- `agent_signing_keys` stores Ed25519 public keys and AES-256-GCM-encrypted private keys; master-key material never enters PostgreSQL.
+- `agent_access_tokens` stores only SHA-256 token hashes and exact audiences.
+- `agent_facts_publications` stores immutable canonical payloads, digests, JWS proofs, expiry, supersession, and revocation.
 
-Schema evolution is performed only by ordered Goose migrations in `migrations/`. Runtime repositories under `internal/postgres` use GORM and must not invoke `AutoMigrate`.
+## Conversation ledger
+
+- `conversations` belongs to both a Principal and an Agent.
+- `messages` is the ordered durable transcript.
+- `runs` stores lifecycle state, failure information, next event sequence, and an immutable JSON execution-policy snapshot.
+- `run_events` is ordered per Run and supports SSE replay. Events are not an audit-log substitute.
+
+## Memory, Skills, and MCP
+
+- `memories` is directly Agent-scoped and supports active/forgotten lifecycle state.
+- `skill_packages` belongs to a Principal; `skill_versions` and `skill_version_files` are immutable content; `agent_skills` selects and enables one Version per Agent.
+- `mcp_servers` and `mcp_tools` form the Principal library. `agent_mcp_servers` and `agent_mcp_tools` hold per-Agent enablement.
+
+## Evolution and access
+
+Schema changes require a new Goose migration; applied migrations are never rewritten. Runtime access goes through `internal/postgres.Database` and GORM. GORM types do not cross the PostgreSQL adapter, and `AutoMigrate` is prohibited.
+
+Destructive repository integration tests must use a dedicated database whose name ends in `_test`.

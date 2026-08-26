@@ -62,6 +62,8 @@ Do not render raw JSON as the primary successful result. Raw input/output may be
 
 ## Human-in-the-loop and approvals
 
+This section defines the required future interaction contract. The current server does not persist or resume Approval requests, so external-write and destructive MCP Tools remain unavailable rather than entering this state.
+
 Meaningful external effects require an explicit approval state unless policy has already granted the exact scope. An approval surface names:
 
 - the action and tool;
@@ -102,8 +104,8 @@ Confirm changes by naming the object and resulting state. Use reversible inline 
 
 ## Agent Profile disclosure
 
-- The owner view always shows the full Agent Profile plus the effective policy for every identity, capability, Fact, and Memory Projection item.
+- The owner view separates Overview, Impressions, Facts, and Publication. Impression has correction/dismiss/restore controls but never a Disclosure control; only Confirmed Facts enter policy editing.
 - `private` is the default and may only target the local Runtime context. External Agent Facts and Agent Card channels require an explicit non-private visibility.
 - Restricted disclosure requires at least one named audience. Indexing is available only for public items that include the Agent Facts channel.
 - Saving identity or disclosure changes advances the Profile version. A version conflict preserves the draft, explains that the Profile changed elsewhere, and offers reload rather than silently overwriting newer state.
-- Agent Card and Agent Facts controls store disclosure intent only until those publishing surfaces are explicitly implemented; the UI must say that they are not currently published.
+- Publication shows DNS/key/token state, the current signed AgentFacts document, and the AgentCard Draft blocker. Token secrets are shown exactly once.

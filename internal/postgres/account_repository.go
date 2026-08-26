@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/re35t/AegisLink/internal/account"
 	"github.com/re35t/AegisLink/internal/agent"
 	"gorm.io/gorm"
@@ -77,6 +78,11 @@ func (repository *AccountRepository) CreateAccountWithAgent(ctx context.Context,
 			INSERT INTO agent_profiles (agent_id, owner_principal_id)
 			VALUES (@p1, @p2)`, agentRecord.ID, agentRecord.OwnerPrincipalID); result.Error != nil {
 			return fmt.Errorf("create personal agent profile: %w", result.Error)
+		}
+		if result := exec(transaction, `
+			INSERT INTO agent_publication_settings (agent_id, owner_principal_id, public_id)
+			VALUES (@p1, @p2, @p3)`, agentRecord.ID, agentRecord.OwnerPrincipalID, "agent_"+ulid.Make().String()); result.Error != nil {
+			return fmt.Errorf("create personal agent publication settings: %w", result.Error)
 		}
 		return nil
 	})

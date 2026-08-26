@@ -35,6 +35,13 @@ func TestDefaultDeepSeekModelUsesCurrentModelName(t *testing.T) {
 	}
 }
 
+func TestBlankCuratorOverridesFallBack(t *testing.T) {
+	t.Setenv("CURATOR_MODEL_NAME", "   ")
+	if got := nonBlankEnv("CURATOR_MODEL_NAME", "primary-model"); got != "primary-model" {
+		t.Fatalf("blank override = %q", got)
+	}
+}
+
 func validConfig() Config {
 	return Config{
 		Server:   Server{Address: "127.0.0.1:4321", ShutdownTimeout: time.Second},

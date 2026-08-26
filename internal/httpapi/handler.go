@@ -10,6 +10,8 @@ import (
 	"github.com/re35t/AegisLink/internal/agent"
 	"github.com/re35t/AegisLink/internal/catalog"
 	"github.com/re35t/AegisLink/internal/conversation"
+	"github.com/re35t/AegisLink/internal/discovery"
+	"github.com/re35t/AegisLink/internal/impression"
 	"github.com/re35t/AegisLink/internal/mcp"
 	"github.com/re35t/AegisLink/internal/memory"
 	"github.com/re35t/AegisLink/internal/skills"
@@ -19,6 +21,9 @@ type handler struct {
 	accounts      AccountService
 	agents        AgentService
 	profiles      AgentProfileService
+	impressions   ImpressionService
+	discovery     DiscoveryService
+	agentCards    AgentCardService
 	conversations ConversationService
 	memories      MemoryService
 	skills        SkillService
@@ -57,6 +62,16 @@ func (handler *handler) handleError(c *gin.Context, err error) {
 		writeError(c, http.StatusConflict, "profile_version_conflict", "the Agent Profile changed; reload it before saving again")
 	case errors.Is(err, agent.ErrInvalidProfile):
 		writeError(c, http.StatusBadRequest, "invalid_agent_profile", "the Agent identity or disclosure policy is invalid")
+	case errors.Is(err, impression.ErrNotFound), errors.Is(err, discovery.ErrNotFound):
+		writeError(c, http.StatusNotFound, "resource_not_found", "the requested resource was not found")
+	case errors.Is(err, impression.ErrConflict), errors.Is(err, discovery.ErrConflict):
+		writeError(c, http.StatusConflict, "version_conflict", "the resource changed; reload it before saving again")
+	case errors.Is(err, impression.ErrInvalid), errors.Is(err, discovery.ErrInvalid):
+		writeError(c, http.StatusBadRequest, "invalid_request", "the requested Impression, Fact, or publication change is invalid")
+	case errors.Is(err, discovery.ErrUnauthorized):
+		writeError(c, http.StatusUnauthorized, "invalid_agentfacts_token", "the AgentFacts query token is invalid")
+	case errors.Is(err, discovery.ErrUnavailable):
+		writeError(c, http.StatusConflict, "publication_unavailable", "AgentFacts publication is not configured or cannot be enabled")
 	case errors.Is(err, conversation.ErrActiveRun):
 		writeError(c, http.StatusConflict, "active_run_exists", "the conversation already has an active run")
 	case errors.Is(err, conversation.ErrRunNotActive):

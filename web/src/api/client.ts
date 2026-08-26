@@ -5,6 +5,11 @@ export type AgentProfile = components["schemas"]["AgentProfile"];
 export type DisclosurePolicy = components["schemas"]["DisclosurePolicy"];
 export type DisclosurePolicyChange =
   components["schemas"]["DisclosurePolicyChange"];
+export type Impression = components["schemas"]["Impression"];
+export type FactCandidate = components["schemas"]["FactCandidate"];
+export type AgentPublication = components["schemas"]["AgentPublication"];
+export type AgentAccessToken = components["schemas"]["AgentAccessToken"];
+export type AgentCardPreview = components["schemas"]["AgentCardPreview"];
 export type AccountSettings = components["schemas"]["AccountSettingsResponse"];
 export type AuthResponse = components["schemas"]["AuthResponse"];
 export type Bootstrap = components["schemas"]["BootstrapResponse"];
@@ -84,6 +89,94 @@ export const api = {
     request<AgentProfile>(
       `/api/v1/agents/${encodeURIComponent(agentId)}/profile/disclosure-policies`,
       { method: "PATCH", body: JSON.stringify(input) },
+    ),
+  listAgentImpressions: async (agentId: string, status = "") => {
+    const query = status ? `?status=${encodeURIComponent(status)}` : "";
+    const response = await request<{ impressions: Impression[] }>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/impressions${query}`,
+    );
+    return response.impressions;
+  },
+  updateAgentImpression: (
+    agentId: string,
+    impressionId: string,
+    input: components["schemas"]["UpdateImpressionRequest"],
+  ) =>
+    request<Impression>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/impressions/${encodeURIComponent(impressionId)}`,
+      { method: "PATCH", body: JSON.stringify(input) },
+    ),
+  listAgentFactCandidates: async (agentId: string, status = "pending") => {
+    const response = await request<{ candidates: FactCandidate[] }>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/fact-candidates?status=${encodeURIComponent(status)}`,
+    );
+    return response.candidates;
+  },
+  confirmAgentFactCandidate: (
+    agentId: string,
+    candidateId: string,
+    input: components["schemas"]["ConfirmFactCandidateRequest"],
+  ) =>
+    request<AgentProfile>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/fact-candidates/${encodeURIComponent(candidateId)}/confirm`,
+      { method: "POST", body: JSON.stringify(input) },
+    ),
+  rejectAgentFactCandidate: (
+    agentId: string,
+    candidateId: string,
+    expectedCandidateVersion: number,
+  ) =>
+    request<void>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/fact-candidates/${encodeURIComponent(candidateId)}/reject`,
+      { method: "POST", body: JSON.stringify({ expectedCandidateVersion }) },
+    ),
+  revokeAgentConfirmedFact: (
+    agentId: string,
+    factId: string,
+    expectedVersion: number,
+  ) =>
+    request<AgentProfile>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/confirmed-facts/${encodeURIComponent(factId)}/revoke`,
+      { method: "POST", body: JSON.stringify({ expectedVersion }) },
+    ),
+  getAgentPublication: (agentId: string) =>
+    request<AgentPublication>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/publication`,
+    ),
+  updateAgentPublication: (
+    agentId: string,
+    input: components["schemas"]["UpdateAgentPublicationRequest"],
+  ) =>
+    request<AgentPublication>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/publication`,
+      { method: "PATCH", body: JSON.stringify(input) },
+    ),
+  verifyAgentPublicationHostname: (agentId: string) =>
+    request<AgentPublication>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/publication/verify-hostname`,
+      { method: "POST" },
+    ),
+  rotateAgentPublicationKey: (agentId: string) =>
+    request<AgentPublication>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/publication/rotate-key`,
+      { method: "POST" },
+    ),
+  createAgentAccessToken: (
+    agentId: string,
+    input: components["schemas"]["CreateAgentAccessTokenRequest"],
+  ) =>
+    request<components["schemas"]["CreatedAgentAccessToken"]>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/access-tokens`,
+      { method: "POST", body: JSON.stringify(input) },
+    ),
+  revokeAgentAccessToken: (agentId: string, tokenId: string) =>
+    request<void>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/access-tokens/${encodeURIComponent(tokenId)}`,
+      { method: "DELETE" },
+    ),
+  getAgentCardPreview: (agentId: string) =>
+    request<AgentCardPreview>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/agent-card-preview`,
     ),
   listMemories: async (agentId: string) => {
     const response = await request<{ memories: Memory[] }>(
