@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/cloudwego/eino/components/model"
-	"github.com/re35t/AegisLink/internal/config"
 )
 
 func TestDefaultModelRegistryListsStableDrivers(t *testing.T) {
@@ -24,7 +23,7 @@ func TestModelRegistryCreatesRegisteredProvider(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	created, err := registry.NewModel(t.Context(), config.Model{Driver: "stub"})
+	created, err := registry.NewModel(t.Context(), ModelConfig{Driver: "stub"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +38,7 @@ func TestModelRegistryRejectsUnsupportedDriver(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := registry.NewModel(t.Context(), config.Model{Driver: "missing"}); !errors.Is(err, ErrUnsupportedModelDriver) {
+	if _, err := registry.NewModel(t.Context(), ModelConfig{Driver: "missing"}); !errors.Is(err, ErrUnsupportedModelDriver) {
 		t.Fatalf("expected unsupported driver error, got %v", err)
 	}
 }
@@ -51,6 +50,6 @@ type stubModelProvider struct {
 
 func (provider stubModelProvider) Driver() string { return provider.driver }
 
-func (provider stubModelProvider) New(context.Context, config.Model) (model.ToolCallingChatModel, error) {
+func (provider stubModelProvider) New(context.Context, ModelConfig) (model.ToolCallingChatModel, error) {
 	return provider.chatModel, nil
 }

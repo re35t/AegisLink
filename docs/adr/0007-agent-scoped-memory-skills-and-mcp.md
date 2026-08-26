@@ -10,7 +10,7 @@ Date: 2026-08-23.
 
 Memory, Skill bindings, MCP servers, and MCP tools are authorized by both the authenticated Human Principal and the target Personal Agent. Management endpoints are nested under `/agents/{agentId}`; the Principal ID always comes from the server-side session.
 
-Memory and MCP connections are directly Agent-scoped. Principal-owned Skill packages contain immutable versions, while `agent_skills` stores the selected version and enablement per Agent. Every run resolves an `AgentContext` from the authoritative Conversation Agent before invoking Eino.
+Memory and MCP connections are directly Agent-scoped. Principal-owned Skill packages contain immutable versions, while `agent_skills` stores the selected version and enablement per Agent. Every run lets the Agent Harness resolve authoritative context for the Conversation Agent before invoking the domain-neutral Eino Runtime.
 
 Memory V0 is explicit and user-editable. Skills follow Agent Skills `SKILL.md` metadata and progressive disclosure. MCP uses the official Go SDK and Streamable HTTP. Discovered tools are disabled by default because server annotations are untrusted hints; only explicitly enabled read-only tools enter the runtime. External-write and destructive tools remain blocked until per-call Approval exists.
 

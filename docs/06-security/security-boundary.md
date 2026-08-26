@@ -12,13 +12,13 @@
 - Historical messages supplied in AG-UI input are not authoritative; the Conversation and Agent are reloaded from PostgreSQL.
 - Composer selections contain only opaque Mention IDs and actions. The server re-resolves enabled Skill/MCP bindings, Tool risk, connection state, and ownership before a Run starts.
 - Only explicitly enabled `read-only` MCP Tools enter Runtime. `external-write` and `destructive` Tools remain blocked because persisted per-call Approval is not implemented.
-- Provider keys, MCP credentials, system prompts, owner identifiers, and private chain-of-thought must not enter API responses, Profile projections, events, or logs.
+- Provider keys, MCP credentials, owner identifiers, and private chain-of-thought must not enter API responses, Profile projections, events, or logs. A System Prompt may be returned only through its authenticated, owner-scoped Agent Instructions endpoint; it must not enter Agent lists, Profile projections, AgentFacts, events, or logs.
 
 ## Profile disclosure
 
 Disclosure Policy is enforced when AgentFacts is built. The default is private. Restricted disclosure requires exact token audience matching, and indexing is valid only for public AgentFacts subjects. Impressions and user/project/task Facts cannot be externally disclosed. Scope-reducing policy changes, Fact revocation, publication disablement, and key rotation revoke the active publication transactionally.
 
-Messages, Tool results, and Memory supplied to the curator are untrusted evidence. The curator has no Tools, emits schema-validated drafts, and cannot write Confirmed Facts. Runtime labels Impressions as fallible low-priority context and never injects their raw evidence or disclosure metadata.
+Messages, Tool results, and Memory supplied to the curator are untrusted evidence. The curator has no Tools, emits schema-validated drafts, and cannot write Confirmed Facts. Harness labels Impressions as fallible low-priority context and never injects their raw evidence or disclosure metadata.
 
 Agent signing uses Ed25519. Private keys are encrypted with AES-256-GCM under the base64 32-byte `AGENT_KEY_ENCRYPTION_KEY`, with Agent/key IDs as associated data. If the master key is absent, Profile/Impression behavior remains available but all publication/key operations are blocked. Query-token secrets are returned once; only SHA-256 hashes are stored.
 

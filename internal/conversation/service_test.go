@@ -12,7 +12,7 @@ func TestStartRunRejectsUnresolvedSelectionBeforeWritingMessageOrRun(t *testing.
 	t.Parallel()
 	repository := &selectionRepository{}
 	service := NewService(
-		context.Background(), repository, nil, nil,
+		context.Background(), repository, nil,
 		selectionContext{err: mcp.ErrUnavailable}, nil,
 	)
 	_, _, err := service.StartRun(t.Context(), "principal-one", RunRequest{
@@ -44,10 +44,15 @@ func (repository *selectionRepository) CreateMessageRun(
 }
 
 type selectionContext struct {
-	ContextProvider
 	err error
 }
 
 func (contextProvider selectionContext) ResolveSelection(context.Context, string, string, RunSelection) (ExecutionPolicy, error) {
 	return ExecutionPolicy{}, contextProvider.err
+}
+
+func (selectionContext) Run(context.Context, HarnessInput) (<-chan HarnessOutput, error) {
+	output := make(chan HarnessOutput)
+	close(output)
+	return output, nil
 }

@@ -6,7 +6,7 @@
 
 - `human_principals` 是授权与所有权根。
 - `user_accounts` 保存邮箱密码登录状态；`account_sessions` 保存 Session Token Hash；`user_preferences` 保存显式 Language/Theme。
-- `agents` 归属于一个 Human Principal，并作为 Agent Name、Description 与 System Prompt 的权威来源。
+- `agents` 归属于一个 Human Principal，并作为 Agent Name、Description 与独立版本化私有 System Prompt 的权威来源。Runtime 会把 Name/Description 动态组合为结构化 Identity 数据，而不会复制进持久化 Prompt。
 - 注册在同一事务中创建 Account、Principal、默认 Agent、Preferences 与 Agent Profile。
 
 ## Agent Profile

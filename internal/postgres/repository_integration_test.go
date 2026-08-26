@@ -501,6 +501,9 @@ func TestAgentProfileMigrationBackfillsExistingAgents(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer closeTestDatabase(t, database)
+	if err := database.Migrate(); err != nil {
+		t.Fatal(err)
+	}
 	goose.SetBaseFS(migrations.FS)
 	if err := goose.SetDialect("postgres"); err != nil {
 		t.Fatal(err)
@@ -543,6 +546,67 @@ func TestAgentProfileMigrationBackfillsExistingAgents(t *testing.T) {
 	mustScan(t, database, &migrated, `SELECT (SELECT count(*) FROM agent_fact_candidates WHERE id='legacy-fact' AND subject_kind='user' AND status='pending') AS candidate_count,(SELECT count(*) FROM agent_impressions WHERE id='legacy-projection' AND status='active') AS impression_count,(SELECT count(*) FROM agent_profile_disclosure_policies WHERE subject_id='legacy-fact') AS policy_count`)
 	if migrated.CandidateCount != 1 || migrated.ImpressionCount != 1 || migrated.PolicyCount != 0 {
 		t.Fatalf("migration downgrade=%#v", migrated)
+	}
+}
+
+func TestAgentInstructionsRepositoryAndMigration(t *testing.T) {
+	databaseURL := testDatabaseURL(t)
+	database, err := Open(t.Context(), databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeTestDatabase(t, database)
+	if err := database.Migrate(); err != nil {
+		t.Fatal(err)
+	}
+	goose.SetBaseFS(migrations.FS)
+	if err := goose.SetDialect("postgres"); err != nil {
+		t.Fatal(err)
+	}
+	if err := gooseDownTo(database, 10); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := gooseUp(database); err != nil {
+			t.Errorf("restore latest schema: %v", err)
+		}
+	}()
+	mustExec(t, database, `
+		TRUNCATE account_sessions, user_accounts, agents, human_principals CASCADE;
+		INSERT INTO human_principals (id, display_name) VALUES ('instructions-owner', 'Instructions owner'), ('instructions-other', 'Other owner');
+		INSERT INTO agents (id, owner_principal_id, name, description, system_prompt) VALUES
+		  ('instructions-agent', 'instructions-owner', 'Chet', 'Personal Agent', 'You are Aegis, a concise and reliable personal assistant. Answer in the language used by the user.'),
+		  ('custom-instructions-agent', 'instructions-owner', 'Custom', '', 'Keep this custom prompt.')`)
+	if err := gooseUpTo(database, 11); err != nil {
+		t.Fatal(err)
+	}
+
+	repository := NewAgentRepository(database)
+	instructions, err := repository.GetInstructions(t.Context(), "instructions-owner", "instructions-agent")
+	if err != nil || instructions.SystemPrompt != "Be concise and reliable. Answer in the language used by the user." || instructions.Version != 1 {
+		t.Fatalf("unexpected migrated instructions: instructions=%#v err=%v", instructions, err)
+	}
+	custom, err := repository.GetInstructions(t.Context(), "instructions-owner", "custom-instructions-agent")
+	if err != nil || custom.SystemPrompt != "Keep this custom prompt." {
+		t.Fatalf("custom prompt changed during migration: instructions=%#v err=%v", custom, err)
+	}
+	if _, err := repository.GetInstructions(t.Context(), "instructions-other", "instructions-agent"); !errors.Is(err, agent.ErrNotFound) {
+		t.Fatalf("instructions crossed Principal scope: %v", err)
+	}
+
+	updated, err := repository.UpdateInstructions(t.Context(), "instructions-owner", "instructions-agent", agent.InstructionsUpdate{
+		ExpectedVersion: 1,
+		SystemPrompt:    "Answer directly.",
+	})
+	if err != nil || updated.SystemPrompt != "Answer directly." || updated.Version != 2 {
+		t.Fatalf("unexpected updated instructions: instructions=%#v err=%v", updated, err)
+	}
+	_, err = repository.UpdateInstructions(t.Context(), "instructions-owner", "instructions-agent", agent.InstructionsUpdate{
+		ExpectedVersion: 1,
+		SystemPrompt:    "Stale update",
+	})
+	if !errors.Is(err, agent.ErrInstructionsConflict) {
+		t.Fatalf("stale instructions update error = %v", err)
 	}
 }
 

@@ -9,10 +9,10 @@ React 19 + Vite
             │
 Gin (internal/httpapi)
             │
-Domain services / Conversation orchestrator / Context resolver
+Domain services / Conversation orchestrator / Agent Harness
             │
   ┌─────────┴──────────┐
-PostgreSQL adapter   Runtime adapter
+PostgreSQL adapter   Domain-neutral Runtime
 (GORM + Goose)       (Eino + model providers)
 ```
 
@@ -21,14 +21,14 @@ PostgreSQL adapter   Runtime adapter
 ```mermaid
 flowchart LR
     owner["Owner / Web"] -->|"REST"| resources["Durable resources and policy"]
-    chat["Conversation"] -->|"AG-UI"| run["Run orchestration"] --> runtime["Eino Runtime"]
-    run -->|"enqueue in success transaction"| job["Curator job"] --> curator["No-Tool curator"] --> cognition["Impression / Fact Candidate"]
+    chat["Conversation"] -->|"AG-UI"| run["Run orchestration"] --> harness["Agent Harness"] --> runtime["Eino Runtime"]
+    run -->|"enqueue in success transaction"| job["Curator job"] --> curator["No-Tool curator"] --> runtime --> cognition["Impression / Fact Candidate"]
     profile["AgentProfile"] --> disclosure["Disclosure Engine"] --> facts["AgentFacts network boundary"]
     profile --> card["AgentCard owner Draft"]
 ```
 
 - **Owner/control path:** REST manages Account, Agent, Profile, Memory, Skill, MCP, Publication, and history resources.
-- **Execution path:** AG-UI carries only active Runs. `conversation` reloads authoritative Agent, history, and capabilities from PostgreSQL before invoking Runtime.
+- **Execution path:** AG-UI carries only active Runs. `conversation` reloads the authoritative Agent and history; Harness resolves context and authorized capabilities before invoking Runtime.
 - **Cognitive maintenance path:** only a successful Run creates a durable curator job. The worker asynchronously maintains fallible Impressions and reviewable Fact Candidates.
 - **Publication path:** the Disclosure Engine builds AgentFacts from the private Profile. AgentCard remains owner-preview only until a real A2A interface exists.
 
@@ -38,9 +38,10 @@ The paths share Principal/Agent ownership and PostgreSQL transactions, but not t
 
 - `internal/app` is the composition root. It wires configuration, repositories, services, runtime, and HTTP without importing GORM or provider SDK types.
 - `internal/httpapi` owns Gin, authentication middleware, OpenAPI-shaped handlers, AG-UI input/output, and HTTP error mapping.
-- Business modules (`account`, `agent`, `conversation`, `agentcontext`, `memory`, `impression`, `discovery`, `a2a`, `skills`, `mcp`, and `catalog`) use `context.Context`, domain types, and small interfaces.
-- `internal/conversation` owns Run orchestration, cancellation, persisted events, capability selection, and Runtime invocation.
-- `internal/runtime` contains Eino and model-provider SDK types. The rest of the application consumes `conversation.Runtime`.
+- Business modules (`account`, `agent`, `conversation`, `memory`, `impression`, `discovery`, `a2a`, `skills`, `mcp`, and `catalog`) use `context.Context`, domain types, and small interfaces.
+- `internal/conversation` owns durable Run orchestration, cancellation, and persisted events; it invokes the `conversation.Harness` port.
+- `internal/harness` assembles Agent context, instructions, policies, and authorized capabilities before delegating to Runtime.
+- `internal/runtime` contains the domain-neutral Eino Run and model-provider SDK types. It imports no AegisLink domain packages.
 - `internal/postgres` owns GORM, PostgreSQL-specific SQL, transactions, row mapping, and connection lifecycle. Goose migrations are the only schema mechanism.
 
 The dependency direction is `HTTP -> service/orchestrator -> repository or Runtime port`. Handlers do not make business decisions, domain models do not implement SQL Scanner/Valuer, the application layer does not hold `*gorm.DB`, and the frontend does not treat hand-written response shapes as public contracts.
@@ -52,9 +53,10 @@ The dependency direction is `HTTP -> service/orchestrator -> repository or Runti
 | `cmd/aegislink-server`  | Process entry point, configuration loading, and graceful shutdown                 |
 | `internal/app`          | Composition root, repository/service wiring, and worker lifecycle                 |
 | `internal/httpapi`      | Gin, sessions, REST, AG-UI, and Host-scoped AgentFacts routes                     |
-| `internal/conversation` | Run creation/cancellation, durable events, and Runtime invocation                 |
-| `internal/agentcontext` | Memory, Skill, MCP, Confirmed Fact, and ranked Impression context assembly        |
-| `internal/runtime`      | Eino, model providers, dynamic Tools, and the isolated curator model call         |
+| `internal/conversation` | Run creation/cancellation, durable events, and Harness invocation                 |
+| `internal/harness`      | Agent context, instructions, selection policy, and capability assembly            |
+| `internal/runtime`      | Domain-neutral Eino Run, Tool adapter, and model providers                        |
+| `internal/curator`      | Isolated no-Tool cognitive model adapter                                          |
 | `internal/impression`   | Impression/Fact Candidate rules and the durable worker                            |
 | `internal/agent`        | Agent and AgentProfile aggregation, revisions, and Disclosure Policy              |
 | `internal/discovery`    | AgentFacts filtering, signing, token query, JWKS, and revocation                  |

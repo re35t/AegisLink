@@ -7,7 +7,7 @@ The authoritative public contract is [`../../contracts/http/v1/openapi.yaml`](..
 REST owns durable resources and control operations:
 
 - authentication, session, Account settings, and password changes;
-- bootstrap, Agent list, Agent Profile, Impression correction/lifecycle, Fact review/revocation, and disclosure policies;
+- bootstrap, Agent list, owner-only versioned Agent Instructions, Agent Profile, Impression correction/lifecycle, Fact review/revocation, and disclosure policies;
 - owner publication settings, DNS verification, signing-key rotation, one-time access-token creation, and AgentCard Draft preview;
 - Agent Memory, Skill packages/import/bindings, MCP library and Agent bindings;
 - Mention Catalog projections;

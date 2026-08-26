@@ -12,13 +12,13 @@
 - AG-UI 输入中的历史消息不是权威历史；服务端会从 PostgreSQL 重新加载 Conversation 与 Agent。
 - Composer Selection 只包含不透明 Mention ID 与 Action。Run 启动前，服务端重新解析 Skill/MCP Binding、Tool Risk、连接状态和 Ownership。
 - 只有显式启用的 `read-only` MCP Tool 能进入 Runtime。因为尚未实现持久化逐次 Approval，`external-write` 与 `destructive` Tool 始终被阻止。
-- Provider Key、MCP Credential、System Prompt、Owner ID 和私有 Chain-of-thought 不得进入 API 响应、Profile Projection、Event 或日志。
+- Provider Key、MCP Credential、Owner ID 和私有 Chain-of-thought 不得进入 API 响应、Profile Projection、Event 或日志。System Prompt 只允许通过认证且限定 Owner Scope 的 Agent Instructions Endpoint 返回；不得进入 Agent List、Profile Projection、AgentFacts、Event 或日志。
 
 ## Profile 披露
 
 Disclosure Policy 在生成 AgentFacts 时强制执行。默认 Private；Restricted 要求 Token Audience 精确匹配，Indexing 只允许 Public AgentFacts Subject。Impression 与 User/Project/Task Fact 永不对外披露。降低披露范围、撤销 Fact、关闭发布与轮换密钥会在事务中撤销当前 Publication。
 
-Message、Tool Result 与 Memory 对 Curator 都是不可信证据。Curator 没有 Tool，只能输出通过 Schema 校验的 Draft，也不能写 Confirmed Fact。Runtime 把 Impression 标记为可能有误的低优先级 Context，不注入原始证据或披露元数据。
+Message、Tool Result 与 Memory 对 Curator 都是不可信证据。Curator 没有 Tool，只能输出通过 Schema 校验的 Draft，也不能写 Confirmed Fact。Harness 把 Impression 标记为可能有误的低优先级 Context，不注入原始证据或披露元数据。
 
 AgentFacts 使用 Ed25519；Private Key 由 32-byte Base64 `AGENT_KEY_ENCRYPTION_KEY` 通过 AES-256-GCM 加密，并绑定 Agent/Key ID。未配置主密钥时内部 Profile/Impression 正常，但发布与密钥操作被阻止。Query Token Secret 只显示一次，数据库只保存 SHA-256 Hash。
 

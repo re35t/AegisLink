@@ -1,11 +1,11 @@
 package conversation
 
-func persistedToolEvent(event *RuntimeToolEvent) (string, map[string]any, bool) {
+func persistedToolEvent(event *HarnessToolEvent) (string, map[string]any, bool) {
 	if event == nil || event.ID == "" {
 		return "", nil, false
 	}
 	switch event.Type {
-	case RuntimeToolStarted:
+	case HarnessToolStarted:
 		if event.Name == "" {
 			return "", nil, false
 		}
@@ -14,12 +14,12 @@ func persistedToolEvent(event *RuntimeToolEvent) (string, map[string]any, bool) 
 			"toolName":   event.Name,
 			"arguments":  event.Arguments,
 		}, true
-	case RuntimeToolCompleted:
+	case HarnessToolCompleted:
 		return "tool.completed", map[string]any{
 			"toolCallId": event.ID,
 			"result":     event.Result,
 		}, true
-	case RuntimeToolFailed:
+	case HarnessToolFailed:
 		return "tool.failed", map[string]any{
 			"toolCallId": event.ID,
 			"error":      event.Error,

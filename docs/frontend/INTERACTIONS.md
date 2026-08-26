@@ -104,7 +104,9 @@ Confirm changes by naming the object and resulting state. Use reversible inline 
 
 ## Agent Profile disclosure
 
-- The owner view separates Overview, Impressions, Facts, and Publication. Impression has correction/dismiss/restore controls but never a Disclosure control; only Confirmed Facts enter policy editing.
+- Configuration places structured Identity and private Custom Instructions together, but saves them independently. The Agent name and description are composed into Runtime identity automatically; editing them must not rewrite owner-authored Instructions.
+- System Prompt reads and writes use only the authenticated owner-scoped Instructions endpoint. The editor preserves drafts on failure, uses optimistic version checks, and offers reload on conflict.
+- The owner view separates Configuration, Profile overview, Impressions, Facts, and Publication. Impression has correction/dismiss/restore controls but never a Disclosure control; only Confirmed Facts enter policy editing.
 - `private` is the default and may only target the local Runtime context. External Agent Facts and Agent Card channels require an explicit non-private visibility.
 - Restricted disclosure requires at least one named audience. Indexing is available only for public items that include the Agent Facts channel.
 - Saving identity or disclosure changes advances the Profile version. A version conflict preserves the draft, explains that the Profile changed elsewhere, and offers reload rather than silently overwriting newer state.

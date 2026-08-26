@@ -213,6 +213,51 @@ func TestAgentProfileEndpointsReturnOwnerViewAndAcceptUpdates(t *testing.T) {
 	}
 }
 
+func TestAgentInstructionsAreOwnerOnlyAndVersioned(t *testing.T) {
+	t.Parallel()
+	service := &fakeService{}
+	router := newTestRouter(service, ModelInfo{})
+
+	unauthenticated := httptest.NewRequest(http.MethodGet, "/api/v1/agents/agent-1/instructions", nil)
+	unauthenticatedResponse := httptest.NewRecorder()
+	router.ServeHTTP(unauthenticatedResponse, unauthenticated)
+	if unauthenticatedResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated status=%d", unauthenticatedResponse.Code)
+	}
+
+	getRequest := httptest.NewRequest(http.MethodGet, "/api/v1/agents/agent-1/instructions", nil)
+	authorize(getRequest)
+	getResponse := httptest.NewRecorder()
+	router.ServeHTTP(getResponse, getRequest)
+	if getResponse.Code != http.StatusOK || !strings.Contains(getResponse.Body.String(), `"systemPrompt":"Be concise."`) {
+		t.Fatalf("unexpected instructions response: status=%d body=%q", getResponse.Code, getResponse.Body.String())
+	}
+
+	patchRequest := httptest.NewRequest(http.MethodPatch, "/api/v1/agents/agent-1/instructions", strings.NewReader(`{
+		"expectedVersion":1,"systemPrompt":"Answer directly."
+	}`))
+	patchRequest.Header.Set("Content-Type", "application/json")
+	authorize(patchRequest)
+	patchResponse := httptest.NewRecorder()
+	router.ServeHTTP(patchResponse, patchRequest)
+	if patchResponse.Code != http.StatusOK || service.instructionsUpdate == nil || service.instructionsUpdate.SystemPrompt != "Answer directly." {
+		t.Fatalf("unexpected instructions update: status=%d body=%q update=%#v", patchResponse.Code, patchResponse.Body.String(), service.instructionsUpdate)
+	}
+}
+
+func TestAgentInstructionsVersionConflictUsesStableError(t *testing.T) {
+	t.Parallel()
+	router := newTestRouter(&fakeService{instructionsError: agent.ErrInstructionsConflict}, ModelInfo{})
+	request := httptest.NewRequest(http.MethodPatch, "/api/v1/agents/agent-1/instructions", strings.NewReader(`{"expectedVersion":1,"systemPrompt":"new"}`))
+	request.Header.Set("Content-Type", "application/json")
+	authorize(request)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "agent_instructions_version_conflict") {
+		t.Fatalf("unexpected instructions conflict: status=%d body=%q", response.Code, response.Body.String())
+	}
+}
+
 func TestAgentProfileVersionConflictUsesStableError(t *testing.T) {
 	t.Parallel()
 	router := newTestRouter(&fakeService{profileError: agent.ErrProfileConflict}, ModelInfo{})
@@ -340,16 +385,18 @@ func TestAGUIRunStreamsProtocolLifecycleAndTextEvents(t *testing.T) {
 }
 
 type fakeService struct {
-	conversationError error
-	profileError      error
-	run               conversation.Run
-	events            []conversation.RunEvent
-	startRequest      *conversation.RunRequest
-	settingsUpdate    *account.SettingsUpdate
-	currentPassword   string
-	newPassword       string
-	profileUpdate     *agent.ProfileUpdate
-	policyChanges     []agent.PolicyChange
+	conversationError  error
+	profileError       error
+	instructionsError  error
+	run                conversation.Run
+	events             []conversation.RunEvent
+	startRequest       *conversation.RunRequest
+	settingsUpdate     *account.SettingsUpdate
+	currentPassword    string
+	newPassword        string
+	profileUpdate      *agent.ProfileUpdate
+	instructionsUpdate *agent.InstructionsUpdate
+	policyChanges      []agent.PolicyChange
 }
 
 func (fake *fakeService) Register(context.Context, string, string, string) (account.AuthResult, error) {
@@ -398,6 +445,19 @@ func (fake *fakeService) Bootstrap(context.Context, string) (agent.Agent, error)
 	return agent.Agent{}, nil
 }
 func (fake *fakeService) List(context.Context, string) ([]agent.Agent, error) { return nil, nil }
+func (fake *fakeService) GetInstructions(context.Context, string, string) (agent.Instructions, error) {
+	if fake.instructionsError != nil {
+		return agent.Instructions{}, fake.instructionsError
+	}
+	return agent.Instructions{AgentID: "agent-1", SystemPrompt: "Be concise.", Version: 1, UpdatedAt: time.Now()}, nil
+}
+func (fake *fakeService) UpdateInstructions(_ context.Context, _, _ string, update agent.InstructionsUpdate) (agent.Instructions, error) {
+	if fake.instructionsError != nil {
+		return agent.Instructions{}, fake.instructionsError
+	}
+	fake.instructionsUpdate = &update
+	return agent.Instructions{AgentID: "agent-1", SystemPrompt: update.SystemPrompt, Version: update.ExpectedVersion + 1, UpdatedAt: time.Now()}, nil
+}
 func (fake *fakeService) Get(context.Context, string, string) (agent.Profile, error) {
 	if fake.profileError != nil {
 		return agent.Profile{}, fake.profileError

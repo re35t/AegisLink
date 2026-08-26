@@ -7,7 +7,7 @@
 REST 负责持久资源与控制操作：
 
 - 认证、Session、Account Settings 与密码修改；
-- Bootstrap、Agent List、Agent Profile、Impression 纠正/生命周期、Fact 审查/撤销与 Disclosure Policy；
+- Bootstrap、Agent List、Owner-only 版本化 Agent Instructions、Agent Profile、Impression 纠正/生命周期、Fact 审查/撤销与 Disclosure Policy；
 - Owner Publication Settings、DNS 验证、签名密钥轮换、一次性 Token 创建与 AgentCard Draft；
 - Agent Memory、Skill Package/Import/Binding、MCP Library 与 Agent Binding；
 - Mention Catalog Projection；

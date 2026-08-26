@@ -130,4 +130,40 @@ describe("API client", () => {
       "/api/v1/agents/agent-one/profile/disclosure-policies",
     );
   });
+
+  it("uses the owner-only versioned Agent instructions contract", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            agentId: "agent-one",
+            systemPrompt: "Be concise.",
+            version: 2,
+            updatedAt: "2026-08-26T00:00:00Z",
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+
+    await api.getAgentInstructions("agent-one");
+    await api.updateAgentInstructions("agent-one", {
+      expectedVersion: 2,
+      systemPrompt: "Answer directly.",
+    });
+
+    expect(fetch.mock.calls[0][0]).toBe(
+      "/api/v1/agents/agent-one/instructions",
+    );
+    expect(fetch.mock.calls[1]).toEqual([
+      "/api/v1/agents/agent-one/instructions",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({
+          expectedVersion: 2,
+          systemPrompt: "Answer directly.",
+        }),
+      }),
+    ]);
+  });
 });

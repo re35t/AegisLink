@@ -11,7 +11,6 @@ import (
 	"github.com/cloudwego/eino-ext/components/model/deepseek"
 	"github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/components/model"
-	"github.com/re35t/AegisLink/internal/config"
 )
 
 var ErrUnsupportedModelDriver = errors.New("unsupported model driver")
@@ -20,7 +19,7 @@ var ErrUnsupportedModelDriver = errors.New("unsupported model driver")
 // Provider SDK types remain inside internal/runtime.
 type ModelProvider interface {
 	Driver() string
-	New(context.Context, config.Model) (model.ToolCallingChatModel, error)
+	New(context.Context, ModelConfig) (model.ToolCallingChatModel, error)
 }
 
 type ModelRegistry struct {
@@ -66,7 +65,7 @@ func (registry *ModelRegistry) Register(provider ModelProvider) error {
 	return nil
 }
 
-func (registry *ModelRegistry) NewModel(ctx context.Context, cfg config.Model) (model.ToolCallingChatModel, error) {
+func (registry *ModelRegistry) NewModel(ctx context.Context, cfg ModelConfig) (model.ToolCallingChatModel, error) {
 	driver := strings.TrimSpace(cfg.Driver)
 	registry.mu.RLock()
 	provider, exists := registry.providers[driver]
@@ -99,7 +98,7 @@ type deepSeekProvider struct{}
 
 func (deepSeekProvider) Driver() string { return "deepseek" }
 
-func (deepSeekProvider) New(ctx context.Context, cfg config.Model) (model.ToolCallingChatModel, error) {
+func (deepSeekProvider) New(ctx context.Context, cfg ModelConfig) (model.ToolCallingChatModel, error) {
 	return deepseek.NewChatModel(ctx, &deepseek.ChatModelConfig{
 		APIKey: cfg.APIKey, BaseURL: cfg.BaseURL, Model: cfg.Name, Timeout: cfg.Timeout, MaxTokens: cfg.MaxTokens,
 	})
@@ -109,7 +108,7 @@ type openAICompatibleProvider struct{}
 
 func (openAICompatibleProvider) Driver() string { return "openai-compatible" }
 
-func (openAICompatibleProvider) New(ctx context.Context, cfg config.Model) (model.ToolCallingChatModel, error) {
+func (openAICompatibleProvider) New(ctx context.Context, cfg ModelConfig) (model.ToolCallingChatModel, error) {
 	maxTokens := cfg.MaxTokens
 	return openai.NewChatModel(ctx, &openai.ChatModelConfig{
 		APIKey: cfg.APIKey, BaseURL: cfg.BaseURL, Model: cfg.Name, Timeout: cfg.Timeout, MaxTokens: &maxTokens,

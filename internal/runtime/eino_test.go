@@ -7,23 +7,21 @@ import (
 	"testing"
 
 	"github.com/cloudwego/eino/components/model"
-	"github.com/cloudwego/eino/components/tool"
-	toolutils "github.com/cloudwego/eino/components/tool/utils"
 	"github.com/cloudwego/eino/schema"
-	"github.com/re35t/AegisLink/internal/agent"
-	"github.com/re35t/AegisLink/internal/conversation"
 )
+
+var errSelectedSkillMismatch = errors.New("selected skill mismatch")
 
 func TestEinoStreamsAssistantDeltasWithConversationHistory(t *testing.T) {
 	t.Parallel()
 	fake := &fakeModel{}
 	runtime := NewWithModel(fake)
-	outputs := runtime.Stream(t.Context(), conversation.RuntimeInput{
-		Agent: agent.Agent{Name: "Aegis", SystemPrompt: "Be concise."},
-		Messages: []conversation.Message{
-			{Role: "user", Content: "hello"},
-			{Role: "assistant", Content: "hi"},
-			{Role: "user", Content: "continue"},
+	outputs := runtime.Run(t.Context(), Input{
+		Agent: Agent{Name: "Aegis"}, Instruction: "Be concise.",
+		Messages: []Message{
+			{Role: RoleUser, Content: "hello"},
+			{Role: RoleAssistant, Content: "hi"},
+			{Role: RoleUser, Content: "continue"},
 		},
 	})
 	var answer strings.Builder
@@ -39,28 +37,69 @@ func TestEinoStreamsAssistantDeltasWithConversationHistory(t *testing.T) {
 	if len(fake.input) != 4 || fake.input[0].Role != schema.System || fake.input[3].Content != "continue" {
 		t.Fatalf("unexpected model input: %#v", fake.input)
 	}
+	if fake.input[0].Content != "Be concise." {
+		t.Fatalf("system instruction = %q", fake.input[0].Content)
+	}
+}
+
+func TestEinoStreamsSingleShotResponseWithOneIteration(t *testing.T) {
+	t.Parallel()
+	fake := &fakeModel{}
+	agentRuntime := NewWithModel(fake, Options{MaxIterations: 1})
+
+	var answer strings.Builder
+	for output := range agentRuntime.Run(t.Context(), Input{
+		Agent: Agent{Name: "curator"}, Instruction: "Return JSON only.",
+		Messages: []Message{{Role: RoleUser, Content: "{}"}},
+	}) {
+		if output.Err != nil {
+			t.Fatalf("unexpected runtime error: %v", output.Err)
+		}
+		answer.WriteString(output.Delta)
+	}
+	if answer.String() != "hello from eino" {
+		t.Fatalf("unexpected answer %q", answer.String())
+	}
+}
+
+func TestEinoRunsSingleTurnWithoutReActOrTools(t *testing.T) {
+	t.Parallel()
+	model := &singleTurnModel{}
+	agentRuntime := NewWithModel(model, Options{MaxIterations: 1})
+
+	var answer strings.Builder
+	for output := range agentRuntime.Run(t.Context(), Input{
+		ExecutionMode: ExecutionModeSingleTurn,
+		Instruction:   "Return JSON only.",
+		Messages:      []Message{{Role: RoleUser, Content: "{}"}},
+		ToolChoice:    ToolChoice{Mode: ToolChoiceAuto},
+	}) {
+		if output.Err != nil {
+			t.Fatalf("unexpected runtime error: %v", output.Err)
+		}
+		answer.WriteString(output.Delta)
+	}
+	if answer.String() != `{"impressions":[],"facts":[]}` {
+		t.Fatalf("unexpected answer %q", answer.String())
+	}
+	if model.streamCalled || len(model.input) != 2 || model.input[0].Role != schema.System {
+		t.Fatalf("single-turn model input = %#v, streamCalled=%v", model.input, model.streamCalled)
+	}
 }
 
 func TestEinoRunsReActToolLoop(t *testing.T) {
 	t.Parallel()
-	echoTool, err := toolutils.InferTool(
-		"echo",
-		"Echo text for a deterministic ReAct test.",
-		func(_ context.Context, input *echoInput) (*echoOutput, error) {
-			return &echoOutput{Text: input.Text}, nil
-		},
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
+	echoTool := Tool{Name: "echo", Description: "Echo text for a deterministic ReAct test.", InputSchema: []byte(`{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}`), Invoke: func(_ context.Context, arguments string) (string, error) {
+		return arguments, nil
+	}}
 	fake := &reactModel{}
-	runtime := NewWithModel(fake, Options{Tools: []tool.BaseTool{echoTool}, MaxIterations: 4})
+	runtime := NewWithModel(fake, Options{MaxIterations: 4})
 
 	var answer strings.Builder
-	var toolEvents []*conversation.RuntimeToolEvent
-	for output := range runtime.Stream(t.Context(), conversation.RuntimeInput{
-		Agent:    agent.Agent{Name: "Aegis", SystemPrompt: "Use tools when requested."},
-		Messages: []conversation.Message{{Role: "user", Content: "Echo hello from tool."}},
+	var toolEvents []*ToolEvent
+	for output := range runtime.Run(t.Context(), Input{
+		Agent: Agent{Name: "Aegis"}, Instruction: "Use tools when requested.",
+		Messages: []Message{{Role: RoleUser, Content: "Echo hello from tool."}}, Tools: []Tool{echoTool},
 	}) {
 		if output.Err != nil {
 			t.Fatalf("unexpected runtime error: %v", output.Err)
@@ -74,19 +113,19 @@ func TestEinoRunsReActToolLoop(t *testing.T) {
 	if answer.String() != "tool result observed" {
 		t.Fatalf("unexpected answer %q", answer.String())
 	}
-	if !fake.sawToolResult || !hasToolNamed(fake.tools, "echo") || !hasToolNamed(fake.tools, "discover_capabilities") {
+	if !fake.sawToolResult || !hasToolNamed(fake.tools, "echo") {
 		t.Fatalf("ReAct loop did not bind and observe the tool result: %#v", fake)
 	}
 	if len(toolEvents) != 2 {
 		t.Fatalf("tool lifecycle events = %#v", toolEvents)
 	}
-	if toolEvents[0].Type != conversation.RuntimeToolStarted ||
+	if toolEvents[0].Type != ToolStarted ||
 		toolEvents[0].ID != "call-echo" ||
 		toolEvents[0].Name != "echo" ||
 		toolEvents[0].Arguments != `{"text":"hello from tool"}` {
 		t.Fatalf("unexpected tool start event: %#v", toolEvents[0])
 	}
-	if toolEvents[1].Type != conversation.RuntimeToolCompleted ||
+	if toolEvents[1].Type != ToolCompleted ||
 		toolEvents[1].ID != "call-echo" ||
 		!strings.Contains(toolEvents[1].Result, "hello from tool") {
 		t.Fatalf("unexpected tool completion event: %#v", toolEvents[1])
@@ -95,19 +134,12 @@ func TestEinoRunsReActToolLoop(t *testing.T) {
 
 func TestEinoForcesOnlyTheFirstModelDecision(t *testing.T) {
 	t.Parallel()
-	echoTool, err := toolutils.InferTool(
-		"echo", "Echo text", func(_ context.Context, input *echoInput) (*echoOutput, error) {
-			return &echoOutput{Text: input.Text}, nil
-		},
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
+	echoTool := Tool{Name: "echo", Description: "Echo text", InputSchema: []byte(`{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}`), Invoke: func(_ context.Context, arguments string) (string, error) { return arguments, nil }}
 	fake := &reactModel{}
-	runtime := NewWithModel(fake, Options{Tools: []tool.BaseTool{echoTool}, MaxIterations: 4})
-	for output := range runtime.Stream(t.Context(), conversation.RuntimeInput{
-		Agent: agent.Agent{Name: "Aegis"}, Messages: []conversation.Message{{Role: "user", Content: "echo"}},
-		Policy: conversation.ExecutionPolicy{Mode: "force-tool-once", QualifiedToolName: "echo"},
+	runtime := NewWithModel(fake, Options{MaxIterations: 4})
+	for output := range runtime.Run(t.Context(), Input{
+		Agent: Agent{Name: "Aegis"}, Messages: []Message{{Role: RoleUser, Content: "echo"}}, Tools: []Tool{echoTool},
+		ToolChoice: ToolChoice{Mode: ToolChoiceForceOnce, Name: "echo"},
 	}) {
 		if output.Err != nil {
 			t.Fatalf("unexpected runtime error: %v", output.Err)
@@ -132,15 +164,15 @@ func TestEinoRejectsIgnoredAndMismatchedForcedTool(t *testing.T) {
 		model    model.ToolCallingChatModel
 		expected error
 	}{
-		{name: "ignored", model: &fakeModel{}, expected: conversation.ErrForcedToolNotCalled},
-		{name: "mismatch", model: &wrongToolModel{}, expected: conversation.ErrForcedToolMismatch},
+		{name: "ignored", model: &fakeModel{}, expected: ErrForcedToolNotCalled},
+		{name: "mismatch", model: &wrongToolModel{}, expected: ErrForcedToolMismatch},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			runtime := NewWithModel(test.model)
 			var runtimeErr error
-			for output := range runtime.Stream(t.Context(), conversation.RuntimeInput{
-				Agent: agent.Agent{Name: "Aegis"}, Messages: []conversation.Message{{Role: "user", Content: "use it"}},
-				Policy: conversation.ExecutionPolicy{Mode: "force-tool-once", QualifiedToolName: "expected"},
+			for output := range runtime.Run(t.Context(), Input{
+				Agent: Agent{Name: "Aegis"}, Messages: []Message{{Role: RoleUser, Content: "use it"}},
+				ToolChoice: ToolChoice{Mode: ToolChoiceForceOnce, Name: "expected"},
 			}) {
 				if output.Err != nil {
 					runtimeErr = output.Err
@@ -161,20 +193,21 @@ func TestEinoForcesSelectedSkillAndValidatesItsName(t *testing.T) {
 		expected  error
 	}{
 		{name: "selected", modelName: "go-review"},
-		{name: "different skill", modelName: "other-skill", expected: conversation.ErrSelectedSkillMismatch},
+		{name: "different skill", modelName: "other-skill", expected: errSelectedSkillMismatch},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			fake := &selectedSkillModel{skillName: test.modelName}
 			runtime := NewWithModel(fake, Options{MaxIterations: 4})
 			var runtimeErr error
-			for output := range runtime.Stream(t.Context(), conversation.RuntimeInput{
-				Agent: agent.Agent{Name: "Aegis"}, Messages: []conversation.Message{{Role: "user", Content: "review this"}},
-				Context: conversation.AgentContext{Skills: []conversation.RuntimeSkill{{
-					Name: "go-review", Description: "Review Go", Content: "Review safely.",
-				}}},
-				Policy: conversation.ExecutionPolicy{
-					Mode: "use-skill-once", SkillName: "go-review", QualifiedToolName: "load_skill",
-				},
+			for output := range runtime.Run(t.Context(), Input{
+				Agent: Agent{Name: "Aegis"}, Messages: []Message{{Role: RoleUser, Content: "review this"}},
+				Tools: []Tool{{Name: "load_skill", InputSchema: []byte(`{"type":"object"}`), Invoke: func(context.Context, string) (string, error) { return `{}`, nil }}},
+				ToolChoice: ToolChoice{Mode: ToolChoiceForceOnce, Name: "load_skill", ValidateArguments: func(arguments string) error {
+					if strings.Contains(arguments, `"go-review"`) {
+						return nil
+					}
+					return errSelectedSkillMismatch
+				}},
 			}) {
 				if output.Err != nil {
 					runtimeErr = output.Err
@@ -193,6 +226,25 @@ func TestEinoForcesSelectedSkillAndValidatesItsName(t *testing.T) {
 type fakeModel struct {
 	input []*schema.Message
 	tools []*schema.ToolInfo
+}
+
+type singleTurnModel struct {
+	input        []*schema.Message
+	streamCalled bool
+}
+
+func (model *singleTurnModel) Generate(_ context.Context, input []*schema.Message, _ ...model.Option) (*schema.Message, error) {
+	model.input = input
+	return schema.AssistantMessage(`{"impressions":[],"facts":[]}`, nil), nil
+}
+
+func (model *singleTurnModel) Stream(context.Context, []*schema.Message, ...model.Option) (*schema.StreamReader[*schema.Message], error) {
+	model.streamCalled = true
+	return nil, errors.New("single-turn runtime must not stream")
+}
+
+func (model *singleTurnModel) WithTools([]*schema.ToolInfo) (model.ToolCallingChatModel, error) {
+	return model, nil
 }
 
 func hasToolNamed(tools []*schema.ToolInfo, name string) bool {
@@ -219,14 +271,6 @@ func (fake *fakeModel) Stream(_ context.Context, input []*schema.Message, _ ...m
 func (fake *fakeModel) WithTools(tools []*schema.ToolInfo) (model.ToolCallingChatModel, error) {
 	fake.tools = tools
 	return fake, nil
-}
-
-type echoInput struct {
-	Text string `json:"text" jsonschema:"required,description=text to echo"`
-}
-
-type echoOutput struct {
-	Text string `json:"text"`
 }
 
 type reactModel struct {

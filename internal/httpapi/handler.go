@@ -60,6 +60,10 @@ func (handler *handler) handleError(c *gin.Context, err error) {
 		writeError(c, http.StatusNotFound, "profile_subject_not_found", "the requested profile item was not found")
 	case errors.Is(err, agent.ErrProfileConflict):
 		writeError(c, http.StatusConflict, "profile_version_conflict", "the Agent Profile changed; reload it before saving again")
+	case errors.Is(err, agent.ErrInstructionsConflict):
+		writeError(c, http.StatusConflict, "agent_instructions_version_conflict", "the Agent instructions changed; reload them before saving again")
+	case errors.Is(err, agent.ErrInvalidInstructions):
+		writeError(c, http.StatusBadRequest, "invalid_agent_instructions", "the Agent instructions are too long or have an invalid version")
 	case errors.Is(err, agent.ErrInvalidProfile):
 		writeError(c, http.StatusBadRequest, "invalid_agent_profile", "the Agent identity or disclosure policy is invalid")
 	case errors.Is(err, impression.ErrNotFound), errors.Is(err, discovery.ErrNotFound):

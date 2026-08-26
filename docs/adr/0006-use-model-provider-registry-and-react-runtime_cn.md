@@ -1,6 +1,6 @@
 # ADR 0006：采用 Model Provider Registry 与 Eino ReAct Runtime
 
-状态：已接受并实现。
+状态：已接受并实现；Runtime/Harness 归属由 [ADR 0015](0015-separate-agent-harness-from-eino-runtime_cn.md) 修订。
 
 日期：2026-08-22。
 
@@ -16,13 +16,16 @@ ADR 0004 确定使用进程内 Eino Runtime，但首版模型创建依赖硬编�
 - 当前模型配置增加稳定的 `MODEL_ID`，为后续多个模型 Profile 和按 Agent 选择模型保留标识。
 - DeepSeek 继续作为默认 Provider，当前默认模型名为 `deepseek-v4-flash`；API key 只从 `MODEL_API_KEY` 读取。
 - Eino `ChatModelAgent` 使用可配置的 `AGENT_MAX_ITERATIONS`，默认 8，执行模型 → 工具 → 模型的 ReAct 循环。
-- 第一版内置只读 `get_current_time` 工具，使用 IANA timezone 并校验输入，用于验证真实工具循环。
-- 系统 Instruction 明确要求不能虚构工具结果，也不能向用户暴露私有 chain-of-thought。
+- 第一版内置只读 `get_current_time` 工具，使用 IANA timezone 并校验输入，用于验证真实工具循环；ADR 0015 后将该产品 Tool 迁入 Harness。
+- 系统 Instruction 明确要求不能虚构工具结果，也不能向用户暴露私有 chain-of-thought；ADR 0015 后将产品指令组装迁入 Harness。
 
 ## 边界
 
 ```text
-internal/conversation.Runtime
+internal/conversation.Harness
+             │
+             ▼
+internal/harness
              │
              ▼
 internal/runtime.Eino
@@ -30,7 +33,6 @@ internal/runtime.Eino
   │   ├── deepseek Provider
   │   └── openai-compatible Provider
   └── Eino ChatModelAgent
-      └── built-in read-only tools
 ```
 
 - Eino、DeepSeek 和 OpenAI-compatible SDK 类型不能离开 `internal/runtime`。
@@ -41,7 +43,7 @@ internal/runtime.Eino
 ## 结果
 
 - 基础 Agent 已能执行多轮 ReAct 工具调用，而不再是单轮 Chat Completion 包装。
-- DeepSeek 和 OpenAI-compatible 共用同一 Conversation Runtime 接口。
+- DeepSeek 和 OpenAI-compatible 在 Agent Harness 后共用同一个领域无关 Runtime 接口。
 - `/api/v1/bootstrap` 返回稳定 model ID、driver、name 和 `streaming`/`tool-calling` capabilities。
 - 自动化测试覆盖 Provider 注册、未知 driver、工具输入校验、ReAct 工具结果回传、流式输出和显式真实 DeepSeek smoke。
 - 未来接入新的 Provider 时，在 `internal/runtime` 注册实现并增加配置即可；模型选择与故障切换另行设计。

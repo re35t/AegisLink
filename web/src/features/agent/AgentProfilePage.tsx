@@ -4,6 +4,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import {
   Bot,
   ChevronLeft,
+  FileText,
   Image,
   LogOut,
   Menu,
@@ -15,6 +16,7 @@ import {
 import {
   APIError,
   api,
+  type AgentInstructions,
   type AgentProfile,
   type DisclosurePolicyChange,
 } from "../../api/client";
@@ -30,6 +32,7 @@ import {
 } from "./AgentProfileSections";
 
 export type AgentProfileSection =
+  | "configuration"
   | "overview"
   | "impressions"
   | "facts"
@@ -37,7 +40,7 @@ export type AgentProfileSection =
 
 export function AgentProfilePage({
   agentId,
-  section = "overview",
+  section = "configuration",
 }: {
   agentId?: string;
   section?: AgentProfileSection;
@@ -93,8 +96,8 @@ export function AgentProfilePage({
         <h1>{t("Agent Profile", "Agent Profile")}</h1>
         <p>
           {t(
-            "Stable identity, effective capabilities, and explicit disclosure boundaries.",
-            "稳定身份、有效能力与明确的披露边界。",
+            "Configure identity and private instructions, then review the Agent's self model.",
+            "配置身份与私有指令，并审查 Agent 的自我模型。",
           )}
         </p>
       </div>
@@ -124,27 +127,35 @@ export function AgentProfilePage({
         className="agent-profile-sections"
         aria-label={t("Agent Profile sections", "Agent Profile 分区")}
       >
-        {(["overview", "impressions", "facts", "publication"] as const).map(
-          (item) => (
-            <Link
-              key={item}
-              to="/settings/agent-profile"
-              search={{ agentId: selectedAgentId, section: item }}
-              className={section === item ? "active" : ""}
-            >
-              {item === "overview"
-                ? t("Overview", "概览")
+        {(
+          [
+            "configuration",
+            "overview",
+            "impressions",
+            "facts",
+            "publication",
+          ] as const
+        ).map((item) => (
+          <Link
+            key={item}
+            to="/settings/agent-profile"
+            search={{ agentId: selectedAgentId, section: item }}
+            className={section === item ? "active" : ""}
+          >
+            {item === "configuration"
+              ? t("Configuration", "配置")
+              : item === "overview"
+                ? t("Profile", "Profile")
                 : item === "impressions"
                   ? "Impressions"
                   : item === "facts"
                     ? t("Facts", "事实")
                     : t("Publication", "发布")}
-              {item === "facts" && profile.data?.pendingFactCount ? (
-                <span>{profile.data.pendingFactCount}</span>
-              ) : null}
-            </Link>
-          ),
-        )}
+            {item === "facts" && profile.data?.pendingFactCount ? (
+              <span>{profile.data.pendingFactCount}</span>
+            ) : null}
+          </Link>
+        ))}
       </nav>
       <div className="capability-scope">
         <ShieldCheck size={17} />
@@ -195,8 +206,8 @@ export function AgentProfilePage({
             <h1>{t("Agent Profile", "Agent Profile")}</h1>
             <p>
               {t(
-                "Review what this Agent says about itself and control what may leave its private scope.",
-                "审查这个 Agent 如何描述自己，并控制哪些信息可以离开私有范围。",
+                "Configure this Agent, review its private self model, and control what may leave its scope.",
+                "配置这个 Agent、审查其私有自我模型，并控制哪些信息可以离开其范围。",
               )}
             </p>
           </div>
@@ -267,6 +278,21 @@ function AgentProfileContent({
       }),
     onSuccess: (next) => updateProfileCaches(agentId, next),
   });
+  const instructions = useQuery({
+    queryKey: ["agent-instructions", agentId],
+    queryFn: () => api.getAgentInstructions(agentId),
+    enabled: section === "configuration",
+    retry: false,
+  });
+  const instructionUpdate = useMutation({
+    mutationFn: (systemPrompt: string) =>
+      api.updateAgentInstructions(agentId, {
+        expectedVersion: instructions.data!.version,
+        systemPrompt,
+      }),
+    onSuccess: (next) =>
+      queryClient.setQueryData(["agent-instructions", agentId], next),
+  });
   const disclosure = useMutation({
     mutationFn: (changes: DisclosurePolicyChange[]) =>
       api.updateAgentProfileDisclosurePolicies(agentId, {
@@ -278,7 +304,7 @@ function AgentProfileContent({
 
   return (
     <div className="agent-profile-content">
-      {section === "overview" && (
+      {section === "configuration" && (
         <>
           <IdentityEditor
             profile={profile}
@@ -286,9 +312,33 @@ function AgentProfileContent({
             error={profileError(identity.error, t)}
             onSave={(input) => identity.mutate(input)}
           />
-          <OverviewSection profile={profile} />
+          {instructions.isPending ? (
+            <InstructionsLoading />
+          ) : instructions.isError ? (
+            <InstructionsLoadError
+              error={instructions.error}
+              onRetry={() => void instructions.refetch()}
+            />
+          ) : (
+            <InstructionsEditor
+              instructions={instructions.data}
+              pending={instructionUpdate.isPending}
+              error={instructionsError(instructionUpdate.error, t)}
+              conflict={
+                instructionUpdate.error instanceof APIError &&
+                instructionUpdate.error.code ===
+                  "agent_instructions_version_conflict"
+              }
+              onReload={() => {
+                instructionUpdate.reset();
+                void instructions.refetch();
+              }}
+              onSave={(systemPrompt) => instructionUpdate.mutate(systemPrompt)}
+            />
+          )}
         </>
       )}
+      {section === "overview" && <OverviewSection profile={profile} />}
       {section === "impressions" && (
         <ImpressionsSection agentId={agentId} profile={profile} />
       )}
@@ -310,6 +360,141 @@ function AgentProfileContent({
       )}
       {section === "publication" && <PublicationSection agentId={agentId} />}
     </div>
+  );
+}
+
+function InstructionsLoading() {
+  const { t } = useInterfacePreferences();
+  return (
+    <section className="agent-profile-section" aria-live="polite">
+      <div className="agent-profile-loading" role="status">
+        <span />
+        <span />
+        {t("Loading private instructions…", "正在加载私有指令…")}
+      </div>
+    </section>
+  );
+}
+
+function InstructionsLoadError({
+  error,
+  onRetry,
+}: {
+  error: unknown;
+  onRetry(): void;
+}) {
+  const { t } = useInterfacePreferences();
+  return (
+    <section className="agent-profile-section">
+      <div className="settings-error" role="alert">
+        <strong>{t("Instructions could not be loaded", "无法加载指令")}</strong>
+        <span>{instructionsError(error, t)}</span>
+        <button type="button" onClick={onRetry}>
+          <RefreshCw size={15} />
+          {t("Retry", "重试")}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+export function InstructionsEditor({
+  instructions,
+  pending,
+  error,
+  conflict,
+  onReload,
+  onSave,
+}: {
+  instructions: AgentInstructions;
+  pending: boolean;
+  error: string;
+  conflict: boolean;
+  onReload(): void;
+  onSave(systemPrompt: string): void;
+}) {
+  const { t } = useInterfacePreferences();
+  const [systemPrompt, setSystemPrompt] = useState(instructions.systemPrompt);
+
+  useEffect(() => {
+    setSystemPrompt(instructions.systemPrompt);
+  }, [instructions.agentId, instructions.systemPrompt, instructions.version]);
+
+  const normalized = systemPrompt.trim();
+  const dirty = normalized !== instructions.systemPrompt;
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (dirty) onSave(normalized);
+  };
+
+  return (
+    <section
+      className="agent-profile-section"
+      aria-labelledby="agent-instructions-title"
+    >
+      <div className="agent-profile-section-heading">
+        <div>
+          <span className="eyebrow">Behavior</span>
+          <h2 id="agent-instructions-title">
+            {t("Custom instructions", "自定义指令")}
+          </h2>
+          <p>
+            {t(
+              "Private owner instructions applied to every Run. Identity is composed automatically from the Agent name and description.",
+              "应用于每次 Run 的所有者私有指令；Identity 会根据 Agent 名称与描述自动组合。",
+            )}
+          </p>
+        </div>
+        <span className="profile-version">v{instructions.version}</span>
+      </div>
+      <form className="agent-profile-instructions-form" onSubmit={submit}>
+        <label htmlFor="agent-system-prompt">
+          <span>{t("System prompt", "System Prompt")}</span>
+          <span className="profile-prompt-input">
+            <FileText size={16} aria-hidden="true" />
+            <textarea
+              id="agent-system-prompt"
+              rows={10}
+              maxLength={32768}
+              value={systemPrompt}
+              disabled={pending}
+              aria-describedby="agent-instructions-help"
+              onChange={(event) => setSystemPrompt(event.target.value)}
+            />
+          </span>
+        </label>
+        <small id="agent-instructions-help">
+          {t(
+            "Never included in Agent Profile, AgentFacts, Run events, or logs.",
+            "不会进入 Agent Profile、AgentFacts、Run Event 或日志。",
+          )}{" "}
+          {systemPrompt.length.toLocaleString()}/32,768
+        </small>
+        <div className="profile-form-actions">
+          <span className={error ? "inline-error" : ""} aria-live="polite">
+            {pending
+              ? t("Saving instructions…", "正在保存指令…")
+              : error ||
+                (!dirty &&
+                  t("Instructions are up to date.", "指令已是最新状态。"))}
+          </span>
+          {conflict && (
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={onReload}
+            >
+              <RefreshCw size={15} />
+              {t("Reload", "重新加载")}
+            </button>
+          )}
+          <button type="submit" disabled={pending || !dirty}>
+            <Save size={16} />
+            {t("Save instructions", "保存指令")}
+          </button>
+        </div>
+      </form>
+    </section>
   );
 }
 
@@ -480,6 +665,35 @@ function profileError(
         return t(
           "Check the identity fields and disclosure combinations.",
           "请检查身份字段与披露策略组合。",
+        );
+      case "resource_not_found":
+        return t(
+          "This Agent is unavailable or is not owned by your account.",
+          "该 Agent 不存在，或不属于当前账户。",
+        );
+    }
+  }
+  return error instanceof Error
+    ? error.message
+    : t("The request could not be completed.", "无法完成请求。");
+}
+
+function instructionsError(
+  error: unknown,
+  t: (english: string, chinese: string) => string,
+) {
+  if (!error) return "";
+  if (error instanceof APIError) {
+    switch (error.code) {
+      case "agent_instructions_version_conflict":
+        return t(
+          "These instructions changed elsewhere. Reload them before saving again.",
+          "这些指令已在其他位置发生变化，请重新加载后再保存。",
+        );
+      case "invalid_agent_instructions":
+        return t(
+          "Keep the instructions within 32,768 characters.",
+          "请将指令控制在 32,768 个字符以内。",
         );
       case "resource_not_found":
         return t(

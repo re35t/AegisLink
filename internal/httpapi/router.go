@@ -35,6 +35,8 @@ type AccountService interface {
 type AgentService interface {
 	Bootstrap(context.Context, string) (agent.Agent, error)
 	List(context.Context, string) ([]agent.Agent, error)
+	GetInstructions(context.Context, string, string) (agent.Instructions, error)
+	UpdateInstructions(context.Context, string, string, agent.InstructionsUpdate) (agent.Instructions, error)
 }
 
 type AgentProfileService interface {
@@ -185,6 +187,8 @@ func NewRouter(dependencies Dependencies, webOrigin string, auth AuthConfig, mod
 	protected.GET("/bootstrap", handler.bootstrap)
 	protected.POST("/ag-ui", handler.runAgent)
 	protected.GET("/agents", handler.listAgents)
+	protected.GET("/agents/:agentId/instructions", handler.getAgentInstructions)
+	protected.PATCH("/agents/:agentId/instructions", handler.updateAgentInstructions)
 	protected.GET("/agents/:agentId/profile", handler.getAgentProfile)
 	protected.PATCH("/agents/:agentId/profile", handler.updateAgentProfile)
 	protected.PATCH("/agents/:agentId/profile/disclosure-policies", handler.updateAgentProfileDisclosurePolicies)

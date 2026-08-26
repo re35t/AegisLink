@@ -186,6 +186,24 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/agents/{agentId}/instructions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    get: operations["getAgentInstructions"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch: operations["updateAgentInstructions"];
+    trace?: never;
+  };
   "/api/v1/agents/{agentId}/profile": {
     parameters: {
       query?: never;
@@ -920,6 +938,19 @@ export interface components {
       avatarUrl: string;
       humanLinked: boolean;
       disclosure: components["schemas"]["DisclosurePolicy"];
+    };
+    AgentInstructions: {
+      agentId: string;
+      systemPrompt: string;
+      /** Format: int64 */
+      version: number;
+      /** Format: date-time */
+      updatedAt: string;
+    };
+    UpdateAgentInstructionsRequest: {
+      /** Format: int64 */
+      expectedVersion: number;
+      systemPrompt: string;
     };
     AgentProfileCapability: {
       id: string;
@@ -1824,6 +1855,58 @@ export interface operations {
           };
         };
       };
+    };
+  };
+  getAgentInstructions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Owner-only editable instructions for the Agent */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentInstructions"];
+        };
+      };
+      404: components["responses"]["Error"];
+    };
+  };
+  updateAgentInstructions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["UpdateAgentInstructionsRequest"];
+      };
+    };
+    responses: {
+      /** @description Agent instructions updated */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentInstructions"];
+        };
+      };
+      400: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
     };
   };
   getAgentProfile: {

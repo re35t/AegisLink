@@ -6,7 +6,7 @@ The authoritative schema is the ordered SQL under [`../../migrations`](../../mig
 
 - `human_principals` is the authorization and ownership root.
 - `user_accounts` owns email/password login state; `account_sessions` stores hashed session tokens; `user_preferences` stores explicit language/theme values.
-- `agents` belongs to one Human Principal and is canonical for Agent name, description, and system prompt.
+- `agents` belongs to one Human Principal and is canonical for Agent name, description, and the separately versioned private system prompt. Runtime composes name and description as structured identity data instead of copying them into the stored prompt.
 - Registration creates Account, Principal, default Agent, preferences, and Agent Profile in one transaction.
 
 ## Agent Profile

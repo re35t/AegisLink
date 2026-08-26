@@ -27,19 +27,15 @@ func (service *Service) execute(ctx context.Context, principalID string, run Run
 		service.finishFailed(principalID, run.ID, "agent_load_failed", false)
 		return
 	}
-	currentMessage := ""
-	if len(detail.Messages) > 0 {
-		currentMessage = detail.Messages[len(detail.Messages)-1].Content
-	}
-	agentContext, err := service.context.Resolve(ctx, principalID, agentRecord.ID, ContextRequest{CurrentMessage: currentMessage})
+	outputs, err := service.harness.Run(ctx, HarnessInput{PrincipalID: principalID, Agent: agentRecord, Messages: detail.Messages, Policy: run.ExecutionPolicy})
 	if err != nil {
-		service.logger.Error("resolve agent context", "runId", run.ID, "error", err)
+		service.logger.Error("prepare agent harness", "runId", run.ID, "error", err)
 		service.finishFailed(principalID, run.ID, "agent_context_load_failed", false)
 		return
 	}
 
 	var answer strings.Builder
-	for output := range service.runtime.Stream(ctx, RuntimeInput{Agent: agentRecord, Messages: detail.Messages, Context: agentContext, Policy: run.ExecutionPolicy}) {
+	for output := range outputs {
 		if output.Err != nil {
 			if errors.Is(output.Err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
 				service.finishFailed(principalID, run.ID, "cancelled_by_user", true)

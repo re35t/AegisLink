@@ -21,7 +21,7 @@
 | Global visual rules             | `styles.css`                                                         | Extract tokens and feature styles incrementally; do not add a styling framework for convenience                                         |
 | Account settings                | `features/settings/SettingsPage.tsx`                                 | Reuse for profile, language/theme preferences, password change states, and responsive settings navigation                               |
 | Interface preferences           | `features/settings/preferences.tsx`                                  | Read the Query-backed server preference and derive document language/theme; do not mirror it into another store                         |
-| Agent Profile                   | `features/agent/AgentProfilePage.tsx` + `DisclosurePolicyEditor.tsx` | Keep identity and policy mutations Query-backed; aggregate server-projected capabilities rather than duplicating Skill/MCP state        |
+| Agent Profile                   | `features/agent/AgentProfilePage.tsx` + `DisclosurePolicyEditor.tsx` | Keep Identity, private Instructions, and policy mutations Query-backed; never copy Instructions into Profile or capability projections   |
 
 ## Reuse decision
 

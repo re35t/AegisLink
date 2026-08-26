@@ -15,7 +15,7 @@ MCP 的所有权与绑定模型已由 [ADR 0011](0011-user-mcp-library-agent-bin
 - 所有管理 API 使用 `/agents/{agentId}/...`，服务端从 session 取得 `principal_id`，并同时校验 Agent ownership；浏览器不能提交或覆盖 Principal ID。
 - `memories`、`mcp_servers` 直接保存 `owner_principal_id + agent_id`；所有查询同时使用两者。`mcp_tools` 通过所属 Server 继承相同作用域。
 - Skill Package 和 immutable Version 属于 Principal，`agent_skills` 保存每个 Agent 独立选择的 Version 与启用状态。同名 Package 可有多个内容 hash 不同的 Version，Agent A 选择 v1 不会被 Agent B 安装 v2 覆盖。
-- Conversation Runtime 根据权威 Conversation 所属 Agent 解析 Memory、enabled Skills 和 MCP Tools，前端传入的历史或 Agent ID 不能替换服务端归属。
+- Agent Harness 根据权威 Conversation 所属 Agent 解析 Memory、enabled Skills 和 MCP Tools，前端传入的历史或 Agent ID 不能替换服务端归属。
 - Memory V0 采用显式、可编辑、可确认和可遗忘的 PostgreSQL 记录；暂不自动抽取全部聊天，也不把完整历史等同于长期记忆。
 - Skills V0 校验 Agent Skills `SKILL.md` 的 `name`/`description` frontmatter。Runtime 先看到元数据，只有任务匹配时才通过 `load_skill` 取得完整内容，采用渐进式披露。
 - MCP V0 使用官方 Go SDK 与 Streamable HTTP。URL 默认只允许不含 userinfo、query 或 fragment 的 HTTPS，禁用 redirect/proxy 并阻止解析到私网、回环、链路本地等地址；本地开发例外必须显式设置 `MCP_ALLOW_PRIVATE_NETWORKS=true`。
@@ -33,16 +33,16 @@ personal agent
   └── mcp_servers ── mcp_tools
         │
         ▼ resolve per run
-conversation.AgentContext
+internal/harness
   ├── memory context
   ├── skill catalog + load_skill
   └── enabled read-only MCP tools
         │
         ▼
-internal/runtime.Eino
+internal/runtime -> Eino
 ```
 
-Gin 和 cookie/session 类型只存在于 `internal/httpapi`/account 边界；Memory、Skills、MCP service 只使用 `context.Context`、Principal ID、Agent ID 和领域类型。MCP SDK 类型只留在 `internal/mcp`，Eino 动态工具类型只留在 `internal/runtime`。
+Gin 和 cookie/session 类型只存在于 `internal/httpapi`/account 边界；Memory、Skills、MCP service 只使用 `context.Context`、Principal ID、Agent ID 和领域类型。MCP SDK 类型只留在 `internal/mcp`，Eino 类型只留在 `internal/runtime`，Harness 通过领域无关的 Tool 定义完成能力装配。
 
 ## V0 边界
 

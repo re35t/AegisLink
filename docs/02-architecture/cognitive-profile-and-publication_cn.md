@@ -38,9 +38,9 @@ AgentProfile 是供 Owner 与 Runtime 使用的私有内部自我模型。AgentF
 
 ## Runtime 与 Curator 的输入边界
 
-- `agentcontext.Resolve` 给 Runtime 注入有效 Confirmed Fact 和最多 12 条 Active Impression。Impression 的基础分为 `confidence × salience × freshness`；当其摘要词项命中当前消息时，再增加相关性权重。
+- `harness.resolveContext` 给 Agent Run 注入有效 Confirmed Fact 和最多 12 条 Active Impression。Impression 的基础分为 `confidence × salience × freshness`；当其摘要词项命中当前消息时，再增加相关性权重。
 - Impression 以“可能有误的低优先级上下文”注入，不能覆盖 System Prompt，也不能作为 Tool 权限或指令来源；原始 Evidence 与 Disclosure Metadata 不进入 Prompt。
-- Curator 使用独立、无 Tool 的结构化模型调用，输入限制为近期消息、截断后的 Tool 结果、相关 Memory 与已有 Active/近期 Dismissed Impression。
+- `internal/curator` 使用专用的一轮 Runtime 完成独立、无 Tool 的结构化模型调用，输入限制为近期消息、截断后的 Tool 结果、相关 Memory 与已有 Active/近期 Dismissed Impression。
 - Message、Memory 和 Tool Result 都是不可信证据。模型输出经严格结构和领域校验后，Repository 才能创建/更新/resolve/supersede Impression 或提出 Fact Candidate。
 
 ## Revision 与后台任务

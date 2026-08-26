@@ -9,8 +9,8 @@
 ## Backend boundaries
 
 - Keep Gin inside `internal/httpapi`. Services and repositories use `context.Context` and domain types only.
-- Keep orchestration in `internal/conversation`; do not put business decisions in handlers or SQL scanners.
-- Keep model SDK types inside `internal/runtime`. The rest of the application consumes the small `conversation.Runtime` interface.
+- Keep durable Run orchestration in `internal/conversation`; keep Agent context, instruction, policy, and capability assembly in `internal/harness`. Do not put business decisions in handlers or SQL scanners.
+- Keep model SDK types inside `internal/runtime`. Runtime is domain-neutral and must not import AegisLink domain packages; `internal/harness` implements the small `conversation.Harness` port.
 - PostgreSQL is authoritative for conversations, messages, runs, and replayable run events.
 - Add schema changes as a new Goose migration. Never rewrite a migration that may have been applied.
 - Use GORM for every runtime PostgreSQL operation under `internal/postgres`; do not add direct `database/sql`, `pgx`, or hand-managed `sql.Tx` queries in repositories. Complex PostgreSQL-specific statements may use GORM `Raw` or `Exec`, but connection ownership, context propagation, transactions, result handling, and error mapping must still go through GORM.

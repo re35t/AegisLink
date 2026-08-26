@@ -38,9 +38,9 @@ AgentProfile is the private internal self model assembled for the owner and Runt
 
 ## Runtime and curator input boundaries
 
-- `agentcontext.Resolve` injects active Confirmed Facts and at most 12 active Impressions. Their base score is `confidence × salience × freshness`, with an additional relevance boost when the current message matches terms in an Impression summary.
+- `harness.resolveContext` injects active Confirmed Facts and at most 12 active Impressions. Their base score is `confidence × salience × freshness`, with an additional relevance boost when the current message matches terms in an Impression summary.
 - Impressions are marked as fallible, low-priority context. They cannot override the System Prompt or authorize Tools, and raw evidence/disclosure metadata is not injected.
-- The curator is an isolated, no-Tool structured model call. Its input is bounded to recent messages, truncated Tool results, relevant Memory, and existing active/recently dismissed Impressions.
+- `internal/curator` is an isolated, no-Tool structured model call using a dedicated one-iteration Runtime. Its input is bounded to recent messages, truncated Tool results, relevant Memory, and existing active/recently dismissed Impressions.
 - Messages, Memory, and Tool results are untrusted evidence. Only output that passes strict structural and domain validation can create/update/resolve/supersede Impressions or propose Fact Candidates.
 
 ## Revisions and background work

@@ -6,8 +6,8 @@ The product has four deliberately separate paths:
 
 ```text
 Owner / Web ──REST──────────────> durable resources and policy
-Conversation ──AG-UI────────────> active Run ──Eino Runtime
-Successful Run ──durable job────> Curator ──Impression / Fact Candidate
+Conversation ──AG-UI────────────> active Run ──Harness ──Runtime ──Eino
+Successful Run ──durable job────> Curator ──Runtime ──Eino ──Impression / Fact Candidate
 AgentProfile ──Disclosure───────> AgentFacts (published) / AgentCard (draft)
 ```
 
@@ -27,8 +27,9 @@ cmd/aegislink-server/       process entry point
 internal/app/               composition root and worker lifecycle
 internal/httpapi/           Gin, sessions, REST, AG-UI, Host routes
 internal/conversation/      Run orchestration and persisted event lifecycle
-internal/agentcontext/      authoritative Runtime context assembly
-internal/runtime/           Eino, model providers, Tool adapters, Curator call
+internal/harness/           Agent context, instructions, policy, and capability assembly
+internal/runtime/           domain-neutral Eino Run and model providers
+internal/curator/           isolated no-Tool cognitive model adapter
 internal/impression/        Impression/Fact Candidate domain and worker
 internal/agent/             Agent and AgentProfile aggregation/policy
 internal/discovery/         AgentFacts filtering, signing, query, revocation
@@ -42,16 +43,16 @@ web/                        React/Vite application
 docs/                       maintained architecture, security, data, ops, ADRs
 ```
 
-Dependency direction is HTTP -> domain services -> repository/runtime ports. Gin stays in `internal/httpapi`, provider SDK types stay in `internal/runtime`, and GORM/persistence models stay in `internal/postgres`. `internal/app` only wires these boundaries and owns shutdown.
+Dependency direction is HTTP -> domain services -> Harness -> Runtime -> Eino. Gin stays in `internal/httpapi`, provider SDK types stay in `internal/runtime`, and GORM/persistence models stay in `internal/postgres`. `internal/app` only wires these boundaries and owns shutdown.
 
 ## Agent Runtime
 
 - `ModelRegistry` resolves `MODEL_DRIVER` to a model provider. `deepseek` and `openai-compatible` are registered without exposing model SDK types to the conversation layer.
-- Eino `ChatModelAgent` runs up to `AGENT_MAX_ITERATIONS` model/tool cycles; the default is 8.
-- A read-only `get_current_time` tool proves the base ReAct loop. Enabled Agent Skills and approved read-only MCP tools are resolved per run and registered dynamically.
-- Long-term semantic/episodic memories are loaded from the authenticated Principal + Agent scope and added as user-controlled context.
+- `internal/runtime` owns the domain-neutral Eino `ChatModelAgent` Run, model/tool event translation, and provider registry. It does not import AegisLink domain packages.
+- `internal/harness` resolves authenticated Agent context, builds instructions and authorized Tools, and delegates each Run to Runtime. Eino can run up to `AGENT_MAX_ITERATIONS` model/tool cycles; the default is 8.
+- The Harness supplies `get_current_time`, progressive Skill loading, Discovery, and approved read-only MCP Tools per Run. Long-term Memory is loaded from the authenticated Principal + Agent scope as user-controlled context.
 - `MODEL_ID` is a stable model-profile identifier so multiple configured models can be added later without changing the conversation contract.
-- Successful Runs enqueue a durable PostgreSQL curator task. A separate no-Tool model call maintains fallible short-term Impressions and conservative Fact candidates; only owner-confirmed Facts become trusted Profile state. Confirmed Facts and at most 12 ranked Impressions enter later Runtime context with explicit low-priority boundaries.
+- Successful Runs enqueue a durable PostgreSQL curator task. `internal/curator` uses a separate one-iteration, no-Tool Runtime to maintain fallible short-term Impressions and conservative Fact candidates; only owner-confirmed Facts become trusted Profile state. Confirmed Facts and at most 12 ranked Impressions enter later Harness context with explicit low-priority boundaries.
 
 At startup the server applies Goose migrations, recovers interrupted Runs, and starts one curator worker. Conversation history, Run events, curator jobs, Profile revisions, and publication state survive process restarts because PostgreSQL is authoritative.
 
@@ -119,7 +120,7 @@ MODEL_NAME=your-deepseek-model
 
 ## API
 
-The authoritative endpoint and schema list is [`contracts/http/v1/openapi.yaml`](contracts/http/v1/openapi.yaml). Current resource groups cover health/readiness, authentication, Account settings, Agent Profile/Impression/Fact review, AgentFacts publication and Host-scoped query, AgentCard owner preview, Agent Memory and Skills, MCP bindings, Mention Catalog, Conversations, AG-UI execution, Run Event replay, and cancellation.
+The authoritative endpoint and schema list is [`contracts/http/v1/openapi.yaml`](contracts/http/v1/openapi.yaml). Current resource groups cover health/readiness, authentication, Account settings, owner-only Agent Instructions, Agent Profile/Impression/Fact review, AgentFacts publication and Host-scoped query, AgentCard owner preview, Agent Memory and Skills, MCP bindings, Mention Catalog, Conversations, AG-UI execution, Run Event replay, and cancellation.
 
 `POST /api/v1/ag-ui` streams active execution as AG-UI SSE. `GET /api/v1/runs/{runId}/events` exposes authenticated persisted replay and supports `Last-Event-ID`.
 

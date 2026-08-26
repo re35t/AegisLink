@@ -33,13 +33,13 @@ web/src/
 │   ├── SettingsPage.tsx         account profile, interface preferences, and password security
 │   └── preferences.tsx          Query-backed language/theme resolution and document application
 ├── features/agent/
-│   ├── AgentProfilePage.tsx     Agent selection, stable identity editing, and Profile query coordination
+│   ├── AgentProfilePage.tsx     Agent selection, Identity/Instructions configuration, and Profile query coordination
 │   ├── AgentProfileSections.tsx Overview, Impression review, Fact inbox, and Publication workflows
 │   └── DisclosurePolicyEditor.tsx per-item disclosure drafts and validation-aware controls
 └── styles.css              current global styles and component classes
 ```
 
-Conversation, Memory, Skills, MCP management, and Agent Profile now have real routes. Runs/Traces remain planned. Capability management is grouped because it shares Agent bootstrap/scope and compact CRUD patterns; backend domain ownership remains split across Memory, Skills, and MCP. Agent Profile aggregates those authoritative capability sources and owns only identity extensions and disclosure policy state.
+Conversation, Memory, Skills, MCP management, and Agent Profile now have real routes. Runs/Traces remain planned. Capability management is grouped because it shares Agent bootstrap/scope and compact CRUD patterns; backend domain ownership remains split across Memory, Skills, and MCP. The Agent Profile page also hosts Agent Configuration, but the Profile aggregate still owns only identity extensions and disclosure policy state; private Instructions remain Agent configuration and never enter the Profile projection.
 
 Account Settings is intentionally separate from Agent capabilities. Display name, login security, interface language, and theme belong to the authenticated User Account/Human Principal; Memory, Skills, MCP, and future model behavior remain Agent-scoped.
 
@@ -91,7 +91,7 @@ The selected capability Mention is ephemeral local Composer state. MCP Tool, Ski
 
 Use local React state for transient presentation state such as an open drawer, selected tab, draft-only filter, or expanded tool row. State that must survive reload, be shared across clients, authorize an external effect, or support event replay belongs on the server.
 
-The Agent Profile section is encoded in route search (`overview|impressions|facts|publication`) and the selected Agent is encoded as `agentId`. Identity and Disclosure mutations use Profile `version`; Impression updates use `contextRevision`; Fact confirmation checks both Profile and Candidate versions. The responsive navigation drawer removes hidden controls from the tab order, makes the workspace inert while open, supports Escape, and restores focus to the opener.
+The Agent Profile section is encoded in route search (`configuration|overview|impressions|facts|publication`) and the selected Agent is encoded as `agentId`. Configuration keeps Identity and private Instructions visually adjacent while using separate Query-backed mutations: Identity uses Profile `version`, and Instructions use their own version without entering the Profile response. Impression updates use `contextRevision`; Fact confirmation checks both Profile and Candidate versions. The responsive navigation drawer removes hidden controls from the tab order, makes the workspace inert while open, supports Escape, and restores focus to the opener.
 
 Durable interface preferences use the `account-settings` TanStack Query. `InterfacePreferencesProvider` derives the effective system language/theme and applies them to the document; it does not create a second writable settings store. Unsaved form values remain local drafts until a mutation succeeds.
 

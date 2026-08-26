@@ -15,8 +15,7 @@ const maxMessageLength = 32 * 1024
 type Service struct {
 	repository Repository
 	agents     AgentReader
-	runtime    Runtime
-	context    ContextProvider
+	harness    Harness
 	logger     *slog.Logger
 	root       context.Context
 
@@ -28,15 +27,13 @@ func NewService(
 	root context.Context,
 	repository Repository,
 	agents AgentReader,
-	runtime Runtime,
-	contextProvider ContextProvider,
+	harness Harness,
 	logger *slog.Logger,
 ) *Service {
 	return &Service{
 		repository: repository,
 		agents:     agents,
-		runtime:    runtime,
-		context:    contextProvider,
+		harness:    harness,
 		logger:     logger,
 		root:       root,
 		active:     make(map[string]context.CancelFunc),
@@ -96,7 +93,7 @@ func (service *Service) StartRun(ctx context.Context, principalID string, reques
 		if err != nil {
 			return Message{}, Run{}, err
 		}
-		policy, err = service.context.ResolveSelection(ctx, principalID, detail.Conversation.AgentID, *request.Selection)
+		policy, err = service.harness.ResolveSelection(ctx, principalID, detail.Conversation.AgentID, *request.Selection)
 		if err != nil {
 			return Message{}, Run{}, err
 		}

@@ -2,7 +2,6 @@ package conversation
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/re35t/AegisLink/internal/agent"
 )
@@ -23,93 +22,31 @@ type RunSelection struct {
 	Action    string
 }
 
-type RuntimeInput struct {
-	Agent    agent.Agent
-	Messages []Message
-	Context  AgentContext
-	Policy   ExecutionPolicy
+type HarnessInput struct {
+	PrincipalID string
+	Agent       agent.Agent
+	Messages    []Message
+	Policy      ExecutionPolicy
 }
 
-type AgentContext struct {
-	Memories    []RuntimeMemory
-	Facts       []RuntimeFact
-	Impressions []RuntimeImpression
-	Skills      []RuntimeSkill
-	Tools       []RuntimeTool
-}
-
-type RuntimeFact struct {
-	ID        string
-	Subject   string
-	Namespace string
-	Key       string
-	Value     string
-}
-
-type RuntimeImpression struct {
-	ID         string
-	Kind       string
-	Summary    string
-	Confidence float64
-}
-
-type ContextRequest struct {
-	CurrentMessage string
-}
-
-type RuntimeMemory struct {
-	ID      string
-	Kind    string
-	Content string
-	Source  string
-}
-
-type RuntimeSkill struct {
-	Name         string
-	Description  string
-	Content      string
-	Files        []RuntimeSkillFile
-	ReadResource func(context.Context, string) (RuntimeSkillResource, error)
-}
-
-type RuntimeSkillFile struct {
-	Path         string
-	MediaType    string
-	SizeBytes    int64
-	TextReadable bool
-}
-
-type RuntimeSkillResource struct {
-	Path      string
-	MediaType string
-	Content   string
-}
-
-type RuntimeTool struct {
-	Name        string
-	Description string
-	InputSchema json.RawMessage
-	Invoke      func(context.Context, string) (string, error)
-}
-
-type RuntimeOutput struct {
+type HarnessOutput struct {
 	Delta string
-	Tool  *RuntimeToolEvent
+	Tool  *HarnessToolEvent
 	Err   error
 }
 
-type RuntimeToolEventType string
+type HarnessToolEventType string
 
 const (
-	RuntimeToolStarted   RuntimeToolEventType = "started"
-	RuntimeToolCompleted RuntimeToolEventType = "completed"
-	RuntimeToolFailed    RuntimeToolEventType = "failed"
+	HarnessToolStarted   HarnessToolEventType = "started"
+	HarnessToolCompleted HarnessToolEventType = "completed"
+	HarnessToolFailed    HarnessToolEventType = "failed"
 )
 
-// RuntimeToolEvent is the transport-neutral lifecycle emitted by a Runtime.
-// Model SDK and AG-UI types must not cross this boundary.
-type RuntimeToolEvent struct {
-	Type      RuntimeToolEventType
+// HarnessToolEvent is the transport-neutral lifecycle emitted by the Agent
+// Harness. Model SDK and AG-UI types must not cross this boundary.
+type HarnessToolEvent struct {
+	Type      HarnessToolEventType
 	ID        string
 	Name      string
 	Arguments string
@@ -117,12 +54,8 @@ type RuntimeToolEvent struct {
 	Error     string
 }
 
-type Runtime interface {
-	Stream(context.Context, RuntimeInput) <-chan RuntimeOutput
-}
-
-type ContextProvider interface {
-	Resolve(context.Context, string, string, ContextRequest) (AgentContext, error)
+type Harness interface {
+	Run(context.Context, HarnessInput) (<-chan HarnessOutput, error)
 	ResolveSelection(context.Context, string, string, RunSelection) (ExecutionPolicy, error)
 }
 

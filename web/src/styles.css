@@ -4020,14 +4020,19 @@ select:focus-visible {
   font-weight: 750;
 }
 
-.agent-profile-identity-form {
+.agent-profile-identity-form,
+.agent-profile-instructions-form {
   display: grid;
   gap: 16px;
   margin-top: 24px;
+}
+
+.agent-profile-identity-form {
   padding-left: 68px;
 }
 
 .agent-profile-identity-form > label,
+.agent-profile-instructions-form > label,
 .disclosure-controls > label {
   display: grid;
   gap: 7px;
@@ -4038,6 +4043,7 @@ select:focus-visible {
 
 .agent-profile-identity-form input,
 .agent-profile-identity-form textarea,
+.agent-profile-instructions-form textarea,
 .disclosure-controls input[type="text"],
 .disclosure-controls select {
   width: 100%;
@@ -4061,10 +4067,43 @@ select:focus-visible {
   resize: vertical;
 }
 
-.agent-profile-identity-form small {
+.agent-profile-identity-form small,
+.agent-profile-instructions-form small {
   color: var(--color-text-tertiary);
   font-size: 10px;
   font-weight: 500;
+}
+
+.profile-prompt-input {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 11px 11px 11px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  color: var(--color-text-tertiary);
+  background: var(--color-surface);
+}
+
+.profile-prompt-input:focus-within {
+  border-color: #60776a;
+  box-shadow: 0 0 0 3px var(--color-focus);
+}
+
+.profile-prompt-input svg {
+  margin-top: 2px;
+}
+
+.profile-prompt-input textarea {
+  min-width: 0;
+  min-height: 210px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+  resize: vertical;
+  line-height: 1.55;
 }
 
 .profile-avatar-input {
@@ -4105,7 +4144,7 @@ select:focus-visible {
   font-size: 11px;
 }
 
-.profile-form-actions > button,
+.profile-form-actions > button:not(.secondary-button),
 .profile-save-bar > button:not(.secondary-button) {
   display: inline-flex;
   align-items: center;

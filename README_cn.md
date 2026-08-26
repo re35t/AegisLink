@@ -11,9 +11,11 @@ AegisLink 是一个本地优先的个人 Agent Web 应用。当前版本采用�
 
 ## Agent Runtime
 
-- `ModelRegistry` 根据 `MODEL_DRIVER` 解析模型 Provider；当前注册 `deepseek` 和 `openai-compatible`，Conversation 层不依赖任何模型 SDK。
-- Eino `ChatModelAgent` 最多执行 `AGENT_MAX_ITERATIONS` 轮模型与工具循环，默认 8 轮。
-- 默认提供只读的 `get_current_time` 工具，用于验证基础 ReAct 调用；外部 MCP 工具尚未接入。
+- 执行方向固定为 `Conversation -> Harness -> Runtime -> Eino`。`internal/runtime` 只实现领域无关的 Eino Agent Run，不依赖 AegisLink 领域包。
+- `internal/harness` 负责 Agent 上下文、Instruction、选择策略与授权 Tool 装配；Eino `ChatModelAgent` 最多执行 `AGENT_MAX_ITERATIONS` 轮模型与工具循环，默认 8 轮。
+- Harness 每 Run 提供 `get_current_time`、渐进式 Skill 加载、Discovery 与已授权的只读 MCP Tool。
+- `internal/curator` 使用独立的一轮、无 Tool Runtime 维护 Impression 与待确认 Fact Candidate。
+- `ModelRegistry` 根据 `MODEL_DRIVER` 解析模型 Provider；当前注册 `deepseek` 和 `openai-compatible`，Conversation/Harness 层不依赖任何模型 SDK。
 - `MODEL_ID` 是稳定的模型配置标识，后续可在不改变 Conversation 业务接口的情况下扩展多个模型配置。
 
 ## Web 与 AG-UI

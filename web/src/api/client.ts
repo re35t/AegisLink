@@ -1,6 +1,7 @@
 import type { components } from "./schema";
 
 export type Agent = components["schemas"]["Agent"];
+export type AgentInstructions = components["schemas"]["AgentInstructions"];
 export type AgentProfile = components["schemas"]["AgentProfile"];
 export type DisclosurePolicy = components["schemas"]["DisclosurePolicy"];
 export type DisclosurePolicyChange =
@@ -70,6 +71,18 @@ export const api = {
     const response = await request<{ agents: Agent[] }>("/api/v1/agents");
     return response.agents;
   },
+  getAgentInstructions: (agentId: string) =>
+    request<AgentInstructions>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/instructions`,
+    ),
+  updateAgentInstructions: (
+    agentId: string,
+    input: components["schemas"]["UpdateAgentInstructionsRequest"],
+  ) =>
+    request<AgentInstructions>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/instructions`,
+      { method: "PATCH", body: JSON.stringify(input) },
+    ),
   getAgentProfile: (agentId: string) =>
     request<AgentProfile>(
       `/api/v1/agents/${encodeURIComponent(agentId)}/profile`,

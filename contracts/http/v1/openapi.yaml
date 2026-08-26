@@ -192,6 +192,41 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/Agent"
+  /api/v1/agents/{agentId}/instructions:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+    get:
+      operationId: getAgentInstructions
+      responses:
+        "200":
+          description: Owner-only editable instructions for the Agent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentInstructions"
+        "404":
+          $ref: "#/components/responses/Error"
+    patch:
+      operationId: updateAgentInstructions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAgentInstructionsRequest"
+      responses:
+        "200":
+          description: Agent instructions updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentInstructions"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
   /api/v1/agents/{agentId}/profile:
     parameters:
       - $ref: "#/components/parameters/AgentId"
@@ -1377,6 +1412,33 @@ components:
           type: boolean
         disclosure:
           $ref: "#/components/schemas/DisclosurePolicy"
+    AgentInstructions:
+      type: object
+      required: [agentId, systemPrompt, version, updatedAt]
+      properties:
+        agentId:
+          type: string
+        systemPrompt:
+          type: string
+          maxLength: 32768
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        updatedAt:
+          type: string
+          format: date-time
+    UpdateAgentInstructionsRequest:
+      type: object
+      required: [expectedVersion, systemPrompt]
+      properties:
+        expectedVersion:
+          type: integer
+          format: int64
+          minimum: 1
+        systemPrompt:
+          type: string
+          maxLength: 32768
     AgentProfileCapability:
       type: object
       required: [id, name, description, kind, tags, source, confidence, callable, disclosure]

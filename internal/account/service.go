@@ -66,7 +66,7 @@ func (service *Service) Register(ctx context.Context, displayName, email, passwo
 			OwnerPrincipalID: principalID,
 			Name:             "Aegis",
 			Description:      "A private, focused personal agent.",
-			SystemPrompt:     "You are Aegis, a concise and reliable personal assistant. Answer in the language used by the user.",
+			SystemPrompt:     "Be concise and reliable. Answer in the language used by the user.",
 		},
 		Preferences: Preferences{Language: LanguageSystem, Theme: ThemeSystem},
 	}

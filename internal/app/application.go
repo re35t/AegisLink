@@ -10,11 +10,12 @@ import (
 	internala2a "github.com/re35t/AegisLink/internal/a2a"
 	"github.com/re35t/AegisLink/internal/account"
 	"github.com/re35t/AegisLink/internal/agent"
-	"github.com/re35t/AegisLink/internal/agentcontext"
 	"github.com/re35t/AegisLink/internal/catalog"
 	"github.com/re35t/AegisLink/internal/config"
 	"github.com/re35t/AegisLink/internal/conversation"
+	"github.com/re35t/AegisLink/internal/curator"
 	"github.com/re35t/AegisLink/internal/discovery"
+	"github.com/re35t/AegisLink/internal/harness"
 	"github.com/re35t/AegisLink/internal/httpapi"
 	"github.com/re35t/AegisLink/internal/impression"
 	"github.com/re35t/AegisLink/internal/mcp"
@@ -62,11 +63,17 @@ func New(parent context.Context, cfg config.Config, logger *slog.Logger) (*Appli
 	if err := conversationRepository.RecoverInterruptedRuns(root); err != nil {
 		return closeOnError(err)
 	}
-	runtime, err := agentruntime.New(root, cfg.Model, cfg.Runtime)
+	modelRegistry := agentruntime.DefaultModelRegistry()
+	runtime, err := agentruntime.NewWithRegistry(root, runtimeModelConfig(cfg.Model), agentruntime.Options{MaxIterations: cfg.Runtime.MaxIterations}, modelRegistry)
 	if err != nil {
 		return closeOnError(err)
 	}
-	curator, err := agentruntime.NewCurator(root, cfg.EffectiveCurator(), agentruntime.DefaultModelRegistry())
+	curatorConfig := cfg.EffectiveCurator()
+	curatorRuntime, err := agentruntime.NewWithRegistry(root, runtimeModelConfig(curatorConfig), agentruntime.Options{MaxIterations: 1}, modelRegistry)
+	if err != nil {
+		return closeOnError(err)
+	}
+	curatorService, err := curator.New(curatorRuntime, curatorConfig.Name)
 	if err != nil {
 		return closeOnError(err)
 	}
@@ -106,13 +113,12 @@ func New(parent context.Context, cfg config.Config, logger *slog.Logger) (*Appli
 		return closeOnError(err)
 	}
 	catalogService := catalog.NewService(agentService, mcpService, skillService)
-	contextService := agentcontext.NewService(memoryService, skillService, mcpService).WithProfileContext(profileService, impressionService)
+	agentHarness := harness.New(runtime, memoryService, skillService, mcpService, profileService, impressionService)
 	conversationService := conversation.NewService(
 		root,
 		conversationRepository,
 		agentService,
-		runtime,
-		contextService,
+		agentHarness,
 		logger,
 	)
 	router := httpapi.NewRouter(httpapi.Dependencies{
@@ -140,13 +146,20 @@ func New(parent context.Context, cfg config.Config, logger *slog.Logger) (*Appli
 		WriteTimeout:      0,
 	}
 	application := &Application{Server: server, closeDatabase: closeDatabase, cancel: cancel}
-	worker := impression.NewWorker(impressionRepository, curator, logger)
+	worker := impression.NewWorker(impressionRepository, curatorService, logger)
 	application.workers.Add(1)
 	go func() {
 		defer application.workers.Done()
 		worker.Run(root)
 	}()
 	return application, nil
+}
+
+func runtimeModelConfig(cfg config.Model) agentruntime.ModelConfig {
+	return agentruntime.ModelConfig{
+		ID: cfg.ID, Driver: cfg.Driver, BaseURL: cfg.BaseURL, APIKey: cfg.APIKey,
+		Name: cfg.Name, Timeout: cfg.Timeout, MaxTokens: cfg.MaxTokens,
+	}
 }
 
 func (application *Application) Close() error {

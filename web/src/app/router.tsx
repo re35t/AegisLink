@@ -69,11 +69,12 @@ const agentProfileRoute = createRoute({
         ? search.agentId
         : undefined,
     section:
+      search.section === "overview" ||
       search.section === "impressions" ||
       search.section === "facts" ||
       search.section === "publication"
         ? (search.section as AgentProfileSection)
-        : ("overview" as AgentProfileSection),
+        : ("configuration" as AgentProfileSection),
   }),
   component: AgentProfileRoute,
 });
