@@ -29,6 +29,10 @@ The client does not authorize Tools by sending AG-UI Tool definitions, schemas, 
 
 `GET /api/v1/runs/{runId}/events` is the authenticated persisted SSE stream. It supports `Last-Event-ID` replay and remains the recovery source while native AG-UI resume is incomplete. Run events are ordered per Run in PostgreSQL.
 
+## Standalone Index
+
+The independent contract at [`../../index/contracts/http/v1/openapi.yaml`](../../index/contracts/http/v1/openapi.yaml) exposes health/readiness and Bearer-authenticated `POST /api/v1/registry/agents`. Registration accepts exactly `{}`, allocates and persists an opaque AgentAddr, and supports idempotent replay. It exposes no public resolve route. Representation Publication and Search from the [pgvector Discovery pipeline](../02-architecture/pgvector-discovery-query-pipeline.md) are not implemented.
+
 ## Not provided
 
-There is no public AgentCard route, A2A invocation endpoint, central Index/search/registration API, third-party attestation API, WebSocket API, gRPC API, organization API, cross-Agent routing API, or third-party SDK contract.
+The Agent Server contract has no public AgentCard route, A2A invocation endpoint, Index/search/registration API, third-party attestation API, WebSocket API, gRPC API, organization API, cross-Agent routing API, or third-party SDK contract. The independent Index has no search, update, revoke, signing, or AgentFacts verification endpoint yet.

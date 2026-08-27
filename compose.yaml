@@ -32,6 +32,41 @@ services:
     volumes:
       - aegislink-postgres-test:/var/lib/postgresql/data
 
+  index-postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: aegislink_index
+      POSTGRES_USER: aegislink_index
+      POSTGRES_PASSWORD: aegislink_index
+    ports:
+      - "${INDEX_POSTGRES_PORT:-55434}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aegislink_index -d aegislink_index"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - aegislink-index-postgres:/var/lib/postgresql/data
+
+  index-postgres-test:
+    profiles: ["test"]
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: aegislink_index_test
+      POSTGRES_USER: aegislink_index
+      POSTGRES_PASSWORD: aegislink_index
+    ports:
+      - "${INDEX_POSTGRES_TEST_PORT:-55435}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aegislink_index -d aegislink_index_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - aegislink-index-postgres-test:/var/lib/postgresql/data
+
 volumes:
   aegislink-postgres:
   aegislink-postgres-test:
+  aegislink-index-postgres:
+  aegislink-index-postgres-test:

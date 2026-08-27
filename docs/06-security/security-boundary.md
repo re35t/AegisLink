@@ -28,6 +28,12 @@ Agent signing uses Ed25519. Private keys are encrypted with AES-256-GCM under th
 - Repository integration tests are destructive and only accept a database name ending in `_test`. The dedicated Compose test service is separate from development data.
 - Skill imports reject traversal, absolute paths, symlinks, duplicate normalized paths, oversized archives/files, and undeclared roots. Stored scripts have no execution authority.
 
+## Standalone Index
+
+The Index uses a separate PostgreSQL database and a static registration Bearer Token of at least 32 characters. The HTTP boundary compares the Token in constant time, never logs headers or request bodies, and persists only a SHA-256 Token-scoped idempotency digest. Registration accepts no discovery data, so there is no Facts URL or LSH input and no outbound fetch path. Public resolution is absent. Future vector publication follows the privacy boundary in the [three-stage Discovery design](../02-architecture/pgvector-discovery-query-pipeline.md).
+
+The static Token authenticates access to the controlled Registry; it does not prove Agent identity or authorize an Agent Server to update a specific record. AgentAddr is therefore explicitly unsigned. Scoped credentials, signing, update/revocation, disclosure-approved publisher automation, and discovery leases remain required before treating registration as a stronger trust statement. Candidate results must always be verified against current signed AgentFacts before use.
+
 ## Known gaps
 
-Email verification, password reset, MFA, login rate limiting, delegated access, MCP OAuth/secret storage, write/destructive Tool Approval, third-party Agent credentials/attestations, central discovery indexing, A2A request authentication, audit retention policy, and sandboxed Skill execution are not implemented. Deployment documentation must not claim these protections.
+Email verification, password reset, MFA, login rate limiting, delegated access, MCP OAuth/secret storage, write/destructive Tool Approval, third-party Agent credentials/attestations, Index scoped identity/signing/search, A2A request authentication, audit retention policy, and sandboxed Skill execution are not implemented. Deployment documentation must not claim these protections.

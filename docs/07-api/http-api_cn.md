@@ -29,6 +29,10 @@ DNS 验证并启用发布后，服务端只按真实 HTTP `Host` 精确选择 Ag
 
 `GET /api/v1/runs/{runId}/events` 是受认证保护的持久化 SSE Stream，支持 `Last-Event-ID` 回放。在原生 AG-UI Resume 尚未完成期间，它继续作为恢复来源。Run Event 在 PostgreSQL 中按 Run 单调排序。
 
+## 独立 Index
+
+独立契约 [`../../index/contracts/http/v1/openapi.yaml`](../../index/contracts/http/v1/openapi.yaml) 暴露 Health/Readiness 和 Bearer 认证的 `POST /api/v1/registry/agents`。注册只接受 `{}`，分配并持久化不透明 AgentAddr，并支持幂等重放；不暴露公开 Resolve。三阶段 [pgvector Discovery 链路](../02-architecture/pgvector-discovery-query-pipeline_cn.md)中的 Representation Publication 与 Search 仍未实现。
+
 ## 未提供接口
 
-当前没有公开 AgentCard/A2A Invocation、中央 Index/Search/Registration、第三方 Attestation、WebSocket、gRPC、Organization、跨 Agent Routing 或第三方 SDK 契约。
+Agent Server 契约当前没有公开 AgentCard/A2A Invocation、Index/Search/Registration、第三方 Attestation、WebSocket、gRPC、Organization、跨 Agent Routing 或第三方 SDK 契约；独立 Index 尚无 Search、更新、撤销、签名或 AgentFacts 验证接口。

@@ -1,0 +1,136 @@
+openapi: 3.1.0
+info:
+  title: AegisLink Index API
+  version: 0.3.0
+  description: >-
+    API for the standalone AegisLink Index. The current Registry slice allocates
+    and durably stores opaque AgentAddr values. Vector publication and discovery
+    search are not yet exposed.
+paths:
+  /healthz:
+    get:
+      operationId: indexHealth
+      summary: Check whether the Index process is alive
+      responses:
+        "200":
+          description: Index process is alive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /readyz:
+    get:
+      operationId: indexReady
+      summary: Check whether Index dependencies are ready
+      responses:
+        "200":
+          description: Index dependencies are ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadyResponse"
+        "503":
+          description: Index dependencies are not ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/registry/agents:
+    post:
+      operationId: registerAgentAddr
+      summary: Allocate and persist an AgentAddr
+      security:
+        - registrationBearer: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterAgentAddrRequest"
+      responses:
+        "201":
+          description: AgentAddr created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentAddrRegistration"
+        "200":
+          description: A matching idempotent registration was replayed
+          headers:
+            Idempotency-Replayed:
+              required: true
+              schema:
+                const: "true"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentAddrRegistration"
+        "400":
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Registration credentials are missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Idempotency key conflicts with an existing registration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  securitySchemes:
+    registrationBearer:
+      type: http
+      scheme: bearer
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          const: ok
+    ReadyResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          const: ready
+    RegisterAgentAddrRequest:
+      type: object
+      additionalProperties: false
+      maxProperties: 0
+    AgentAddrRegistration:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, agentAddr, createdAt]
+      properties:
+        schemaVersion:
+          const: aegislink.agent-addr/0.2-draft
+        agentAddr:
+          type: string
+          pattern: "^agent_[0-9A-HJKMNP-TV-Z]{26}$"
+        createdAt:
+          type: string
+          format: date-time
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string

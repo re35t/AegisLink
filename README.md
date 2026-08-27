@@ -1,6 +1,6 @@
 # AegisLink
 
-AegisLink is a local-first personal Agent Web application. The current release is a readable Go modular monolith with an `assistant-ui` React chat interface, an AG-UI execution protocol, an in-process Eino ReAct Agent Runtime, an extensible model-provider registry, cookie-based account sessions, and PostgreSQL-backed conversations and replayable run events. DeepSeek is the active default provider.
+AegisLink is a local-first personal Agent Web application. The current release is a readable Go modular monolith with an `assistant-ui` React chat interface, an AG-UI execution protocol, an in-process Eino ReAct Agent Runtime, an extensible model-provider registry, cookie-based account sessions, and PostgreSQL-backed conversations and replayable run events. The repository also contains a separately runnable `aegislink-index` with a basic AgentAddr Registry for cross-server Agent discovery. DeepSeek is the active default provider for the Personal Agent server; the Index does not use model credentials.
 
 The product has four deliberately separate paths:
 
@@ -41,6 +41,7 @@ migrations/                 ordered Goose schema migrations
 contracts/http/v1/          OpenAPI source of truth
 web/                        React/Vite application
 docs/                       maintained architecture, security, data, ops, ADRs
+index/                      independent Agent Index process, contract, and private ports
 ```
 
 Dependency direction is HTTP -> domain services -> Harness -> Runtime -> Eino. Gin stays in `internal/httpapi`, provider SDK types stay in `internal/runtime`, and GORM/persistence models stay in `internal/postgres`. `internal/app` only wires these boundaries and owns shutdown.
@@ -110,6 +111,16 @@ make dev-web
 
 Open `http://127.0.0.1:5173`. The API listens on `http://127.0.0.1:4321`.
 
+The independent Index is optional. It uses its own PostgreSQL database and starts without the Agent Server database or model credentials:
+
+```bash
+make dev-index-db
+make dev-index
+# health/readiness: http://127.0.0.1:4331
+```
+
+It implements authenticated `POST /api/v1/registry/agents` with an empty object body, allocates and durably stores an opaque AgentAddr, and returns the same address on idempotent replay. Public resolve has been removed. Fact Vector publication and PostgreSQL + pgvector Search are the next stages.
+
 For an OpenAI-compatible gateway, set:
 
 ```dotenv
@@ -121,6 +132,8 @@ MODEL_NAME=your-deepseek-model
 ## API
 
 The authoritative endpoint and schema list is [`contracts/http/v1/openapi.yaml`](contracts/http/v1/openapi.yaml). Current resource groups cover health/readiness, authentication, Account settings, owner-only Agent Instructions, Agent Profile/Impression/Fact review, AgentFacts publication and Host-scoped query, AgentCard owner preview, Agent Memory and Skills, MCP bindings, Mention Catalog, Conversations, AG-UI execution, Run Event replay, and cancellation.
+
+The standalone Index has its own narrow source of truth at [`index/contracts/http/v1/openapi.yaml`](index/contracts/http/v1/openapi.yaml). It contains health/readiness plus AgentAddr register/resolve and does not change the Agent Server contract.
 
 `POST /api/v1/ag-ui` streams active execution as AG-UI SSE. `GET /api/v1/runs/{runId}/events` exposes authenticated persisted replay and supports `Last-Event-ID`.
 
@@ -135,10 +148,10 @@ make test
 make build
 ```
 
-Run `make test-integration` to start and use the dedicated `aegislink_test` database. Destructive repository tests reject database names that do not end in `_test`.
+Run `make test-integration` and `make test-index-integration` to exercise the isolated Agent Server and Index databases. Destructive repository tests reject database names that do not end in `_test`.
 
 Runtime persistence goes through GORM. Goose remains authoritative for ordered schema migrations; the application intentionally does not call `AutoMigrate`.
 
 ## Current boundary
 
-This release implements private cognitive Agent Profiles, model-generated Impressions, owner-confirmed Facts, signed/revocable AgentFacts publication, owner-only AgentCard Drafts, Agent-scoped Memory, versioned Skills, MCP bindings, read-only Tool execution, and owner isolation. It does not include a public AgentCard/A2A endpoint, central Index, third-party attestation, email verification, password reset, MFA, login rate limiting, delegated access, multiple-Agent creation UI, automatic long-term Memory extraction/vector retrieval, executable Skill scripts, MCP OAuth/secret storage, write/destructive Tool Approval, cross-Agent communication, Redis, WebSocket, or sandboxed runners. The maintained technical-document index is [`docs/README.md`](docs/README.md).
+This release implements private cognitive Agent Profiles, model-generated Impressions, owner-confirmed Facts, signed/revocable AgentFacts publication, owner-only AgentCard Drafts, Agent-scoped Memory, versioned Skills, MCP bindings, read-only Tool execution, owner isolation, and standalone Index stage-one AgentAddr allocation/persistence. The Index does not yet implement vector snapshot publication, pgvector Search, or scoped publisher credentials. The product also does not include a public AgentCard/A2A endpoint, third-party attestation, email verification, password reset, MFA, login rate limiting, delegated access, multiple-Agent creation UI, automatic long-term Memory extraction/vector retrieval, executable Skill scripts, MCP OAuth/secret storage, write/destructive Tool Approval, cross-Agent communication, Redis, WebSocket, or sandboxed runners. See the [Index architecture](docs/02-architecture/distributed-agent-index.md) and maintained [technical-document index](docs/README.md).

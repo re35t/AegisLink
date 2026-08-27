@@ -54,6 +54,6 @@ AgentProfile is the private internal self model assembled for the owner and Runt
 
 Impressions have no external channel. A Confirmed Fact may target AgentFacts/AgentCard only when its subject is `agent`. The public well-known document contains only `public + agent-facts + indexable` claims. POST queries may include non-indexable public claims and, with a valid scoped token, authenticated or exact-audience restricted claims.
 
-No central Index exists in this version. `aegislink.agent-facts/1.0-draft` is an AegisLink-owned versioned document intended for a future adapter, not a claim of an external standard.
+A standalone Index now implements address-only AgentAddr allocation/persistence with no public resolve route. It has no Fact Vector publisher or pgvector Search yet. The next stage has Agent Server derive and upload a vector snapshot from `public + indexable` AgentFacts; Index stores no Facts URL and never fetches AgentFacts. `aegislink.agent-facts/1.0-draft` remains an AegisLink-owned, versioned, Server-authoritative document rather than a claim of an external standard.
 
 Public routes match only a verified, enabled Agent publication by the request's real `Host` and never trust `X-Forwarded-Host`. This release exposes AgentFacts, JWKS, revocations, and POST query routes; it does not register `/.well-known/agent-card.json`.

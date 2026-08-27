@@ -27,6 +27,7 @@ jobs:
           --health-retries 10
     env:
       TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/aegislink_test?sslmode=disable
+      INDEX_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/aegislink_index_test?sslmode=disable
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -41,14 +42,20 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Create standalone Index test database
+        env:
+          PGPASSWORD: postgres
+        run: createdb -h 127.0.0.1 -U postgres aegislink_index_test
       - name: Check generated API types
         run: |
           pnpm generate:api
           git diff --exit-code -- web/src/api/schema.ts
       - name: Check Go
         run: |
-          test -z "$(gofmt -l cmd internal migrations)"
+          test -z "$(gofmt -l cmd index internal migrations)"
           go vet ./...
+          go build ./cmd/aegislink-server
+          go build ./index/cmd/aegislink-index
       - name: Test Go with PostgreSQL and mock model service
         run: go test ./...
       - name: Check and test Web

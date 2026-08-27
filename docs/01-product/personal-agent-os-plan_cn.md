@@ -239,7 +239,7 @@ AegisLink
 - 名称、头像、Instructions、模型和可解释的自主级别。
 - Model Provider 配置与 Agent Profile 分离，API key 不进入 Profile 返回值。
 
-当前已实现从内部认知到 AgentFacts 的披露链路；AgentCard 只提供 Owner Draft。中央 Index 与公开 AgentCard/A2A endpoint 仍未实现。
+当前已实现从内部认知到 AgentFacts 的披露链路；AgentCard 只提供 Owner Draft。独立 Index 已实现 AgentAddr Registration/Resolve，但 Search、Agent Server Publisher 与公开 AgentCard/A2A Endpoint 仍未实现。
 
 ```mermaid
 flowchart TD
@@ -253,7 +253,7 @@ flowchart TD
     a2a --> card["AgentCard"]
     facts --> factsEndpoint["facts endpoint"]
     card --> blocker["Owner preview only:<br/>A2A endpoint missing"]
-    factsEndpoint --> index["Future Index adapter"]
+    factsEndpoint --> index["Index shell: future publisher adapter"]
 ```
 
 ### Memory
