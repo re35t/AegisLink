@@ -14,7 +14,7 @@ Run `make dev-web` in another terminal. The default Web URL is `http://127.0.0.1
 
 Goose applies ordered migrations when the server opens the database. Runtime persistence uses GORM; `AutoMigrate` is intentionally disabled.
 
-Curator configuration is optional: every empty `CURATOR_MODEL_*` field falls back to the corresponding `MODEL_*` value. AgentFacts publication remains unavailable until `AGENT_KEY_ENCRYPTION_KEY` contains the base64 encoding of exactly 32 random bytes. Keep this key stable and secret; changing it requires signing-key rotation.
+Curator configuration is optional: every empty provider/model field falls back to the corresponding `MODEL_*` value. Curator requests use JSON Output and `CURATOR_MODEL_THINKING=disabled` by default; the thinking switch is applied by the DeepSeek driver. AgentFacts publication remains unavailable until `AGENT_KEY_ENCRYPTION_KEY` contains the base64 encoding of exactly 32 random bytes. Keep this key stable and secret; changing it requires signing-key rotation.
 
 ## Validate
 

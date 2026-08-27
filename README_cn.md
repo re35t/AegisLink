@@ -44,6 +44,8 @@ AGENT_MAX_ITERATIONS=8
 
 API key 只通过未提交的 `.env` 中 `MODEL_API_KEY` 提供，不能写入文档、日志或代码。
 
+`CURATOR_MODEL_*` 可选，未设置的 Provider/模型字段会逐项回退到 `MODEL_*`。Curator 默认继续使用轻量的 `deepseek-v4-flash`，启用 JSON Output，并通过 `CURATOR_MODEL_THINKING=disabled` 关闭思考模式，避免结构化后台任务把输出预算消耗在 reasoning 上；只有实际证据表明需要时才改为 `enabled`。
+
 ## 本地运行
 
 ```bash

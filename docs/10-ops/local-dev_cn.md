@@ -14,7 +14,7 @@ make dev-server
 
 Server 打开数据库时由 Goose 应用有序 migration。运行时持久化使用 GORM，并明确禁用 `AutoMigrate`。
 
-Curator 配置是可选的：每个空的 `CURATOR_MODEL_*` 字段都会回退到对应 `MODEL_*`。只有 AgentFacts 发布需要 `AGENT_KEY_ENCRYPTION_KEY`，其值必须是恰好 32 个随机字节的 Base64。该密钥必须保持稳定且保密；更换后需要轮换 Agent Signing Key。
+Curator 配置是可选的：每个空的 Provider/模型字段都会回退到对应 `MODEL_*`。Curator 请求默认启用 JSON Output，并设置 `CURATOR_MODEL_THINKING=disabled`；思考模式开关由 DeepSeek Driver 应用。只有 AgentFacts 发布需要 `AGENT_KEY_ENCRYPTION_KEY`，其值必须是恰好 32 个随机字节的 Base64。该密钥必须保持稳定且保密；更换后需要轮换 Agent Signing Key。
 
 ## 验证
 

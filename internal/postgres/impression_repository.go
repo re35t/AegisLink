@@ -441,9 +441,17 @@ func (repository *ImpressionRepository) ApplyCuration(ctx context.Context, job i
 				changed = true
 			case "update":
 				targetID := translateLocalID(localIDs, draft.TargetID)
+				detailsJSON, err := jsonbExpression(nonNilMap(draft.Details))
+				if err != nil {
+					return fmt.Errorf("encode generated Impression details: %w", err)
+				}
+				tagsJSON, err := jsonbExpression(nonNilStringSlice(draft.Tags))
+				if err != nil {
+					return fmt.Errorf("encode generated Impression tags: %w", err)
+				}
 				result := transaction.Model(&impressionModel{}).
 					Where("id = ? AND owner_principal_id = ? AND agent_id = ? AND status <> ?", targetID, job.OwnerPrincipalID, job.AgentID, impression.StatusDismissed).
-					Updates(map[string]any{"summary": draft.Summary, "details_json": draft.Details, "tags": draft.Tags,
+					Updates(map[string]any{"summary": draft.Summary, "details_json": detailsJSON, "tags": tagsJSON,
 						"confidence": draft.Confidence, "salience": draft.Salience, "last_observed_at": now,
 						"expires_at": now.Add(30 * 24 * time.Hour), "updated_at": now})
 				if result.Error != nil {
@@ -596,6 +604,14 @@ func nonNilStringSlice(value []string) []string {
 		return []string{}
 	}
 	return value
+}
+
+func jsonbExpression(value any) (clause.Expr, error) {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return clause.Expr{}, err
+	}
+	return gorm.Expr("CAST(? AS jsonb)", string(encoded)), nil
 }
 
 func truncateText(value string, limit int) string {

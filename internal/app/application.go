@@ -159,6 +159,7 @@ func runtimeModelConfig(cfg config.Model) agentruntime.ModelConfig {
 	return agentruntime.ModelConfig{
 		ID: cfg.ID, Driver: cfg.Driver, BaseURL: cfg.BaseURL, APIKey: cfg.APIKey,
 		Name: cfg.Name, Timeout: cfg.Timeout, MaxTokens: cfg.MaxTokens,
+		JSONOutput: cfg.JSONOutput, ThinkingMode: cfg.ThinkingMode,
 	}
 }
 

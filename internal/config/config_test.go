@@ -40,6 +40,28 @@ func TestBlankCuratorOverridesFallBack(t *testing.T) {
 	if got := nonBlankEnv("CURATOR_MODEL_NAME", "primary-model"); got != "primary-model" {
 		t.Fatalf("blank override = %q", got)
 	}
+	t.Setenv("CURATOR_MODEL_JSON_OUTPUT", "   ")
+	if got, err := optionalBoolEnv("CURATOR_MODEL_JSON_OUTPUT", true); err != nil || !got {
+		t.Fatalf("blank JSON output override = %v, %v", got, err)
+	}
+}
+
+func TestValidateCuratorThinkingMode(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"", "enabled", "disabled"} {
+		cfg := validConfig()
+		cfg.Curator = cfg.Model
+		cfg.Curator.ThinkingMode = mode
+		if err := cfg.Validate(); err != nil {
+			t.Fatalf("thinking mode %q should be valid: %v", mode, err)
+		}
+	}
+	cfg := validConfig()
+	cfg.Curator = cfg.Model
+	cfg.Curator.ThinkingMode = "sometimes"
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected invalid curator thinking mode")
+	}
 }
 
 func validConfig() Config {

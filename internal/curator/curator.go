@@ -14,7 +14,9 @@ import (
 	"github.com/re35t/AegisLink/internal/runtime"
 )
 
-const promptVersion = "impression-curator-v1"
+const promptVersion = "impression-curator-v2"
+
+var errIncompleteResponse = errors.New("incomplete curator response")
 
 type Curator struct {
 	runtime runtime.Runtime
@@ -71,7 +73,20 @@ Fact candidates must be conservative, stable enough to ask the owner to confirm,
 Allowed scopes: user, task, project, environment, relationship.
 Allowed kinds: current-task, recent-interest, knowledge-exposure, acquired-information, open-loop, temporary-preference, working-style-observation, recent-decision.
 Allowed fact subjects: agent, user, project, task.
+Keep the response concise enough to finish within the output limit. Return empty arrays when no changes are warranted.
 Schema: {"impressions":[{"action":"create|update|resolve|supersede","ref":"local ref for create","targetId":"existing id","scope":"...","kind":"...","summary":"...","details":{},"tags":[],"confidence":0.0,"salience":0.0,"sourceMessageIds":[],"sourceMemoryIds":[]}],"facts":[{"subject":"...","namespace":"...","key":"...","value":{},"rationale":"...","confidence":0.0,"sourceImpressionIds":["id or ref"]}]}`
+	result, err := curator.generate(ctx, encoded, instruction)
+	if errors.Is(err, errIncompleteResponse) {
+		result, err = curator.generate(ctx, encoded, instruction+"\nA prior response was truncated. Produce a smaller complete JSON object this time.")
+	}
+	if err != nil {
+		return impression.Curation{}, err
+	}
+	result.Generation = impression.GenerationInfo{Model: curator.name, RunID: input.RunID, PromptVersion: promptVersion, GeneratedAt: time.Now().UTC()}
+	return result, nil
+}
+
+func (curator *Curator) generate(ctx context.Context, encoded []byte, instruction string) (impression.Curation, error) {
 	var content strings.Builder
 	for event := range curator.runtime.Run(ctx, runtime.Input{
 		ExecutionMode: runtime.ExecutionModeSingleTurn,
@@ -95,7 +110,6 @@ Schema: {"impressions":[{"action":"create|update|resolve|supersede","ref":"local
 	if err != nil {
 		return impression.Curation{}, err
 	}
-	result.Generation = impression.GenerationInfo{Model: curator.name, RunID: input.RunID, PromptVersion: promptVersion, GeneratedAt: time.Now().UTC()}
 	return result, nil
 }
 
@@ -108,6 +122,9 @@ func decodeResponse(content string) (impression.Curation, error) {
 	decoder.DisallowUnknownFields()
 	var decoded response
 	if err := decoder.Decode(&decoded); err != nil {
+		if errors.Is(err, io.ErrUnexpectedEOF) {
+			return impression.Curation{}, fmt.Errorf("decode curator response: %w: %v", errIncompleteResponse, err)
+		}
 		return impression.Curation{}, fmt.Errorf("decode curator response: %w", err)
 	}
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {

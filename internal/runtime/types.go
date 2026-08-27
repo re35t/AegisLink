@@ -95,13 +95,15 @@ type ToolEvent struct {
 }
 
 type ModelConfig struct {
-	ID        string
-	Driver    string
-	BaseURL   string
-	APIKey    string
-	Name      string
-	Timeout   time.Duration
-	MaxTokens int
+	ID           string
+	Driver       string
+	BaseURL      string
+	APIKey       string
+	Name         string
+	Timeout      time.Duration
+	MaxTokens    int
+	JSONOutput   bool
+	ThinkingMode string
 }
 
 type Options struct {

@@ -99,9 +99,16 @@ type deepSeekProvider struct{}
 func (deepSeekProvider) Driver() string { return "deepseek" }
 
 func (deepSeekProvider) New(ctx context.Context, cfg ModelConfig) (model.ToolCallingChatModel, error) {
-	return deepseek.NewChatModel(ctx, &deepseek.ChatModelConfig{
+	modelConfig := &deepseek.ChatModelConfig{
 		APIKey: cfg.APIKey, BaseURL: cfg.BaseURL, Model: cfg.Name, Timeout: cfg.Timeout, MaxTokens: cfg.MaxTokens,
-	})
+	}
+	if cfg.JSONOutput {
+		modelConfig.ResponseFormatType = deepseek.ResponseFormatTypeJSONObject
+	}
+	if cfg.ThinkingMode != "" {
+		modelConfig.ThinkingConfig = &deepseek.ThinkingConfig{Type: cfg.ThinkingMode}
+	}
+	return deepseek.NewChatModel(ctx, modelConfig)
 }
 
 type openAICompatibleProvider struct{}
@@ -110,7 +117,11 @@ func (openAICompatibleProvider) Driver() string { return "openai-compatible" }
 
 func (openAICompatibleProvider) New(ctx context.Context, cfg ModelConfig) (model.ToolCallingChatModel, error) {
 	maxTokens := cfg.MaxTokens
-	return openai.NewChatModel(ctx, &openai.ChatModelConfig{
+	modelConfig := &openai.ChatModelConfig{
 		APIKey: cfg.APIKey, BaseURL: cfg.BaseURL, Model: cfg.Name, Timeout: cfg.Timeout, MaxTokens: &maxTokens,
-	})
+	}
+	if cfg.JSONOutput {
+		modelConfig.ResponseFormat = &openai.ChatCompletionResponseFormat{Type: openai.ChatCompletionResponseFormatTypeJSONObject}
+	}
+	return openai.NewChatModel(ctx, modelConfig)
 }

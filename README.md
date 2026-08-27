@@ -90,7 +90,7 @@ AGENT_MAX_ITERATIONS=8
 
 Provide the API key only through `MODEL_API_KEY` in an uncommitted `.env`; never place it in source, documentation, or logs.
 
-`CURATOR_MODEL_*` is optional and falls back field-by-field to `MODEL_*`. AgentFacts signing additionally requires a stable base64 32-byte `AGENT_KEY_ENCRYPTION_KEY`; leaving it unset disables publication without disabling internal Profile/Impression behavior.
+`CURATOR_MODEL_*` is optional and falls back field-by-field to `MODEL_*`. The curator keeps the lightweight `deepseek-v4-flash` model by default, enables JSON Output, and sets `CURATOR_MODEL_THINKING=disabled` so structured background curation does not spend its output budget on reasoning. Set that field to `enabled` only when a curator workload demonstrably needs it. AgentFacts signing additionally requires a stable base64 32-byte `AGENT_KEY_ENCRYPTION_KEY`; leaving it unset disables publication without disabling internal Profile/Impression behavior.
 
 ## Run locally
 

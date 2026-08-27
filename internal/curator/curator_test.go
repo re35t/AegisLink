@@ -51,6 +51,36 @@ func TestCurateRejectsUnknownAndTrailingJSON(t *testing.T) {
 	}
 }
 
+func TestCurateRetriesOneIncompleteResponse(t *testing.T) {
+	t.Parallel()
+	stub := &runtimeSequenceStub{runs: [][]runtime.Event{
+		{{Delta: `{"impressions":[`}},
+		{{Delta: `{"impressions":[],"facts":[]}`}},
+	}}
+	service, err := New(stub, "test-curator")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.Curate(t.Context(), impression.CurationInput{RunID: "run-one"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stub.inputs) != 2 || !strings.Contains(stub.inputs[1].Instruction, "prior response was truncated") {
+		t.Fatalf("retry inputs = %#v", stub.inputs)
+	}
+	if len(result.Impressions) != 0 || len(result.Facts) != 0 {
+		t.Fatalf("unexpected curation = %#v", result)
+	}
+}
+
+func TestDecodeResponseMarksTruncatedJSONAsIncomplete(t *testing.T) {
+	t.Parallel()
+	_, err := decodeResponse(`{"impressions":[],"facts":[`)
+	if !errors.Is(err, errIncompleteResponse) {
+		t.Fatalf("decode error = %v", err)
+	}
+}
+
 func TestCuratePropagatesRuntimeFailureAndRejectsToolEvent(t *testing.T) {
 	for _, events := range [][]runtime.Event{
 		{{Err: errors.New("model failed")}},
@@ -92,6 +122,11 @@ type runtimeStub struct {
 	events []runtime.Event
 }
 
+type runtimeSequenceStub struct {
+	inputs []runtime.Input
+	runs   [][]runtime.Event
+}
+
 type singleTurnModel struct {
 	input        []*schema.Message
 	streamCalled bool
@@ -115,6 +150,21 @@ func (stub *runtimeStub) Run(_ context.Context, input runtime.Input) <-chan runt
 	stub.input = input
 	output := make(chan runtime.Event, len(stub.events))
 	for _, event := range stub.events {
+		output <- event
+	}
+	close(output)
+	return output
+}
+
+func (stub *runtimeSequenceStub) Run(_ context.Context, input runtime.Input) <-chan runtime.Event {
+	index := len(stub.inputs)
+	stub.inputs = append(stub.inputs, input)
+	var events []runtime.Event
+	if index < len(stub.runs) {
+		events = stub.runs[index]
+	}
+	output := make(chan runtime.Event, len(events))
+	for _, event := range events {
 		output <- event
 	}
 	close(output)

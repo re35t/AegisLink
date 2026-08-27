@@ -111,12 +111,27 @@ func TestRepositoryConversationRunLifecycle(t *testing.T) {
 	if err = impressionRepository.ApplyCuration(t.Context(), job, curation); err != nil {
 		t.Fatal(err)
 	}
-	if err = impressionRepository.CompleteJob(t.Context(), job.ID); err != nil {
-		t.Fatal(err)
-	}
 	items, err := impressionRepository.List(t.Context(), ownerID, agentID, "active")
 	if err != nil || len(items) != 1 || items[0].Details["language"] != "Go" || len(items[0].Evidence) != 1 {
 		t.Fatalf("Impressions=%#v err=%v", items, err)
+	}
+	update := impression.Curation{
+		Generation: impression.GenerationInfo{Model: "test-curator", PromptVersion: "test-v1", GeneratedAt: time.Now().UTC()},
+		Impressions: []impression.ImpressionDraft{{
+			Action: "update", TargetID: items[0].ID, Scope: impression.ScopeProject, Kind: impression.KindRecentDecision,
+			Summary: "Curator JSONB update works", Details: map[string]any{"language": "Go", "updated": true},
+			Tags: []string{"curator", "jsonb"}, Confidence: .95, Salience: .85,
+		}},
+	}
+	if err = impressionRepository.ApplyCuration(t.Context(), job, update); err != nil {
+		t.Fatal(err)
+	}
+	items, err = impressionRepository.List(t.Context(), ownerID, agentID, "active")
+	if err != nil || len(items) != 1 || items[0].Summary != "Curator JSONB update works" || items[0].Details["updated"] != true || len(items[0].Tags) != 2 || items[0].Tags[1] != "jsonb" {
+		t.Fatalf("updated Impressions=%#v err=%v", items, err)
+	}
+	if err = impressionRepository.CompleteJob(t.Context(), job.ID); err != nil {
+		t.Fatal(err)
 	}
 	candidates, err := impressionRepository.ListCandidates(t.Context(), ownerID, agentID, "pending")
 	if err != nil || len(candidates) != 1 || len(candidates[0].SourceImpressionIDs) != 1 {

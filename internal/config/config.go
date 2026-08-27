@@ -39,13 +39,15 @@ type Auth struct {
 }
 
 type Model struct {
-	ID        string
-	Driver    string
-	BaseURL   string
-	APIKey    string
-	Name      string
-	Timeout   time.Duration
-	MaxTokens int
+	ID           string
+	Driver       string
+	BaseURL      string
+	APIKey       string
+	Name         string
+	Timeout      time.Duration
+	MaxTokens    int
+	JSONOutput   bool
+	ThinkingMode string
 }
 
 type AgentRuntime struct {
@@ -107,6 +109,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	curatorJSONOutput, err := optionalBoolEnv("CURATOR_MODEL_JSON_OUTPUT", true)
+	if err != nil {
+		return Config{}, err
+	}
 
 	driver := strings.TrimSpace(env("MODEL_DRIVER", "deepseek"))
 	cfg := Config{
@@ -126,13 +132,15 @@ func Load() (Config, error) {
 			MaxTokens: maxTokens,
 		},
 		Curator: Model{
-			ID:        nonBlankEnv("CURATOR_MODEL_ID", strings.TrimSpace(env("MODEL_ID", "deepseek-primary"))+"-curator"),
-			Driver:    nonBlankEnv("CURATOR_MODEL_DRIVER", driver),
-			BaseURL:   nonBlankEnv("CURATOR_MODEL_BASE_URL", strings.TrimSpace(env("MODEL_BASE_URL", defaultBaseURL(driver)))),
-			APIKey:    nonBlankEnv("CURATOR_MODEL_API_KEY", strings.TrimSpace(os.Getenv("MODEL_API_KEY"))),
-			Name:      nonBlankEnv("CURATOR_MODEL_NAME", strings.TrimSpace(env("MODEL_NAME", defaultModelName(driver)))),
-			Timeout:   curatorTimeout,
-			MaxTokens: curatorMaxTokens,
+			ID:           nonBlankEnv("CURATOR_MODEL_ID", strings.TrimSpace(env("MODEL_ID", "deepseek-primary"))+"-curator"),
+			Driver:       nonBlankEnv("CURATOR_MODEL_DRIVER", driver),
+			BaseURL:      nonBlankEnv("CURATOR_MODEL_BASE_URL", strings.TrimSpace(env("MODEL_BASE_URL", defaultBaseURL(driver)))),
+			APIKey:       nonBlankEnv("CURATOR_MODEL_API_KEY", strings.TrimSpace(os.Getenv("MODEL_API_KEY"))),
+			Name:         nonBlankEnv("CURATOR_MODEL_NAME", strings.TrimSpace(env("MODEL_NAME", defaultModelName(driver)))),
+			Timeout:      curatorTimeout,
+			MaxTokens:    curatorMaxTokens,
+			JSONOutput:   curatorJSONOutput,
+			ThinkingMode: strings.ToLower(strings.TrimSpace(env("CURATOR_MODEL_THINKING", "disabled"))),
 		},
 		Runtime: AgentRuntime{MaxIterations: maxIterations},
 		MCP: MCP{
@@ -180,6 +188,9 @@ func (cfg Config) Validate() error {
 	if curator.ID == "" || curator.Driver == "" || curator.APIKey == "" || curator.Name == "" || curator.MaxTokens < 1 || curator.Timeout <= 0 {
 		problems = append(problems, errors.New("CURATOR_MODEL_* must resolve to a complete positive model configuration"))
 	}
+	if curator.ThinkingMode != "" && curator.ThinkingMode != "enabled" && curator.ThinkingMode != "disabled" {
+		problems = append(problems, errors.New("CURATOR_MODEL_THINKING must be enabled, disabled, or empty"))
+	}
 	if cfg.Runtime.MaxIterations < 1 {
 		problems = append(problems, errors.New("AGENT_MAX_ITERATIONS must be positive"))
 	}
@@ -199,7 +210,7 @@ func (cfg Config) Validate() error {
 }
 
 func (cfg Config) EffectiveCurator() Model {
-	if cfg.Curator.ID == "" && cfg.Curator.Driver == "" && cfg.Curator.BaseURL == "" && cfg.Curator.APIKey == "" && cfg.Curator.Name == "" && cfg.Curator.Timeout == 0 && cfg.Curator.MaxTokens == 0 {
+	if cfg.Curator.ID == "" && cfg.Curator.Driver == "" && cfg.Curator.BaseURL == "" && cfg.Curator.APIKey == "" && cfg.Curator.Name == "" && cfg.Curator.Timeout == 0 && cfg.Curator.MaxTokens == 0 && !cfg.Curator.JSONOutput && cfg.Curator.ThinkingMode == "" {
 		return cfg.Model
 	}
 	return cfg.Curator
@@ -258,6 +269,13 @@ func boolEnv(key string, fallback bool) (bool, error) {
 		return false, fmt.Errorf("%s must be a boolean: %w", key, err)
 	}
 	return parsed, nil
+}
+
+func optionalBoolEnv(key string, fallback bool) (bool, error) {
+	if strings.TrimSpace(os.Getenv(key)) == "" {
+		return fallback, nil
+	}
+	return boolEnv(key, fallback)
 }
 
 func validateURL(name, value string) error {
