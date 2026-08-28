@@ -1195,6 +1195,7 @@ export interface components {
       expectedVersion: number;
       name?: string;
       description?: string;
+      avatarUrl?: string;
     };
     ConfigureAgentRequest: {
       name: string;
@@ -1215,7 +1216,6 @@ export interface components {
     };
     AgentDiscoverySearchResponse: {
       candidates: components["schemas"]["AgentDiscoveryCandidate"][];
-      avatarUrl?: string;
     };
     DisclosurePolicyChange: {
       /** @enum {string} */

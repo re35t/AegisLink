@@ -2,6 +2,8 @@ package agentindex
 
 import (
 	"context"
+	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -57,6 +59,59 @@ func TestSearchEncodesInputAndReturnsIndexCandidates(t *testing.T) {
 	}
 }
 
+func TestSearchRejectsMalformedEncoderOutput(t *testing.T) {
+	service, err := NewService(
+		&repositoryStub{},
+		profileReaderStub{profile: agent.Profile{AgentID: "agent-1"}},
+		embedderFunc(func(context.Context, []string) ([][]float32, error) { return [][]float32{}, nil }),
+		&clientStub{},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Search(t.Context(), "owner-1", "agent-1", "Go help", 5); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("malformed encoder error = %v", err)
+	}
+}
+
+func TestSyncSerializesOneAgentPublication(t *testing.T) {
+	encoder := &blockingEmbedder{started: make(chan struct{}, 2), release: make(chan struct{})}
+	index := &clientStub{}
+	service, err := NewService(&repositoryStub{}, profileReaderStub{profile: agent.Profile{
+		AgentID:  "agent-1",
+		Identity: agent.ProfileIdentity{ID: "agent-1", Name: "Atlas", Description: "Go systems", Disclosure: publicIndexPolicy()},
+	}}, encoder, index)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var wait sync.WaitGroup
+	wait.Add(2)
+	results := make(chan error, 2)
+	for range 2 {
+		go func() {
+			defer wait.Done()
+			results <- service.Sync(context.Background(), "owner-1", "agent-1")
+		}()
+	}
+	<-encoder.started
+	select {
+	case <-encoder.started:
+		t.Fatal("a second encoder call started before the first Agent sync completed")
+	case <-time.After(20 * time.Millisecond):
+	}
+	encoder.release <- struct{}{}
+	<-encoder.started
+	encoder.release <- struct{}{}
+	wait.Wait()
+	close(results)
+	for result := range results {
+		if result != nil {
+			t.Fatal(result)
+		}
+	}
+}
+
 func publicIndexPolicy() agent.DisclosurePolicy {
 	return agent.DisclosurePolicy{Visibility: agent.VisibilityPublic, Channels: []agent.DisclosureChannel{agent.ChannelAgentFacts}, Indexable: true}
 }
@@ -71,6 +126,28 @@ type embedderStub struct{ input []string }
 
 func (embedder *embedderStub) Embed(_ context.Context, input []string) ([][]float32, error) {
 	embedder.input = append([]string(nil), input...)
+	result := make([][]float32, len(input))
+	for index := range result {
+		result[index] = make([]float32, EmbeddingDimensions)
+		result[index][0] = 1
+	}
+	return result, nil
+}
+
+type embedderFunc func(context.Context, []string) ([][]float32, error)
+
+func (function embedderFunc) Embed(ctx context.Context, input []string) ([][]float32, error) {
+	return function(ctx, input)
+}
+
+type blockingEmbedder struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (embedder *blockingEmbedder) Embed(_ context.Context, input []string) ([][]float32, error) {
+	embedder.started <- struct{}{}
+	<-embedder.release
 	result := make([][]float32, len(input))
 	for index := range result {
 		result[index] = make([]float32, EmbeddingDimensions)

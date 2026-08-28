@@ -16,6 +16,7 @@ import (
 	internala2a "github.com/re35t/AegisLink/internal/a2a"
 	"github.com/re35t/AegisLink/internal/account"
 	"github.com/re35t/AegisLink/internal/agent"
+	"github.com/re35t/AegisLink/internal/agentindex"
 	"github.com/re35t/AegisLink/internal/catalog"
 	"github.com/re35t/AegisLink/internal/conversation"
 	"github.com/re35t/AegisLink/internal/discovery"
@@ -174,6 +175,60 @@ func TestBootstrapExposesStableModelMetadata(t *testing.T) {
 	}
 	if body.Model.ID != model.ID || body.Model.Name != model.Name || len(body.Model.Capabilities) != 2 {
 		t.Fatalf("unexpected model metadata: %#v", body.Model)
+	}
+}
+
+func TestBootstrapExposesRequiredAgentSetup(t *testing.T) {
+	t.Parallel()
+	service := &fakeService{setupRequired: true}
+	router := newTestRouter(service, ModelInfo{})
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/bootstrap", nil)
+	authorize(request)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"setupRequired":true`) {
+		t.Fatalf("unexpected bootstrap response: status=%d body=%q", response.Code, response.Body.String())
+	}
+}
+
+func TestAgentSetupSavesBasicProfileBeforeWorkspace(t *testing.T) {
+	t.Parallel()
+	service := &fakeService{}
+	router := newTestRouter(service, ModelInfo{})
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/agents/agent-1/setup", strings.NewReader(`{
+		"name":"Atlas","primaryFocus":"Go systems and API design"
+	}`))
+	request.Header.Set("Content-Type", "application/json")
+	authorize(request)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK || service.configuredName != "Atlas" || service.configuredFocus != "Go systems and API design" {
+		t.Fatalf("unexpected setup: status=%d body=%q name=%q focus=%q", response.Code, response.Body.String(), service.configuredName, service.configuredFocus)
+	}
+}
+
+func TestAgentDiscoverySearchForwardsValidatedInput(t *testing.T) {
+	t.Parallel()
+	service := &fakeService{discoveryCandidates: []agentindex.Candidate{{
+		AgentAddr: "agent_01ARZ3NDEKTSV4RRFFQ69G5FAV", Score: 0.87,
+		MatchedVectorID: "fact:one", RepresentationRevision: 3,
+	}}}
+	router := newTestRouter(service, ModelInfo{})
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/agents/agent-1/discovery/search", strings.NewReader(`{
+		"query":"Find a Go security reviewer"
+	}`))
+	request.Header.Set("Content-Type", "application/json")
+	authorize(request)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK || service.discoveryQuery != "Find a Go security reviewer" || service.discoveryTopK != 5 {
+		t.Fatalf("unexpected discovery search: status=%d body=%q query=%q topK=%d", response.Code, response.Body.String(), service.discoveryQuery, service.discoveryTopK)
+	}
+	if !strings.Contains(response.Body.String(), `"agentAddr":"agent_01ARZ3NDEKTSV4RRFFQ69G5FAV"`) {
+		t.Fatalf("candidate missing from %q", response.Body.String())
 	}
 }
 
@@ -385,18 +440,24 @@ func TestAGUIRunStreamsProtocolLifecycleAndTextEvents(t *testing.T) {
 }
 
 type fakeService struct {
-	conversationError  error
-	profileError       error
-	instructionsError  error
-	run                conversation.Run
-	events             []conversation.RunEvent
-	startRequest       *conversation.RunRequest
-	settingsUpdate     *account.SettingsUpdate
-	currentPassword    string
-	newPassword        string
-	profileUpdate      *agent.ProfileUpdate
-	instructionsUpdate *agent.InstructionsUpdate
-	policyChanges      []agent.PolicyChange
+	conversationError   error
+	profileError        error
+	instructionsError   error
+	run                 conversation.Run
+	events              []conversation.RunEvent
+	startRequest        *conversation.RunRequest
+	settingsUpdate      *account.SettingsUpdate
+	currentPassword     string
+	newPassword         string
+	profileUpdate       *agent.ProfileUpdate
+	instructionsUpdate  *agent.InstructionsUpdate
+	policyChanges       []agent.PolicyChange
+	setupRequired       bool
+	configuredName      string
+	configuredFocus     string
+	discoveryQuery      string
+	discoveryTopK       int
+	discoveryCandidates []agentindex.Candidate
 }
 
 func (fake *fakeService) Register(context.Context, string, string, string) (account.AuthResult, error) {
@@ -491,6 +552,22 @@ func (fake *fakeService) RevokeFact(context.Context, string, string, string, int
 	profile := testAgentProfile()
 	profile.Version++
 	return profile, fake.profileError
+}
+func (fake *fakeService) SetupRequired(context.Context, string, string) (bool, error) {
+	return fake.setupRequired, fake.profileError
+}
+func (fake *fakeService) Configure(_ context.Context, _, _ string, name, primaryFocus string) (agent.Profile, error) {
+	fake.configuredName = name
+	fake.configuredFocus = primaryFocus
+	return testAgentProfile(), fake.profileError
+}
+func (fake *fakeService) Sync(context.Context, string, string) error {
+	return fake.profileError
+}
+func (fake *fakeService) Search(_ context.Context, _, _ string, query string, topK int) ([]agentindex.Candidate, error) {
+	fake.discoveryQuery = query
+	fake.discoveryTopK = topK
+	return fake.discoveryCandidates, fake.profileError
 }
 func (fake *fakeService) ListConversations(context.Context, string) ([]conversation.Conversation, error) {
 	return nil, nil
@@ -606,6 +683,7 @@ func newTestRouterWithSkills(service *fakeService, model ModelInfo, skillService
 	return NewRouter(
 		Dependencies{
 			Accounts: service, Agents: service, Profiles: service, Conversations: service,
+			Setup: service, AgentIndex: service,
 			Impressions: &fakeImpressionService{}, Discovery: &fakeDiscoveryService{}, AgentCards: &fakeAgentCardService{},
 			Memories: &fakeMemoryService{}, Skills: skillService, MCP: &fakeMCPService{}, Catalog: &fakeCatalogService{},
 		},

@@ -8,8 +8,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash"
+	"math"
 	"sort"
 	"strings"
+	"sync"
 	"unicode/utf8"
 
 	"github.com/re35t/AegisLink/internal/agent"
@@ -25,16 +27,32 @@ type Service struct {
 	profiles   ProfileReader
 	embedder   Embedder
 	client     Client
+	lockMu     sync.Mutex
+	locks      map[string]*agentSyncLock
+}
+
+type agentSyncLock struct {
+	mutex sync.Mutex
+	users int
 }
 
 func NewService(repository Repository, profiles ProfileReader, embedder Embedder, client Client) (*Service, error) {
 	if repository == nil || profiles == nil || embedder == nil || client == nil {
 		return nil, fmt.Errorf("%w: repository, Profile reader, encoder, and Index client are required", ErrUnavailable)
 	}
-	return &Service{repository: repository, profiles: profiles, embedder: embedder, client: client}, nil
+	return &Service{
+		repository: repository,
+		profiles:   profiles,
+		embedder:   embedder,
+		client:     client,
+		locks:      make(map[string]*agentSyncLock),
+	}, nil
 }
 
 func (service *Service) Sync(ctx context.Context, principalID, agentID string) error {
+	unlock := service.lockAgent(principalID, agentID)
+	defer unlock()
+
 	profile, err := service.profiles.Get(ctx, principalID, agentID)
 	if err != nil {
 		return err
@@ -67,6 +85,10 @@ func (service *Service) Sync(ctx context.Context, principalID, agentID string) e
 		service.fail(ctx, principalID, agentID, err)
 		return fmt.Errorf("%w: encode Profile: %v", ErrUnavailable, err)
 	}
+	if err := validateEmbeddings(embeddings, len(units)); err != nil {
+		service.fail(ctx, principalID, agentID, err)
+		return err
+	}
 	vectors := make([]FactVector, len(units))
 	for index, unit := range units {
 		vectors[index] = FactVector{VectorID: unit.vectorID, SourceDigest: digest(unit.text), Embedding: embeddings[index]}
@@ -98,7 +120,55 @@ func (service *Service) Search(ctx context.Context, principalID, agentID, query 
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrUnavailable, err)
 	}
+	if err := validateEmbeddings(vectors, 1); err != nil {
+		return nil, err
+	}
 	return service.client.Search(ctx, vectors[0], topK)
+}
+
+func (service *Service) lockAgent(principalID, agentID string) func() {
+	key := principalID + "\x00" + agentID
+	service.lockMu.Lock()
+	entry := service.locks[key]
+	if entry == nil {
+		entry = &agentSyncLock{}
+		service.locks[key] = entry
+	}
+	entry.users++
+	service.lockMu.Unlock()
+
+	entry.mutex.Lock()
+	return func() {
+		entry.mutex.Unlock()
+		service.lockMu.Lock()
+		entry.users--
+		if entry.users == 0 {
+			delete(service.locks, key)
+		}
+		service.lockMu.Unlock()
+	}
+}
+
+func validateEmbeddings(vectors [][]float32, expected int) error {
+	if len(vectors) != expected {
+		return fmt.Errorf("%w: encoder returned %d vectors, expected %d", ErrUnavailable, len(vectors), expected)
+	}
+	for index, vector := range vectors {
+		if len(vector) != EmbeddingDimensions {
+			return fmt.Errorf("%w: encoder vector %d has %d dimensions, expected %d", ErrUnavailable, index, len(vector), EmbeddingDimensions)
+		}
+		nonzero := false
+		for _, value := range vector {
+			if math.IsNaN(float64(value)) || math.IsInf(float64(value), 0) {
+				return fmt.Errorf("%w: encoder vector %d contains a non-finite value", ErrUnavailable, index)
+			}
+			nonzero = nonzero || value != 0
+		}
+		if !nonzero {
+			return fmt.Errorf("%w: encoder vector %d is zero", ErrUnavailable, index)
+		}
+	}
+	return nil
 }
 
 func (service *Service) fail(ctx context.Context, principalID, agentID string, cause error) {

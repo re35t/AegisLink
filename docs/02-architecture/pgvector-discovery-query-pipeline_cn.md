@@ -16,7 +16,7 @@
 - MVP 不做结构化 Facet 倒排检索，也不在 Search 后增加 AgentFacts 回源验证阶段；
 - Index 不保存 AgentFacts 原文，只保存由 Agent Server 上传的向量和必要版本元数据。
 
-当前独立 Index 已完成全部三阶段：空对象注册与幂等重放、pgvector Representation 原子替换，以及按 AgentAddr 聚合的 exact cosine Search。旧 public Resolve 路由已移除。Agent Server 侧自动 Encoder/Publisher/Caller 接入仍是独立产品切片。
+当前独立 Index 已完成全部三阶段：空对象注册与幂等重放、pgvector Representation 原子替换，以及按 AgentAddr 聚合的 exact cosine Search。Agent Server 已完成首次设置注册、Disclosure Policy 过滤后的 Profile 编码、Profile/Policy/Confirmed Fact 变化后的完整快照自动发布、显式同步重试，以及通过受认证 Discovery 接口进行 Query 编码与 Index 查询。旧 public Resolve 路由保持移除。
 
 ## 2. 核心模型
 
@@ -645,12 +645,12 @@ Publish 使用 AgentAddr 行锁和单事务 replacement。并发 Revision `7`、
 
 - **Index 已实现**：pgvector Extension、Representation/Fact Vector Migration、共享 Token 认证、快照校验、幂等单调 Revision 与事务 replacement；
 - **Index 已验证**：新增、修改、删除、空快照与并发 Revision；
-- Agent Server 统一 Encoder 与自动 Publisher Client 仍是独立接入切片。
+- **Agent Server 已实现**：固定 OpenAI-compatible Encoder 配置、Disclosure 过滤、确定性 Profile 单元与摘要、setup/Profile/Policy/Confirmed Fact 变化后的完整快照自动发布，以及显式重试同步。
 
 ### Slice 3：Vector Search
 
 - **Index 已实现**：exact cosine、AgentAddr 聚合、稳定排序，并返回 AgentAddr、Score、Matched Vector ID 和 Representation Revision；
-- Caller Agent Server 使用同一 Encoder 自动生成 Query Vector 仍是独立接入切片；
+- **Agent Server 已实现**：Owner-scoped Discovery HTTP 输入校验、使用相同 Encoder Profile 生成 Query Vector，并通过认证 Index Search 返回排序候选；
 - 建立 exact baseline 后才按规模评估 HNSW；
 - 不增加 LSH、Facts URL Fetch 或结构化倒排旁路。
 

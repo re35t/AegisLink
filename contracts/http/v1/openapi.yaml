@@ -1836,6 +1836,9 @@ components:
         description:
           type: string
           maxLength: 1000
+        avatarUrl:
+          type: string
+          maxLength: 2048
     ConfigureAgentRequest:
       type: object
       additionalProperties: false
@@ -1891,9 +1894,6 @@ components:
           maxItems: 50
           items:
             $ref: "#/components/schemas/AgentDiscoveryCandidate"
-        avatarUrl:
-          type: string
-          maxLength: 2048
     DisclosurePolicyChange:
       type: object
       required: [subjectType, subjectId, policy]

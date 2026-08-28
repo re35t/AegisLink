@@ -69,8 +69,10 @@ The protocol contains no public AgentAddr resolve, Facts URL fetch, AgentFacts p
 | AgentAddr registration             | Implemented                  | Empty request; persist and return AgentAddr |
 | Facts URL / empty LSH              | Removed                      | Never enter contract or new storage         |
 | Representation publication         | Complete snapshot replacement | Per-AgentAddr publisher credentials         |
+| Agent Server Profile publisher      | Setup and mutation sync implemented | Durable retry/outbox for multi-replica operation |
 | PostgreSQL pgvector                | Fixed 1536-dimensional table  | Scale from measured capacity                |
 | Discovery Search                   | Exact cosine implemented      | Add HNSW migration only after evaluation    |
+| Agent Server Discovery caller       | Query encoding/API implemented | Run-level product integration               |
 | LSH / Hash Index                   | Removed                       | Never implement                             |
 
 The implemented public contract is `index/contracts/http/v1/openapi.yaml`. Future HTTP changes must still update it before runtime implementation.

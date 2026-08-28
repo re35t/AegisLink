@@ -23,7 +23,7 @@ curl http://127.0.0.1:4331/readyz
 
 Index 读取 `INDEX_SERVER_ADDRESS`、`INDEX_SERVER_SHUTDOWN_TIMEOUT`、`INDEX_DATABASE_URL`、`INDEX_REGISTRATION_TOKEN` 与 `INDEX_QUERY_TOKEN`，不需要主服务的 `DATABASE_URL`、`MODEL_API_KEY` 或 AgentFacts 加密密钥。Index 的 pgvector 数据库与 Agent Server 数据库相互独立。
 
-要让 Agent Server 的首次设置、Profile 同步和 Discovery 搜索连接到该进程，请配置 `AGENT_INDEX_BASE_URL`、`AGENT_INDEX_REGISTRATION_TOKEN` 与 `AGENT_INDEX_QUERY_TOKEN`；再通过 `DISCOVERY_ENCODER_BASE_URL` 和 `DISCOVERY_ENCODER_MODEL` 配置 OpenAI-compatible Encoder，Provider 需要鉴权时再设置 `DISCOVERY_ENCODER_API_KEY`。Agent Index 与 Encoder 的必填字段作为一组启用，部分配置会在启动时被拒绝；Encoder 必须生成 Index Profile 固定的 1536 维向量。
+要让 Agent Server 的首次设置、Profile 同步和 Discovery 搜索连接到该进程，请配置 `AGENT_INDEX_BASE_URL`、`AGENT_INDEX_REGISTRATION_TOKEN` 与 `AGENT_INDEX_QUERY_TOKEN`；再通过 `DISCOVERY_ENCODER_BASE_URL` 和 `DISCOVERY_ENCODER_MODEL` 配置 OpenAI-compatible Encoder，Provider 需要鉴权时再设置 `DISCOVERY_ENCODER_API_KEY`。已有且完成配置的账号可以在关闭 Agent Index 时运行，但新注册账号只有在 Index 与 Encoder 可用后才能完成必需的首次设置。Agent Index 与 Encoder 的必填字段作为一组启用，部分配置会在启动时被拒绝；Encoder 必须生成 Index Profile 固定的 1536 维向量。
 
 Server 打开数据库时由 Goose 应用有序 migration。运行时持久化使用 GORM，并明确禁用 `AutoMigrate`。
 

@@ -115,6 +115,45 @@ func TestProfileServiceConfiguresAndSyncsBeforeCompletingSetup(t *testing.T) {
 	}
 }
 
+func TestProfileAndFactMutationsSynchronizeDiscoveryVectors(t *testing.T) {
+	repository := newProfileRepositoryStub()
+	synchronizer := &profileSynchronizerStub{}
+	service := NewProfileService(repository, profileAgentStub{}).WithSynchronizer(synchronizer)
+
+	description := "Go systems"
+	if _, err := service.Update(t.Context(), "owner-1", "agent-1", ProfileUpdate{ExpectedVersion: 1, Description: &description}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.UpdatePolicies(t.Context(), "owner-1", "agent-1", 2, []PolicyChange{{
+		SubjectType: SubjectIdentity,
+		SubjectID:   "agent-1",
+		Policy:      DisclosurePolicy{Visibility: VisibilityPublic, Channels: []DisclosureChannel{ChannelAgentFacts}, Indexable: true},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.ConfirmCandidate(t.Context(), "owner-1", "agent-1", "candidate-1", 3, 1, ConfirmFactUpdate{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.RevokeFact(t.Context(), "owner-1", "agent-1", "fact-1", 3); err != nil {
+		t.Fatal(err)
+	}
+	if synchronizer.calls != 4 {
+		t.Fatalf("discovery synchronizer calls = %d, want 4", synchronizer.calls)
+	}
+}
+
+func TestProfileMutationReportsIndexFailureAfterLocalSave(t *testing.T) {
+	repository := newProfileRepositoryStub()
+	synchronizer := &profileSynchronizerStub{err: errors.New("encoder offline")}
+	service := NewProfileService(repository, profileAgentStub{}).WithSynchronizer(synchronizer)
+	description := "Go systems"
+
+	_, err := service.Update(t.Context(), "owner-1", "agent-1", ProfileUpdate{ExpectedVersion: 1, Description: &description})
+	if !errors.Is(err, ErrIndexSync) || repository.identityUpdate.Description == nil {
+		t.Fatalf("update error=%v identityUpdate=%#v", err, repository.identityUpdate)
+	}
+}
+
 func TestDisclosurePolicyFiltering(t *testing.T) {
 	public := DisclosurePolicy{Visibility: VisibilityPublic, Channels: []DisclosureChannel{ChannelAgentFacts}}
 	if !public.Allows(ChannelAgentFacts, "", false) || public.Allows(ChannelAgentCard, "", false) {
@@ -204,9 +243,12 @@ func (repository *profileRepositoryStub) CompleteSetup(context.Context, string, 
 	return nil
 }
 
-type profileSynchronizerStub struct{ calls int }
+type profileSynchronizerStub struct {
+	calls int
+	err   error
+}
 
 func (synchronizer *profileSynchronizerStub) Sync(context.Context, string, string) error {
 	synchronizer.calls++
-	return nil
+	return synchronizer.err
 }

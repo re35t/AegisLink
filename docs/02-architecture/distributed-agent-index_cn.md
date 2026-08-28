@@ -85,8 +85,10 @@ Index 不持有：
 | AgentAddr 注册             | 已实现             | 空请求，仅返回并持久化 AgentAddr |
 | Facts URL / 空 LSH         | 已移除             | 不再进入契约和新存储             |
 | Representation Publication | 已实现完整快照替换 | AgentAddr 独立 Publisher Credential |
+| Agent Server Profile Publisher | 已实现 setup 与变化同步 | 多副本场景的持久重试/Outbox          |
 | PostgreSQL pgvector        | 已实现固定 1536 维 | 按实测容量扩展                   |
 | Discovery Search           | 已实现 exact cosine | 评测达标后另加 HNSW Migration    |
+| Agent Server Discovery Caller | 已实现 Query 编码与接口 | Run 级产品接入                    |
 | LSH / Hash Index           | 已删除             | 不再实现                         |
 
 公开 HTTP 形状以 `index/contracts/http/v1/openapi.yaml` 为准；后续变更仍必须先更新 OpenAPI，再进入运行时代码。

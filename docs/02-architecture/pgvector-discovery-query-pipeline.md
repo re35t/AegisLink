@@ -10,7 +10,7 @@ This document replaces the previous retrieval design with exactly three business
 
 The target design removes the empty registration `lsh` field, Facts URLs, Index-side AgentFacts fetching, LSH/HashIndex, structured facet retrieval, and post-search AgentFacts fetching. Index stores no raw AgentFacts, only vector snapshots and version metadata.
 
-The standalone Index now implements all three stages: empty-object registration and idempotent replay, atomic Representation replacement in pgvector, and exact cosine Search grouped by AgentAddr. The legacy public resolve route is removed. Automatic Agent Server encoder/publisher/caller integration remains a separate product slice.
+The standalone Index implements all three stages: empty-object registration and idempotent replay, atomic Representation replacement in pgvector, and exact cosine Search grouped by AgentAddr. The Agent Server now completes first-run registration, disclosure-gated Profile encoding, automatic complete-snapshot publication after Profile, policy, and Confirmed Fact mutations, explicit sync retry, and query encoding through its authenticated Discovery endpoint. The legacy public resolve route remains removed.
 
 ## 2. Core model
 
@@ -358,8 +358,8 @@ Retire `StructuredIndex`, `HashIndex`, `RoutingKey`, `WeightedRoutingKey`, `Hash
 Implementation slices:
 
 1. **Register — implemented**: OpenAPI removes name, Facts URL, TTL, and LSH; empty registration allocates AgentAddr; a new Goose migration evolves Registry; public resolve is absent.
-2. **Publish / Update — Index implemented**: pgvector tables, shared-token authentication, validation, idempotent monotonic revisions, and atomic snapshot replacement are present. Automatic Agent Server encoding/publication remains separate.
-3. **Search — Index implemented**: exact cosine, per-Agent aggregation, stable ranking, and the query-token boundary are present. Automatic caller encoding remains separate; HNSW waits for measurements.
+2. **Publish / Update — implemented end to end**: Index provides pgvector tables, shared-token authentication, validation, idempotent monotonic revisions, and atomic snapshot replacement. Agent Server provides the pinned OpenAI-compatible encoder, disclosure filtering, deterministic Profile units and digests, automatic publication after setup/Profile/policy/Confirmed Fact changes, and explicit retry sync.
+3. **Search — implemented end to end**: Index provides exact cosine, per-Agent aggregation, stable ranking, and the query-token boundary. Agent Server validates owner-scoped Discovery input, encodes it with the same Encoder Profile, and returns the ranked Index candidates; HNSW waits for measurements.
 
 ## 10. Final invariants
 
