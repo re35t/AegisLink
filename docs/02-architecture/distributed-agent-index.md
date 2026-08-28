@@ -2,7 +2,7 @@
 
 ## Status
 
-The repository already contains an independent Go/Gin `aegislink-index` process, health/readiness, its own PostgreSQL connection, and stage-one address-only registration. Registration accepts an empty object and allocates and persists AgentAddr; name, Facts URL, cache TTL, LSH JSON, and public resolve are absent. Vector publication and search are not implemented.
+The repository contains a runnable initial Go/Gin `aegislink-index`, health/readiness, independent PostgreSQL + pgvector, and all three Register, Publish/Update, and Search stages. Registration allocates an AgentAddr from an empty object, publication atomically replaces complete Fact Vector snapshots, and exact cosine search aggregates candidates by AgentAddr. Name, Facts URL, cache TTL, LSH JSON, and public resolve are absent.
 
 Index continues through exactly three stages:
 
@@ -61,16 +61,16 @@ The protocol contains no public AgentAddr resolve, Facts URL fetch, AgentFacts p
 - If PostgreSQL capacity is exceeded, replace the `VectorSearch` adapter without changing Register/Publish/Search.
 - Do not implement LSH or use NANDA URL/URN resolution as the data model.
 
-## Current versus target
+## Current initial version and next extensions
 
 | Capability                         | Current repository           | Next target                                 |
 | ---------------------------------- | ---------------------------- | ------------------------------------------- |
 | Independent Index process/database | Implemented                  | Retain                                      |
 | AgentAddr registration             | Implemented                  | Empty request; persist and return AgentAddr |
 | Facts URL / empty LSH              | Removed                      | Never enter contract or new storage         |
-| Representation publication         | Port skeleton only           | Complete vector snapshot replacement        |
-| PostgreSQL pgvector                | Not implemented              | Fixed-dimension Fact Vector table           |
-| Discovery Search                   | Not implemented              | Query Vector to AgentAddr Top-K             |
-| LSH / Hash Index                   | Legacy port skeleton remains | Remove; never implement                     |
+| Representation publication         | Complete snapshot replacement | Per-AgentAddr publisher credentials         |
+| PostgreSQL pgvector                | Fixed 1536-dimensional table  | Scale from measured capacity                |
+| Discovery Search                   | Exact cosine implemented      | Add HNSW migration only after evaluation    |
+| LSH / Hash Index                   | Removed                       | Never implement                             |
 
-Public HTTP changes must update `index/contracts/http/v1/openapi.yaml` before runtime implementation. This architecture document does not make target routes implemented.
+The implemented public contract is `index/contracts/http/v1/openapi.yaml`. Future HTTP changes must still update it before runtime implementation.

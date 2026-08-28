@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/re35t/AegisLink/index/internal/config"
+	"github.com/re35t/AegisLink/index/internal/discovery"
 	"github.com/re35t/AegisLink/index/internal/httpapi"
 	"github.com/re35t/AegisLink/index/internal/postgres"
 	"github.com/re35t/AegisLink/index/internal/registry"
@@ -38,7 +39,12 @@ func New(parent context.Context, cfg config.Config, logger *slog.Logger) (*Appli
 	if err != nil {
 		return closeOnError(err)
 	}
-	return build(cfg, logger, database, registryService, database.Close, cancel), nil
+	discoveryRepository := postgres.NewDiscoveryRepository(database)
+	discoveryService, err := discovery.NewService(discoveryRepository, discoveryRepository)
+	if err != nil {
+		return closeOnError(err)
+	}
+	return build(cfg, logger, database, registryService, discoveryService, database.Close, cancel), nil
 }
 
 func build(
@@ -46,14 +52,16 @@ func build(
 	logger *slog.Logger,
 	readiness httpapi.Readiness,
 	registryService httpapi.Registry,
+	discoveryService httpapi.Discovery,
 	closeDatabase func() error,
 	cancel context.CancelFunc,
 ) *Application {
 	server := &http.Server{
 		Addr: cfg.Server.Address,
 		Handler: httpapi.NewRouter(httpapi.Dependencies{
-			Readiness: readiness, Registry: registryService,
+			Readiness: readiness, Registry: registryService, Discovery: discoveryService,
 			RegistrationToken: cfg.Security.RegistrationToken,
+			QueryToken:        cfg.Security.QueryToken,
 		}, logger),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,

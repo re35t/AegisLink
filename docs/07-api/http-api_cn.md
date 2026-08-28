@@ -31,7 +31,7 @@ DNS 验证并启用发布后，服务端只按真实 HTTP `Host` 精确选择 Ag
 
 ## 独立 Index
 
-独立契约 [`../../index/contracts/http/v1/openapi.yaml`](../../index/contracts/http/v1/openapi.yaml) 暴露 Health/Readiness 和 Bearer 认证的 `POST /api/v1/registry/agents`。注册只接受 `{}`，分配并持久化不透明 AgentAddr，并支持幂等重放；不暴露公开 Resolve。三阶段 [pgvector Discovery 链路](../02-architecture/pgvector-discovery-query-pipeline_cn.md)中的 Representation Publication 与 Search 仍未实现。
+独立契约 [`../../index/contracts/http/v1/openapi.yaml`](../../index/contracts/http/v1/openapi.yaml) 暴露 Health/Readiness 和带 Bearer 认证的三阶段 Index：只接受空对象且支持幂等重放的 AgentAddr Registration、完整 Representation 替换与 Query Vector Search；不暴露公开 Resolve 或 AgentFacts 原文。
 
 ## 未提供接口
 

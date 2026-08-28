@@ -2,7 +2,7 @@
 
 The authoritative schema is the ordered SQL under [`../../migrations`](../../migrations). This guide describes ownership and table responsibilities without duplicating every column or constraint.
 
-The standalone Index has a separate authority boundary and migration history under [`../../index/migrations`](../../index/migrations). Runtime Registry access now uses `agent_registry`, which stores only AgentAddr, schema/status, idempotency/request digests, and timestamps. Migration 00002 copies previously allocated addresses into this table without copying name, Facts URL, cache TTL, or LSH. The legacy `agent_addresses` table remains only for migration compatibility. pgvector Representation tables from the [three-stage Discovery design](../02-architecture/pgvector-discovery-query-pipeline.md) are not implemented.
+The standalone Index has a separate authority boundary and migration history under [`../../index/migrations`](../../index/migrations). `agent_registry` stores only AgentAddr, schema/status, idempotency/request digests, and timestamps. Migration 00002 copies previously allocated addresses without copying name, Facts URL, cache TTL, or LSH; the legacy `agent_addresses` table remains only for migration compatibility. Migration 00003 enables pgvector and adds current `discovery_representations` plus fixed-dimension `discovery_fact_vectors`; each publication atomically replaces these vector rows.
 
 ## Account and Agent ownership
 

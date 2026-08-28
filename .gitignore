@@ -14,3 +14,4 @@ output/
 *.tsbuildinfo
 data/agents/*/conversations.jsonl
 !data/agents/local-agent/conversations.jsonl
+.idea

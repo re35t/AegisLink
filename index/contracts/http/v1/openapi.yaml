@@ -1,11 +1,11 @@
 openapi: 3.1.0
 info:
   title: AegisLink Index API
-  version: 0.3.0
+  version: 0.4.0
   description: >-
-    API for the standalone AegisLink Index. The current Registry slice allocates
-    and durably stores opaque AgentAddr values. Vector publication and discovery
-    search are not yet exposed.
+    API for the standalone AegisLink Index. It allocates opaque AgentAddr
+    values, atomically replaces complete vector representations, and searches
+    those representations without storing AgentFacts text.
 paths:
   /healthz:
     get:
@@ -91,11 +91,105 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/registry/agents/{agentAddr}/representation:
+    put:
+      operationId: replaceAgentRepresentation
+      summary: Replace an AgentAddr's complete discovery vector snapshot
+      security:
+        - registrationBearer: []
+      parameters:
+        - $ref: "#/components/parameters/AgentAddr"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RepresentationSnapshot"
+      responses:
+        "204":
+          description: Snapshot replaced or an identical revision replayed
+        "401":
+          description: Publication credentials are missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: AgentAddr does not exist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Revision is stale or conflicts with stored content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: Request body exceeds the 2 MiB publication limit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Encoder profile or vector snapshot is invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/discovery/search:
+    post:
+      operationId: searchAgentRepresentations
+      summary: Find AgentAddr candidates by exact cosine similarity
+      security:
+        - queryBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DiscoveryQuery"
+      responses:
+        "200":
+          description: Ranked AgentAddr candidates, possibly empty
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscoveryResult"
+        "401":
+          description: Query credentials are missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Encoder profile or query vector is invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Vector search is temporarily unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   securitySchemes:
     registrationBearer:
       type: http
       scheme: bearer
+    queryBearer:
+      type: http
+      scheme: bearer
+  parameters:
+    AgentAddr:
+      name: agentAddr
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/AgentAddr"
   schemas:
     HealthResponse:
       type: object
@@ -121,11 +215,107 @@ components:
         schemaVersion:
           const: aegislink.agent-addr/0.2-draft
         agentAddr:
-          type: string
-          pattern: "^agent_[0-9A-HJKMNP-TV-Z]{26}$"
+          $ref: "#/components/schemas/AgentAddr"
         createdAt:
           type: string
           format: date-time
+    AgentAddr:
+      type: string
+      pattern: "^agent_[0-9A-HJKMNP-TV-Z]{26}$"
+    Digest:
+      type: string
+      pattern: "^sha256:[0-9a-f]{64}$"
+    EncoderProfile:
+      const: aegislink-discovery-v1:text-embedding-model:1536:cosine
+    Embedding:
+      type: array
+      minItems: 1536
+      maxItems: 1536
+      items:
+        type: number
+        format: float
+    FactVector:
+      type: object
+      additionalProperties: false
+      required: [vectorId, sourceDigest, embedding]
+      properties:
+        vectorId:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        sourceDigest:
+          $ref: "#/components/schemas/Digest"
+        embedding:
+          $ref: "#/components/schemas/Embedding"
+    RepresentationSnapshot:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, revision, encoderProfile, sourceSetDigest, vectors]
+      properties:
+        schemaVersion:
+          const: aegislink.discovery-representation/0.2-draft
+        revision:
+          type: integer
+          format: int64
+          minimum: 1
+        encoderProfile:
+          $ref: "#/components/schemas/EncoderProfile"
+        sourceSetDigest:
+          $ref: "#/components/schemas/Digest"
+        vectors:
+          type: array
+          maxItems: 64
+          items:
+            $ref: "#/components/schemas/FactVector"
+    DiscoveryQuery:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, encoderProfile, embedding]
+      properties:
+        schemaVersion:
+          const: aegislink.discovery-query/0.2-draft
+        encoderProfile:
+          $ref: "#/components/schemas/EncoderProfile"
+        embedding:
+          $ref: "#/components/schemas/Embedding"
+        topK:
+          type: integer
+          minimum: 1
+          maximum: 50
+          default: 5
+    DiscoveryCandidate:
+      type: object
+      additionalProperties: false
+      required: [agentAddr, score, matchedVectorId, representationRevision]
+      properties:
+        agentAddr:
+          $ref: "#/components/schemas/AgentAddr"
+        score:
+          type: number
+          format: double
+          minimum: -1
+          maximum: 1
+        matchedVectorId:
+          type: string
+        representationRevision:
+          type: integer
+          format: int64
+          minimum: 1
+    DiscoveryResult:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, encoderProfile, candidates]
+      properties:
+        schemaVersion:
+          const: aegislink.discovery-result/0.2-draft
+        encoderProfile:
+          $ref: "#/components/schemas/EncoderProfile"
+        candidates:
+          type: array
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/DiscoveryCandidate"
     ErrorResponse:
       type: object
       required: [code, message]

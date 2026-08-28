@@ -2,90 +2,84 @@ package discovery
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/re35t/AegisLink/index/internal/registry"
 )
 
-const DraftSchemaVersion = "aegislink.discovery-representation/0.1-draft"
+const (
+	RepresentationSchemaVersion = "aegislink.discovery-representation/0.2-draft"
+	QuerySchemaVersion          = "aegislink.discovery-query/0.2-draft"
+	ResultSchemaVersion         = "aegislink.discovery-result/0.2-draft"
+	EncoderProfile              = "aegislink-discovery-v1:text-embedding-model:1536:cosine"
+	EmbeddingDimensions         = 1536
+	MaxVectorsPerAgent          = 64
+	DefaultTopK                 = 5
+	MaxTopK                     = 50
+)
 
-type RoutingKey struct {
-	Facet string `json:"facet"`
-	Value string `json:"value"`
+var (
+	ErrAgentNotFound      = errors.New("AgentAddr is not registered")
+	ErrInvalidSnapshot    = errors.New("invalid vector snapshot")
+	ErrInvalidQuery       = errors.New("invalid query vector")
+	ErrUnsupportedProfile = errors.New("encoder profile is unsupported")
+	ErrStaleRevision      = errors.New("representation revision is stale")
+)
+
+// FactVector contains only a publisher-chosen identifier, a source digest, and
+// an embedding. The Index never receives the source AgentFact text.
+type FactVector struct {
+	VectorID     string    `json:"vectorId"`
+	SourceDigest string    `json:"sourceDigest"`
+	Embedding    []float32 `json:"embedding"`
 }
 
-type WeightedRoutingKey struct {
-	RoutingKey
-	Weight float64 `json:"weight"`
+// Snapshot is a complete replacement, not a patch. An empty Vectors slice
+// deliberately removes the AgentAddr from discovery results.
+type Snapshot struct {
+	SchemaVersion   string       `json:"schemaVersion"`
+	Revision        int64        `json:"revision"`
+	EncoderProfile  string       `json:"encoderProfile"`
+	SourceSetDigest string       `json:"sourceSetDigest"`
+	Vectors         []FactVector `json:"vectors"`
 }
 
-type SemanticVector struct {
-	Name           string    `json:"name"`
-	EncoderProfile string    `json:"encoderProfile"`
-	Values         []float32 `json:"values"`
-}
-
-type HashSignature struct {
-	Family string `json:"family"`
-	Table  uint16 `json:"table"`
-	Bucket string `json:"bucket"`
-}
-
-// Representation is a lossy routing projection. It deliberately contains no
-// private Profile data or complete AgentFacts document.
+// Representation is the validated form passed to persistence.
 type Representation struct {
-	SchemaVersion   string             `json:"schemaVersion"`
-	AgentAddr       registry.AgentAddr `json:"agentAddr"`
-	Revision        int64              `json:"revision"`
-	EncoderProfile  string             `json:"encoderProfile"`
-	RoutingKeys     []RoutingKey       `json:"routingKeys"`
-	SemanticVectors []SemanticVector   `json:"semanticVectors"`
-	HashSignatures  []HashSignature    `json:"hashSignatures"`
-	FactsDigest     string             `json:"factsDigest"`
-	UpdatedAt       time.Time          `json:"updatedAt"`
+	AgentAddr       registry.AgentAddr
+	Revision        int64
+	EncoderProfile  string
+	SourceSetDigest string
+	Vectors         []FactVector
+	RequestDigest   []byte
+	PublishedAt     time.Time
 }
 
-type QueryPlan struct {
-	Required       []RoutingKey         `json:"required"`
-	Preferred      []WeightedRoutingKey `json:"preferred"`
-	Semantic       []SemanticVector     `json:"semantic"`
-	HashSignatures []HashSignature      `json:"hashSignatures"`
-	TopK           int                  `json:"topK"`
-}
-
-type CandidateSignal struct {
-	AgentID        string  `json:"agentId"`
-	PreferredScore float64 `json:"preferredScore"`
-	SemanticScore  float64 `json:"semanticScore"`
-	FreshnessScore float64 `json:"freshnessScore"`
-	MatchedBuckets int     `json:"matchedBuckets"`
+type Query struct {
+	SchemaVersion  string    `json:"schemaVersion"`
+	EncoderProfile string    `json:"encoderProfile"`
+	Embedding      []float32 `json:"embedding"`
+	TopK           int       `json:"topK,omitempty"`
 }
 
 type Candidate struct {
-	AgentID     string  `json:"agentId"`
-	Score       float64 `json:"score"`
-	FactsDigest string  `json:"factsDigest"`
-	Revision    int64   `json:"revision"`
+	AgentAddr              registry.AgentAddr `json:"agentAddr"`
+	Score                  float64            `json:"score"`
+	MatchedVectorID        string             `json:"matchedVectorId"`
+	RepresentationRevision int64              `json:"representationRevision"`
+}
+
+type Result struct {
+	SchemaVersion  string      `json:"schemaVersion"`
+	EncoderProfile string      `json:"encoderProfile"`
+	Candidates     []Candidate `json:"candidates"`
 }
 
 type RepresentationStore interface {
-	Upsert(context.Context, Representation) error
-	Remove(context.Context, string) error
-	Get(context.Context, string) (Representation, error)
+	Replace(context.Context, Representation) error
 }
 
-type StructuredIndex interface {
-	SearchStructured(context.Context, []RoutingKey, []WeightedRoutingKey, int) ([]CandidateSignal, error)
-}
-
-type SemanticIndex interface {
-	SearchSemantic(context.Context, []SemanticVector, []string, int) ([]CandidateSignal, error)
-}
-
-type HashIndex interface {
-	SearchHashes(context.Context, []HashSignature, int) ([]CandidateSignal, error)
-}
-
-type Ranker interface {
-	Rank(context.Context, QueryPlan, []CandidateSignal) ([]Candidate, error)
+type VectorSearch interface {
+	Search(context.Context, string, []float32, int) ([]Candidate, error)
 }

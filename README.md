@@ -1,6 +1,6 @@
 # AegisLink
 
-AegisLink is a local-first personal Agent Web application. The current release is a readable Go modular monolith with an `assistant-ui` React chat interface, an AG-UI execution protocol, an in-process Eino ReAct Agent Runtime, an extensible model-provider registry, cookie-based account sessions, and PostgreSQL-backed conversations and replayable run events. The repository also contains a separately runnable `aegislink-index` with a basic AgentAddr Registry for cross-server Agent discovery. DeepSeek is the active default provider for the Personal Agent server; the Index does not use model credentials.
+AegisLink is a local-first personal Agent Web application. The current release is a readable Go modular monolith with an `assistant-ui` React chat interface, an AG-UI execution protocol, an in-process Eino ReAct Agent Runtime, an extensible model-provider registry, cookie-based account sessions, and PostgreSQL-backed conversations and replayable run events. The repository also contains a separately runnable `aegislink-index` with AgentAddr registration, complete vector snapshot publication, and exact cosine search for cross-server Agent discovery. DeepSeek is the active default provider for the Personal Agent server; the Index does not use model credentials.
 
 The product has four deliberately separate paths:
 
@@ -74,7 +74,7 @@ At startup the server applies Goose migrations, recovers interrupted Runs, and s
 
 ## Account and Personal Agent
 
-- Registration creates a login Account, its Human Principal (`User` in the API), and one default Personal Agent in a single PostgreSQL transaction.
+- Registration creates a login Account, its Human Principal (`User` in the API), and one default Personal Agent in a single PostgreSQL transaction. A new account then completes the basic Agent identity setup; the workspace opens only after the Agent is registered and its first vector snapshot is published to Index.
 - Login returns the current User and Personal Agent and creates an opaque server-side session. The browser receives only an `HttpOnly`, `SameSite=Strict` cookie; the database stores only the session-token hash.
 - Passwords are hashed with Argon2id. Existing agent, conversation, message, run, and event operations are scoped by the authenticated Principal.
 - `AUTH_COOKIE_SECURE=false` supports local HTTP development. Set it to `true` behind production HTTPS.
@@ -119,7 +119,7 @@ make dev-index
 # health/readiness: http://127.0.0.1:4331
 ```
 
-It implements authenticated `POST /api/v1/registry/agents` with an empty object body, allocates and durably stores an opaque AgentAddr, and returns the same address on idempotent replay. Public resolve has been removed. Fact Vector publication and PostgreSQL + pgvector Search are the next stages.
+It implements the three-stage Index API: authenticated AgentAddr registration, atomic complete Fact Vector snapshot replacement, and exact cosine Search returning AgentAddr candidates. Public resolve has been removed.
 
 For an OpenAI-compatible gateway, set:
 
@@ -133,7 +133,7 @@ MODEL_NAME=your-deepseek-model
 
 The authoritative endpoint and schema list is [`contracts/http/v1/openapi.yaml`](contracts/http/v1/openapi.yaml). Current resource groups cover health/readiness, authentication, Account settings, owner-only Agent Instructions, Agent Profile/Impression/Fact review, AgentFacts publication and Host-scoped query, AgentCard owner preview, Agent Memory and Skills, MCP bindings, Mention Catalog, Conversations, AG-UI execution, Run Event replay, and cancellation.
 
-The standalone Index has its own narrow source of truth at [`index/contracts/http/v1/openapi.yaml`](index/contracts/http/v1/openapi.yaml). It contains health/readiness plus AgentAddr register/resolve and does not change the Agent Server contract.
+The standalone Index has its own narrow source of truth at [`index/contracts/http/v1/openapi.yaml`](index/contracts/http/v1/openapi.yaml). It contains health/readiness plus AgentAddr register, representation publication, and vector search; it does not change the Agent Server contract and has no public resolve route.
 
 `POST /api/v1/ag-ui` streams active execution as AG-UI SSE. `GET /api/v1/runs/{runId}/events` exposes authenticated persisted replay and supports `Last-Event-ID`.
 
@@ -154,4 +154,4 @@ Runtime persistence goes through GORM. Goose remains authoritative for ordered s
 
 ## Current boundary
 
-This release implements private cognitive Agent Profiles, model-generated Impressions, owner-confirmed Facts, signed/revocable AgentFacts publication, owner-only AgentCard Drafts, Agent-scoped Memory, versioned Skills, MCP bindings, read-only Tool execution, owner isolation, and standalone Index stage-one AgentAddr allocation/persistence. The Index does not yet implement vector snapshot publication, pgvector Search, or scoped publisher credentials. The product also does not include a public AgentCard/A2A endpoint, third-party attestation, email verification, password reset, MFA, login rate limiting, delegated access, multiple-Agent creation UI, automatic long-term Memory extraction/vector retrieval, executable Skill scripts, MCP OAuth/secret storage, write/destructive Tool Approval, cross-Agent communication, Redis, WebSocket, or sandboxed runners. See the [Index architecture](docs/02-architecture/distributed-agent-index.md) and maintained [technical-document index](docs/README.md).
+This release implements private cognitive Agent Profiles, model-generated Impressions, owner-confirmed Facts, signed/revocable AgentFacts publication, owner-only AgentCard Drafts, Agent-scoped Memory, versioned Skills, MCP bindings, read-only Tool execution, owner isolation, and the standalone three-stage Index MVP. The Index does not yet implement scoped publisher credentials, query rate limiting, or evaluated HNSW retrieval. The product also does not include a public AgentCard/A2A endpoint, third-party attestation, email verification, password reset, MFA, login rate limiting, delegated access, multiple-Agent creation UI, automatic long-term Memory extraction/vector retrieval, executable Skill scripts, MCP OAuth/secret storage, write/destructive Tool Approval, cross-Agent communication, Redis, WebSocket, or sandboxed runners. See the [Index architecture](docs/02-architecture/distributed-agent-index.md) and maintained [technical-document index](docs/README.md).

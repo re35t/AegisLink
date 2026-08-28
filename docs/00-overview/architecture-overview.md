@@ -37,7 +37,7 @@ flowchart LR
 
 The paths share Principal/Agent ownership and PostgreSQL transactions, but not transport types or trust levels. AG-UI input cannot authorize a Tool, curator output cannot directly become a Confirmed Fact, and Profile content cannot bypass Disclosure Policy to reach the network.
 
-The standalone Index is outside these four Agent Server paths. It must consume only future disclosure-approved routing projections and must never connect to the Agent Server database. The detailed boundary and MVP algorithm are in [Distributed Agent Discovery and Index](../02-architecture/distributed-agent-index.md).
+The standalone Index is outside these four Agent Server paths. Its publication API must consume only disclosure-approved vectors and it must never connect to the Agent Server database. The detailed boundary and MVP algorithm are in [Distributed Agent Discovery and Index](../02-architecture/distributed-agent-index.md).
 
 ## Backend boundaries
 
@@ -80,6 +80,6 @@ The Web loads durable resources through REST. An active Run uses AG-UI SSE, whil
 
 ## Current scope
 
-Implemented scope includes authentication, one default Personal Agent per registration, an internal Agent Profile with model-generated Impressions and owner-confirmed Facts, Runtime context injection, AgentFacts publication under a verified hostname, an owner-only AgentCard Draft, Agent-scoped Memory, versioned Skill bundles, a Principal-owned MCP library with per-Agent bindings, typed capability selection, read-only Tool execution, replayable Conversations, and standalone Index AgentAddr allocation/persistence.
+Implemented scope includes authentication, one default Personal Agent per registration, an internal Agent Profile with model-generated Impressions and owner-confirmed Facts, Runtime context injection, AgentFacts publication under a verified hostname, an owner-only AgentCard Draft, Agent-scoped Memory, versioned Skill bundles, a Principal-owned MCP library with per-Agent bindings, typed capability selection, read-only Tool execution, replayable Conversations, and the standalone three-stage Index MVP.
 
-Not implemented: Fact Vector snapshot publication, pgvector exact/HNSW Search, scoped publisher credentials, a public AgentCard route or A2A endpoint, third-party credentials/attestations, automatic long-term Memory extraction/vector search, write/destructive Tool approval, MCP OAuth or secret storage, delegated access, cross-Agent routing, organizations, WebSocket, gRPC, Redis, or Kubernetes deployment. Index no longer plans an LSH or Facts URL fetch path.
+Not implemented: automatic Agent Server vector publication/caller integration, pgvector HNSW, scoped publisher credentials, a public AgentCard route or A2A endpoint, third-party credentials/attestations, automatic long-term Memory extraction/vector search, write/destructive Tool approval, MCP OAuth or secret storage, delegated access, cross-Agent routing, organizations, WebSocket, gRPC, Redis, or Kubernetes deployment. Index no longer plans an LSH or Facts URL fetch path.

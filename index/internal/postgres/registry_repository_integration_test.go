@@ -30,7 +30,9 @@ func TestRegistryPersistenceAndIdempotency(t *testing.T) {
 	if err := database.Migrate(); err != nil {
 		t.Fatal(err)
 	}
-	if err := database.connection.WithContext(t.Context()).Exec("TRUNCATE agent_registry, agent_addresses").Error; err != nil {
+	if err := database.connection.WithContext(t.Context()).Exec(
+		"TRUNCATE discovery_fact_vectors, discovery_representations, agent_registry, agent_addresses",
+	).Error; err != nil {
 		t.Fatal(err)
 	}
 

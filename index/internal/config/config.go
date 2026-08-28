@@ -29,6 +29,7 @@ type Database struct {
 
 type Security struct {
 	RegistrationToken string
+	QueryToken        string
 }
 
 func Load() (Config, error) {
@@ -43,7 +44,10 @@ func Load() (Config, error) {
 			ShutdownTimeout: shutdownTimeout,
 		},
 		Database: Database{URL: strings.TrimSpace(os.Getenv("INDEX_DATABASE_URL"))},
-		Security: Security{RegistrationToken: strings.TrimSpace(os.Getenv("INDEX_REGISTRATION_TOKEN"))},
+		Security: Security{
+			RegistrationToken: strings.TrimSpace(os.Getenv("INDEX_REGISTRATION_TOKEN")),
+			QueryToken:        strings.TrimSpace(os.Getenv("INDEX_QUERY_TOKEN")),
+		},
 	}
 	if err := cfg.Validate(); err != nil {
 		return Config{}, err
@@ -64,6 +68,9 @@ func (cfg Config) Validate() error {
 	}
 	if utf8.RuneCountInString(cfg.Security.RegistrationToken) < 32 {
 		problems = append(problems, errors.New("INDEX_REGISTRATION_TOKEN must contain at least 32 characters"))
+	}
+	if utf8.RuneCountInString(cfg.Security.QueryToken) < 32 {
+		problems = append(problems, errors.New("INDEX_QUERY_TOKEN must contain at least 32 characters"))
 	}
 	return errors.Join(problems...)
 }

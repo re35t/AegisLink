@@ -15,7 +15,7 @@ For a fast orientation, read in this order:
 ## Sources of truth
 
 1. [`../contracts/http/v1/openapi.yaml`](../contracts/http/v1/openapi.yaml) defines the Agent Server REST contract; [`../index/contracts/http/v1/openapi.yaml`](../index/contracts/http/v1/openapi.yaml) independently defines the Index contract.
-2. [`../migrations`](../migrations) defines the Agent Server PostgreSQL schema; [`../index/migrations`](../index/migrations) independently defines the Index Registry schema.
+2. [`../migrations`](../migrations) defines the Agent Server PostgreSQL schema; [`../index/migrations`](../index/migrations) independently defines the Index Registry and pgvector schema.
 3. [`../internal`](../internal), [`../index/internal`](../index/internal), and [`../web/src`](../web/src) define runtime behavior within their process boundaries.
 4. Accepted [ADRs](./adr) explain architectural decisions; later ADRs override earlier ones when they say so explicitly.
 5. This documentation explains the implementation but must not redefine contracts or schema independently.
@@ -52,7 +52,7 @@ Substantial frontend work also follows [`../skills/frontend-engineering/SKILL.md
 
 - ADR 0001 is explicitly superseded by ADR 0004.
 - ADR 0002 is superseded by ADR 0014, which limits Ed25519 signing to AgentFacts publication rather than pretending it is a general Agent identity protocol.
-- ADR 0003–0016 record accepted decisions. ADR 0011 revises the MCP ownership statement in ADR 0007. ADR 0016 defines the independent Index boundary and its first persistent AgentAddr Registry slice.
+- ADR 0003–0016 record accepted decisions. ADR 0011 revises the MCP ownership statement in ADR 0007. ADR 0016 defines the independent three-stage Index boundary; the current implementation now covers its initial Register, Publish, and Search slices.
 - [`01-product/personal-agent-os-plan_cn.md`](./01-product/personal-agent-os-plan_cn.md) is a planning record. Its implemented/deferred checklists are useful context, but current code, contracts, migrations, and ADRs take precedence.
 
 The removed prototype documents described a TypeScript CLI, `soul.md`, JSONL history, Chroma/RAG, agent routing, organizations, gRPC, WebSocket, IM adapters, and Kubernetes services that do not exist in this repository. They were short placeholders rather than maintained specifications; Git history remains the archive if that research is needed.

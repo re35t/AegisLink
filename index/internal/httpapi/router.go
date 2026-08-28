@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/re35t/AegisLink/index/internal/discovery"
 	"github.com/re35t/AegisLink/index/internal/registry"
 )
 
@@ -26,10 +27,17 @@ type Registry interface {
 	Register(context.Context, []byte) (registry.Registration, bool, error)
 }
 
+type Discovery interface {
+	Publish(context.Context, registry.AgentAddr, discovery.Snapshot) error
+	Search(context.Context, discovery.Query) (discovery.Result, error)
+}
+
 type Dependencies struct {
 	Readiness         Readiness
 	Registry          Registry
+	Discovery         Discovery
 	RegistrationToken string
+	QueryToken        string
 }
 
 type AlwaysReady struct{}
@@ -67,6 +75,12 @@ func NewRouter(dependencies Dependencies, logger *slog.Logger) *gin.Engine {
 	registryRoutes.POST("/agents", func(c *gin.Context) {
 		registerAgentAddr(c, dependencies, logger)
 	})
+	registryRoutes.PUT("/agents/:agentAddr/representation", func(c *gin.Context) {
+		replaceRepresentation(c, dependencies, logger)
+	})
+	router.POST("/api/v1/discovery/search", func(c *gin.Context) {
+		searchRepresentations(c, dependencies, logger)
+	})
 	return router
 }
 
@@ -85,7 +99,7 @@ func registerAgentAddr(c *gin.Context, dependencies Dependencies, logger *slog.L
 	idempotencyKey := c.GetHeader("Idempotency-Key")
 	if err := registry.ValidateIdempotencyKey(idempotencyKey); err != nil {
 		c.JSON(http.StatusBadRequest, errorResponse{
-			Code: "invalid_request", Message: err.Error(),
+			Code: "invalid_idempotency_key", Message: err.Error(),
 		})
 		return
 	}

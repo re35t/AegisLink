@@ -54,6 +54,6 @@ AgentProfile 是供 Owner 与 Runtime 使用的私有内部自我模型。AgentF
 
 Impression 没有任何外部 channel。Confirmed Fact 只有在 subject=`agent` 时才能进入 AgentFacts/AgentCard。公开 well-known 文档只包含 `public + agent-facts + indexable` 声明；POST query 还可返回非索引 public 声明，并在有效 scoped token 下返回 authenticated 或 audience 精确匹配的 restricted 声明。
 
-当前独立 Index 已实现纯 AgentAddr 分配/持久化，不再提供公开 Resolve；尚无 Fact Vector Publisher 或 pgvector Search。下一阶段由 Agent Server 从 `public + indexable` AgentFacts 生成向量快照并上传；Index 不保存 Facts URL，也不回源获取 AgentFacts。`aegislink.agent-facts/1.0-draft` 仍是 AegisLink 自有、可版本演进的 Server 内权威文档，不冒充外部标准。
+当前独立 Index 已实现 AgentAddr 分配、完整 Fact Vector 快照替换与 pgvector exact Search，不提供公开 Resolve。Agent Server 自动发布仍必须只从 `public + indexable` AgentFacts 生成并上传向量；Index 不保存 Facts URL，也不回源获取 AgentFacts。`aegislink.agent-facts/1.0-draft` 仍是 AegisLink 自有、可版本演进的 Server 内权威文档，不冒充外部标准。
 
 公开路由只按请求的真实 `Host` 精确匹配已验证且启用的 Agent Publication，不信任 `X-Forwarded-Host`。当前公开提供 AgentFacts、JWKS、Revocation 与 POST Query；不会注册 `/.well-known/agent-card.json`。

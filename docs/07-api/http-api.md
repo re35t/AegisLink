@@ -31,7 +31,7 @@ The client does not authorize Tools by sending AG-UI Tool definitions, schemas, 
 
 ## Standalone Index
 
-The independent contract at [`../../index/contracts/http/v1/openapi.yaml`](../../index/contracts/http/v1/openapi.yaml) exposes health/readiness and Bearer-authenticated `POST /api/v1/registry/agents`. Registration accepts exactly `{}`, allocates and persists an opaque AgentAddr, and supports idempotent replay. It exposes no public resolve route. Representation Publication and Search from the [pgvector Discovery pipeline](../02-architecture/pgvector-discovery-query-pipeline.md) are not implemented.
+The independent contract at [`../../index/contracts/http/v1/openapi.yaml`](../../index/contracts/http/v1/openapi.yaml) exposes health/readiness and all three Bearer-authenticated Index stages: empty-object AgentAddr registration with idempotent replay, complete Representation replacement, and Query Vector Search. It exposes no public resolve route or AgentFacts text.
 
 ## Not provided
 

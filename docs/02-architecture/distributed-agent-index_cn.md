@@ -2,7 +2,7 @@
 
 ## 状态
 
-仓库已经包含独立的 `aegislink-index` Go/Gin 进程、Health/Readiness、独立 PostgreSQL 连接，以及阶段一纯 AgentAddr 注册。注册接受空对象，分配并持久化 AgentAddr；不再包含名称、Facts URL、Cache TTL、LSH JSON 或 public Resolve。Vector Publication 与 Search 尚未实现。
+仓库已经包含可独立运行的 `aegislink-index` Go/Gin 初版、Health/Readiness、独立 PostgreSQL + pgvector，以及 Register、Publish/Update、Search 三阶段。注册接受空对象并持久化 AgentAddr；发布以事务完整替换当前 Fact Vector 快照；检索使用 exact cosine，按 AgentAddr 聚合候选。不包含名称、Facts URL、Cache TTL、LSH JSON 或 public Resolve。
 
 Index 按以下三个阶段继续演进：
 
@@ -77,16 +77,16 @@ Index 不持有：
 - PostgreSQL 容量不足时可替换 `VectorSearch` Adapter，但不改变 Register、Publish、Search 领域协议。
 - 不再采用 LSH，也不以 NANDA 的 URL/URN 解析模型作为数据设计依据。
 
-## 当前实现与目标差异
+## 当前初版与后续扩展
 
 | 能力                       | 当前仓库           | 下一版目标                       |
 | -------------------------- | ------------------ | -------------------------------- |
 | Index 独立进程与数据库     | 已实现             | 保留                             |
 | AgentAddr 注册             | 已实现             | 空请求，仅返回并持久化 AgentAddr |
 | Facts URL / 空 LSH         | 已移除             | 不再进入契约和新存储             |
-| Representation Publication | 只有 Ports 雏形    | 完整向量快照更新                 |
-| PostgreSQL pgvector        | 未实现             | 固定维度 Fact Vector 表          |
-| Discovery Search           | 未实现             | Query Vector -> AgentAddr Top-K  |
-| LSH / Hash Index           | 旧 Port 雏形待清理 | 删除，不再实现                   |
+| Representation Publication | 已实现完整快照替换 | AgentAddr 独立 Publisher Credential |
+| PostgreSQL pgvector        | 已实现固定 1536 维 | 按实测容量扩展                   |
+| Discovery Search           | 已实现 exact cosine | 评测达标后另加 HNSW Migration    |
+| LSH / Hash Index           | 已删除             | 不再实现                         |
 
-公开 HTTP 形状必须在 `index/contracts/http/v1/openapi.yaml` 中先变更，再进入运行时代码。本架构文档不能代替尚未实现的 OpenAPI。
+公开 HTTP 形状以 `index/contracts/http/v1/openapi.yaml` 为准；后续变更仍必须先更新 OpenAPI，再进入运行时代码。

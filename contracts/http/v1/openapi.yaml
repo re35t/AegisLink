@@ -262,6 +262,69 @@ paths:
           $ref: "#/components/responses/Error"
         "409":
           $ref: "#/components/responses/Error"
+  /api/v1/agents/{agentId}/setup:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+    post:
+      operationId: configureAgent
+      summary: Save the initial Agent identity and register it with Index
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfigureAgentRequest"
+      responses:
+        "200":
+          description: Agent configured, registered, and published to Index
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentProfile"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+  /api/v1/agents/{agentId}/discovery/sync:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+    post:
+      operationId: syncAgentDiscovery
+      summary: Retry the Agent Profile vector publication to Index
+      responses:
+        "204":
+          description: Current public and indexable Profile state published
+        "404":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+  /api/v1/agents/{agentId}/discovery/search:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+    post:
+      operationId: searchAgentDiscovery
+      summary: Encode input and query Index for matching AgentAddr candidates
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentDiscoverySearchRequest"
+      responses:
+        "200":
+          description: Ranked Index candidates
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentDiscoverySearchResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
   /api/v1/agents/{agentId}/profile/disclosure-policies:
     parameters:
       - $ref: "#/components/parameters/AgentId"
@@ -1773,6 +1836,61 @@ components:
         description:
           type: string
           maxLength: 1000
+    ConfigureAgentRequest:
+      type: object
+      additionalProperties: false
+      required: [name, primaryFocus]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        primaryFocus:
+          type: string
+          minLength: 1
+          maxLength: 1000
+    AgentDiscoverySearchRequest:
+      type: object
+      additionalProperties: false
+      required: [query]
+      properties:
+        query:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        topK:
+          type: integer
+          minimum: 1
+          maximum: 50
+          default: 5
+    AgentDiscoveryCandidate:
+      type: object
+      additionalProperties: false
+      required: [agentAddr, score, matchedVectorId, representationRevision]
+      properties:
+        agentAddr:
+          type: string
+        score:
+          type: number
+          format: double
+          minimum: -1
+          maximum: 1
+        matchedVectorId:
+          type: string
+        representationRevision:
+          type: integer
+          format: int64
+          minimum: 1
+    AgentDiscoverySearchResponse:
+      type: object
+      additionalProperties: false
+      required: [candidates]
+      properties:
+        candidates:
+          type: array
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/AgentDiscoveryCandidate"
         avatarUrl:
           type: string
           maxLength: 2048
@@ -2551,7 +2669,7 @@ components:
           $ref: "#/components/schemas/Run"
     BootstrapResponse:
       type: object
-      required: [user, agent, model]
+      required: [user, agent, model, setupRequired]
       properties:
         user:
           $ref: "#/components/schemas/User"
@@ -2559,6 +2677,8 @@ components:
           $ref: "#/components/schemas/Agent"
         model:
           $ref: "#/components/schemas/ModelInfo"
+        setupRequired:
+          type: boolean
     ModelInfo:
       type: object
       required: [id, driver, name, capabilities]

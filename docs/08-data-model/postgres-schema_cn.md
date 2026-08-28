@@ -2,7 +2,7 @@
 
 权威 Schema 是 [`../../migrations`](../../migrations) 下的有序 SQL。本文只说明所有权和表职责，不重复每个 Column 或 Constraint。
 
-独立 Index 使用不同的权威边界与 [`../../index/migrations`](../../index/migrations) Migration 历史。运行时 Registry 现在使用 `agent_registry`，只保存 AgentAddr、Schema/Status、幂等/请求摘要和时间戳。Migration 00002 会迁移既有地址，但不复制名称、Facts URL、Cache TTL 或 LSH；旧 `agent_addresses` 表仅为迁移兼容保留。[三阶段 Discovery 设计](../02-architecture/pgvector-discovery-query-pipeline_cn.md)中的 pgvector Representation 表仍未实现。
+独立 Index 使用不同的权威边界与 [`../../index/migrations`](../../index/migrations) Migration 历史。`agent_registry` 只保存 AgentAddr、Schema/Status、幂等/请求摘要和时间戳。Migration 00002 会迁移既有地址，但不复制名称、Facts URL、Cache TTL 或 LSH；旧 `agent_addresses` 表仅为迁移兼容保留。Migration 00003 启用 pgvector，增加当前 `discovery_representations` 与固定维度 `discovery_fact_vectors`；每次 Publication 会原子替换这些向量行。
 
 ## Account 与 Agent 所有权
 

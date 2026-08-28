@@ -37,7 +37,7 @@ flowchart LR
 
 这四条链共享 Agent/Principal 所有权和 PostgreSQL 事务，但不共享传输类型或信任等级。尤其是 AG-UI 输入不能授权 Tool，Curator 输出不能直接成为 Confirmed Fact，Profile 内容也不能绕过 Disclosure Policy 进入网络。
 
-独立 Index 位于这四条 Agent Server 链路之外，只能消费未来经过 Disclosure Policy 允许的 Routing Projection，不能连接 Agent Server 数据库。完整边界与 MVP 算法见[分布式 Agent Discovery 与 Index](../02-architecture/distributed-agent-index_cn.md)。
+独立 Index 位于这四条 Agent Server 链路之外，其发布接口只能消费经过 Disclosure Policy 允许的向量，不能连接 Agent Server 数据库。完整边界与 MVP 算法见[分布式 Agent Discovery 与 Index](../02-architecture/distributed-agent-index_cn.md)。
 
 ## 后端边界
 
@@ -80,6 +80,6 @@ Web 通过 REST 加载持久资源，活动 Run 使用 AG-UI SSE，`/runs/{runId
 
 ## 当前范围
 
-已实现：认证、注册时创建一个默认 Personal Agent、包含模型 Impression 和 Owner-confirmed Fact 的内部 Agent Profile、Runtime 注入、已验证域名下的 AgentFacts 发布、Owner-only AgentCard Draft、Agent 范围 Memory、版本化 Skill Bundle、Principal 所有的 MCP Library 与 Agent Binding、类型化能力选择、只读 Tool 执行、可回放 Conversation，以及独立 Index AgentAddr 分配/持久化。
+已实现：认证、注册时创建一个默认 Personal Agent、包含模型 Impression 和 Owner-confirmed Fact 的内部 Agent Profile、Runtime 注入、已验证域名下的 AgentFacts 发布、Owner-only AgentCard Draft、Agent 范围 Memory、版本化 Skill Bundle、Principal 所有的 MCP Library 与 Agent Binding、类型化能力选择、只读 Tool 执行、可回放 Conversation，以及独立 Index 三阶段初版。
 
-未实现：Fact Vector 快照发布、pgvector exact/HNSW Search、Scoped Publisher Credential、公开 AgentCard/A2A Endpoint、第三方 Credential/Attestation、长期 Memory 自动提取与向量检索、写入/破坏性 Tool Approval、MCP OAuth/Secret Storage、委托访问、跨 Agent 路由、Organization、WebSocket、gRPC、Redis 或 Kubernetes 部署。Index 不再规划 LSH 或 Facts URL 回源链路。
+未实现：Agent Server 自动 Vector Publisher/Caller 接入、pgvector HNSW、Scoped Publisher Credential、公开 AgentCard/A2A Endpoint、第三方 Credential/Attestation、长期 Memory 自动提取与向量检索、写入/破坏性 Tool Approval、MCP OAuth/Secret Storage、委托访问、跨 Agent 路由、Organization、WebSocket、gRPC、Redis 或 Kubernetes 部署。Index 不再规划 LSH 或 Facts URL 回源链路。

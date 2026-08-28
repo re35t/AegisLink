@@ -13,6 +13,7 @@ func TestLoadUsesIndependentSettings(t *testing.T) {
 	t.Setenv("INDEX_SERVER_SHUTDOWN_TIMEOUT", "10s")
 	t.Setenv("INDEX_DATABASE_URL", "postgres://aegislink:aegislink@127.0.0.1:55434/aegislink_index?sslmode=disable")
 	t.Setenv("INDEX_REGISTRATION_TOKEN", testRegistrationToken)
+	t.Setenv("INDEX_QUERY_TOKEN", testRegistrationToken+"-query")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
@@ -20,7 +21,7 @@ func TestLoadUsesIndependentSettings(t *testing.T) {
 	if cfg.Server.Address != "127.0.0.1:4331" || cfg.Server.ShutdownTimeout != 10*time.Second {
 		t.Fatalf("unexpected server config: %#v", cfg.Server)
 	}
-	if !strings.Contains(cfg.Database.URL, "aegislink_index") || cfg.Security.RegistrationToken != testRegistrationToken {
+	if !strings.Contains(cfg.Database.URL, "aegislink_index") || cfg.Security.RegistrationToken != testRegistrationToken || cfg.Security.QueryToken == "" {
 		t.Fatalf("unexpected dependency config: %#v", cfg)
 	}
 }
@@ -47,10 +48,23 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 			t.Setenv("INDEX_SERVER_SHUTDOWN_TIMEOUT", test.timeout)
 			t.Setenv("INDEX_DATABASE_URL", test.database)
 			t.Setenv("INDEX_REGISTRATION_TOKEN", test.token)
+			t.Setenv("INDEX_QUERY_TOKEN", testRegistrationToken+"-query")
 			_, err := Load()
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("error = %v, expected %q", err, test.want)
 			}
 		})
 	}
+
+	t.Run("short query token", func(t *testing.T) {
+		t.Setenv("INDEX_SERVER_ADDRESS", "127.0.0.1:4331")
+		t.Setenv("INDEX_SERVER_SHUTDOWN_TIMEOUT", "10s")
+		t.Setenv("INDEX_DATABASE_URL", validURL)
+		t.Setenv("INDEX_REGISTRATION_TOKEN", testRegistrationToken)
+		t.Setenv("INDEX_QUERY_TOKEN", "short")
+		_, err := Load()
+		if err == nil || !strings.Contains(err.Error(), "INDEX_QUERY_TOKEN") {
+			t.Fatalf("error = %v", err)
+		}
+	})
 }

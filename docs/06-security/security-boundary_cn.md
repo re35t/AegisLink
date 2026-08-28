@@ -30,10 +30,10 @@ AgentFacts 使用 Ed25519；Private Key 由 32-byte Base64 `AGENT_KEY_ENCRYPTION
 
 ## 独立 Index
 
-Index 使用独立 PostgreSQL 与至少 32 字符的静态 Registration Bearer Token。HTTP 边界以常量时间比较 Token，不记录 Header 或 Request Body，只持久化 SHA-256 Token 范围幂等摘要。Registration 不接受发现数据，因此没有 Facts URL、LSH 输入或出站 Fetch 链路；公开 Resolve 也不存在。未来向量发布遵循 [三阶段 Discovery 设计](../02-architecture/pgvector-discovery-query-pipeline_cn.md)中的隐私边界。
+Index 使用独立 PostgreSQL + pgvector、至少 32 字符的 Registration/Publication Bearer Token，以及独立 Query Token。HTTP 边界以常量时间比较 Token，不记录 Header、Request Body 或完整向量；Registration 只持久化 SHA-256 Token 范围幂等摘要。Publication 只接受 Agent Server 经 Disclosure 后生成的向量与摘要，不接收 Fact 原文。系统没有 Facts URL、LSH 输入、出站 Fetch 或公开 Resolve 链路。
 
-静态 Token 只认证受控 Registry 的访问，不证明 Agent 身份，也没有把更新权限绑定到特定 Agent；因此 AgentAddr 明确属于未签名草案。在把注册视为更强信任声明前，仍需 Scoped Credential、签名、更新/撤销、经过 Disclosure Policy 的 Publisher 自动化与 Discovery Lease。任何候选在使用前都必须回到当前签名 AgentFacts 验证。
+静态 Token 只认证受控 Registry/Publication API 的访问，不证明 Agent 身份，也没有把更新权限绑定到特定 Agent；因此 AgentAddr 明确属于未签名草案。在把注册视为更强信任声明前，仍需 Scoped Credential、签名、更新/撤销、经过 Disclosure Policy 的 Publisher 自动化与 Discovery Lease。任何候选在使用前都必须回到当前签名 AgentFacts 验证。
 
 ## 已知缺口
 
-邮箱验证、密码重置、MFA、登录限流、委托访问、MCP OAuth/Secret Storage、写入/破坏性 Tool Approval、第三方 Credential/Attestation、Index Scoped Identity/签名/Search、A2A Request Authentication、审计保留策略和沙箱 Skill 执行均未实现，部署文档不得声称已具备这些保护。
+邮箱验证、密码重置、MFA、登录限流、委托访问、MCP OAuth/Secret Storage、写入/破坏性 Tool Approval、第三方 Credential/Attestation、Index Scoped Identity/签名/限流、A2A Request Authentication、审计保留策略和沙箱 Skill 执行均未实现，部署文档不得声称已具备这些保护。

@@ -10,7 +10,7 @@ This document replaces the previous retrieval design with exactly three business
 
 The target design removes the empty registration `lsh` field, Facts URLs, Index-side AgentFacts fetching, LSH/HashIndex, structured facet retrieval, and post-search AgentFacts fetching. Index stores no raw AgentFacts, only vector snapshots and version metadata.
 
-The repository now implements stage one: empty-object registration, the `aegislink.agent-addr/0.2-draft` response, durable `agent_registry` storage, and idempotent replay. The legacy public resolve route is removed. Representation Publication and Search remain **target contracts** and must not be registered as placeholder-success routes.
+The standalone Index now implements all three stages: empty-object registration and idempotent replay, atomic Representation replacement in pgvector, and exact cosine Search grouped by AgentAddr. The legacy public resolve route is removed. Automatic Agent Server encoder/publisher/caller integration remains a separate product slice.
 
 ## 2. Core model
 
@@ -144,7 +144,7 @@ Content-Type: application/json
 }
 ```
 
-Example vectors are abbreviated. The MVP accepts 0–64 vectors, rejects non-finite values and mismatched dimensions, and requires a monotonically increasing revision. An empty snapshot clears the previous vectors. A request digest makes an identical same-revision retry idempotent; conflicting or older revisions return `409 stale_representation_revision`. The first JSON implementation uses a 2 MiB request limit; a measured production protocol may use binary float32, Base64, or Protobuf.
+Example vectors are abbreviated. The MVP accepts 0–64 vectors, rejects non-finite values and mismatched dimensions, and requires a monotonically increasing revision. An empty snapshot clears the previous vectors. `sourceSetDigest` is `sha256:` plus SHA-256 over vectors sorted by `vectorId`, with each `vectorId` and `sourceDigest` encoded as a four-byte big-endian byte length followed by its UTF-8 bytes. A request digest makes an identical same-revision retry idempotent; conflicting or older revisions return `409 stale_representation_revision`. The first JSON implementation uses a 2 MiB request limit; a measured production protocol may use binary float32, Base64, or Protobuf.
 
 ```mermaid
 sequenceDiagram
@@ -273,7 +273,7 @@ erDiagram
     }
 ```
 
-With one fixed profile, use `VECTOR(1536)` and a cosine HNSW index:
+With one fixed profile, the initial migration uses `VECTOR(1536)` without an ANN index:
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -298,9 +298,9 @@ CREATE TABLE discovery_fact_vectors (
     PRIMARY KEY (agent_addr, vector_id)
 );
 
-CREATE INDEX discovery_fact_vectors_hnsw_cosine
-    ON discovery_fact_vectors USING hnsw (embedding vector_cosine_ops);
 ```
+
+Exact cosine is the correctness baseline. HNSW must be added only in a later Goose migration after recall and latency measurements justify it.
 
 Runtime access remains GORM-only and schema changes remain Goose-only. Existing `agent_addresses` deployments require a new migration to copy only Agent address/idempotency/timestamp data into `agent_registry`; legacy `facts_url`, `lsh_json`, name, and cache TTL do not migrate.
 
@@ -358,8 +358,8 @@ Retire `StructuredIndex`, `HashIndex`, `RoutingKey`, `WeightedRoutingKey`, `Hash
 Implementation slices:
 
 1. **Register — implemented**: OpenAPI removes name, Facts URL, TTL, and LSH; empty registration allocates AgentAddr; a new Goose migration evolves Registry; public resolve is absent.
-2. **Publish / Update**: add pgvector, representation/vector tables, same-profile encoder clients, shared-token MVP authentication, validation, and atomic snapshot replacement.
-3. **Search**: caller produces Query Vector; Index implements exact cosine and Agent aggregation, then enables HNSW only when measurements justify it.
+2. **Publish / Update — Index implemented**: pgvector tables, shared-token authentication, validation, idempotent monotonic revisions, and atomic snapshot replacement are present. Automatic Agent Server encoding/publication remains separate.
+3. **Search — Index implemented**: exact cosine, per-Agent aggregation, stable ranking, and the query-token boundary are present. Automatic caller encoding remains separate; HNSW waits for measurements.
 
 ## 10. Final invariants
 

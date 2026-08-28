@@ -6,15 +6,10 @@ import (
 	"github.com/re35t/AegisLink/index/internal/registry"
 )
 
-// These assertions keep persistence, inverted, vector, hash, and ranking
-// implementations independently replaceable as the MVP evolves.
 var (
 	_ registry.Repository = registryAdapter{}
-	_ RepresentationStore = representationAdapter{}
-	_ StructuredIndex     = structuredAdapter{}
-	_ SemanticIndex       = semanticAdapter{}
-	_ HashIndex           = hashAdapter{}
-	_ Ranker              = rankAdapter{}
+	_ RepresentationStore = discoveryAdapter{}
+	_ VectorSearch        = discoveryAdapter{}
 )
 
 type registryAdapter struct{}
@@ -26,34 +21,9 @@ func (registryAdapter) Exists(context.Context, registry.AgentAddr) (bool, error)
 	return false, nil
 }
 
-type representationAdapter struct{}
+type discoveryAdapter struct{}
 
-func (representationAdapter) Upsert(context.Context, Representation) error { return nil }
-func (representationAdapter) Remove(context.Context, string) error         { return nil }
-func (representationAdapter) Get(context.Context, string) (Representation, error) {
-	return Representation{}, nil
-}
-
-type structuredAdapter struct{}
-
-func (structuredAdapter) SearchStructured(context.Context, []RoutingKey, []WeightedRoutingKey, int) ([]CandidateSignal, error) {
-	return nil, nil
-}
-
-type semanticAdapter struct{}
-
-func (semanticAdapter) SearchSemantic(context.Context, []SemanticVector, []string, int) ([]CandidateSignal, error) {
-	return nil, nil
-}
-
-type hashAdapter struct{}
-
-func (hashAdapter) SearchHashes(context.Context, []HashSignature, int) ([]CandidateSignal, error) {
-	return nil, nil
-}
-
-type rankAdapter struct{}
-
-func (rankAdapter) Rank(context.Context, QueryPlan, []CandidateSignal) ([]Candidate, error) {
+func (discoveryAdapter) Replace(context.Context, Representation) error { return nil }
+func (discoveryAdapter) Search(context.Context, string, []float32, int) ([]Candidate, error) {
 	return nil, nil
 }

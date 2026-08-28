@@ -33,7 +33,7 @@ services:
       - aegislink-postgres-test:/var/lib/postgresql/data
 
   index-postgres:
-    image: postgres:17-alpine
+    image: pgvector/pgvector:pg17
     environment:
       POSTGRES_DB: aegislink_index
       POSTGRES_USER: aegislink_index
@@ -50,7 +50,7 @@ services:
 
   index-postgres-test:
     profiles: ["test"]
-    image: postgres:17-alpine
+    image: pgvector/pgvector:pg17
     environment:
       POSTGRES_DB: aegislink_index_test
       POSTGRES_USER: aegislink_index

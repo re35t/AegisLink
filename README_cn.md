@@ -1,6 +1,6 @@
 # AegisLink
 
-AegisLink 是一个本地优先的个人 Agent Web 应用。当前版本采用易读的 Go 模块化单体、基于 `assistant-ui` 的 React 聊天界面、AG-UI 执行协议、进程内 Eino ReAct Agent Runtime、可扩展模型 Provider、Cookie 账户会话，以及由 PostgreSQL 持久化的对话和可回放 Run 事件。仓库还包含可独立运行、具备基础 AgentAddr Registry 的 `aegislink-index`，用于跨 Server Agent Discovery。Personal Agent Server 默认使用 DeepSeek；Index 不使用模型凭据。
+AegisLink 是一个本地优先的个人 Agent Web 应用。当前版本采用易读的 Go 模块化单体、基于 `assistant-ui` 的 React 聊天界面、AG-UI 执行协议、进程内 Eino ReAct Agent Runtime、可扩展模型 Provider、Cookie 账户会话，以及由 PostgreSQL 持久化的对话和可回放 Run 事件。仓库还包含可独立运行、具备 AgentAddr 注册、完整向量快照发布与 exact cosine 检索的 `aegislink-index`，用于跨 Server Agent Discovery。Personal Agent Server 默认使用 DeepSeek；Index 不使用模型凭据。
 
 ## 技术栈
 
@@ -14,7 +14,7 @@ AegisLink 是一个本地优先的个人 Agent Web 应用。当前版本采用�
 - `cmd/aegislink-server` 与根 `internal/`：Personal Agent OS API、Harness、Runtime 与持久化。
 - `index/cmd/aegislink-index` 与 `index/internal/`：独立 Index 进程及其私有 Registry/Discovery ports。
 - `contracts/http/v1/openapi.yaml`：Agent Server HTTP 契约。
-- `index/contracts/http/v1/openapi.yaml`：Index 独立 HTTP 契约，当前包含 Health/Readiness 与 AgentAddr Registration/Resolve。
+- `index/contracts/http/v1/openapi.yaml`：Index 独立 HTTP 契约，包含 Health/Readiness、AgentAddr Registration、Representation Publication 与 Vector Search；没有 public Resolve。
 - `web`：React/Vite 客户端；`docs`：维护中的架构、运维和 ADR。
 
 ## Agent Runtime
@@ -80,9 +80,9 @@ make dev-index
 # Health/Readiness: http://127.0.0.1:4331
 ```
 
-当前 Index 已实现带认证的 `POST /api/v1/registry/agents`：请求体为空对象，Index 分配并持久化不透明 AgentAddr，幂等重放返回同一地址；公开 Resolve 已移除。Fact Vector 发布与 PostgreSQL + pgvector Search 是后续阶段。
+当前 Index 已实现三阶段初版：`POST /api/v1/registry/agents` 分配并持久化不透明 AgentAddr，`PUT /api/v1/registry/agents/{agentAddr}/representation` 原子替换完整 Fact Vector 快照，`POST /api/v1/discovery/search` 通过 PostgreSQL + pgvector exact cosine 返回 AgentAddr 候选；公开 Resolve 已移除。
 
-首次打开会进入注册/登录页。注册成功后会自动进入与该账户默认 Personal Agent 绑定的工作区。
+首次打开会进入注册/登录页。新账号注册后先设置 Agent 名称与主要方向；只有完成 Index 注册和首次向量快照发布后，才进入与该 Personal Agent 绑定的工作区。
 
 如果通过 OneAPI 等 OpenAI-compatible 网关调用 DeepSeek：
 
@@ -113,4 +113,4 @@ make build
 
 ## 当前边界
 
-当前版本已实现私有 Cognitive Agent Profile、模型生成 Impression、Owner-confirmed Fact、签名/可撤销 AgentFacts、Owner-only AgentCard Draft、Agent 范围 Memory、版本化 Skills、MCP Binding、只读 Tool 执行、Owner 隔离，以及独立 Index 阶段一 AgentAddr 分配与持久化。Index 尚未实现向量快照 Publisher、pgvector Search 或 Scoped Publisher Credential。公开 AgentCard/A2A、第三方 Attestation、邮箱验证、密码重置、MFA、登录限流、委托访问、多 Agent 创建 UI、长期 Memory 自动提取/向量检索、MCP OAuth/Secret Storage、写入/破坏性 Tool Approval、跨 Agent 通信、Redis、WebSocket 和沙箱 Runner 仍未实现。详见 [Index 架构](docs/02-architecture/distributed-agent-index_cn.md) 与 [技术文档索引](docs/README.md)。
+当前版本已实现私有 Cognitive Agent Profile、模型生成 Impression、Owner-confirmed Fact、签名/可撤销 AgentFacts、Owner-only AgentCard Draft、Agent 范围 Memory、版本化 Skills、MCP Binding、只读 Tool 执行、Owner 隔离，以及独立 Index 三阶段初版。Index 尚未实现 Scoped Publisher Credential、Query Rate Limit 或经过评测的 HNSW。公开 AgentCard/A2A、第三方 Attestation、邮箱验证、密码重置、MFA、登录限流、委托访问、多 Agent 创建 UI、长期 Memory 自动提取/向量检索、MCP OAuth/Secret Storage、写入/破坏性 Tool Approval、跨 Agent 通信、Redis、WebSocket 和沙箱 Runner 仍未实现。详见 [Index 架构](docs/02-architecture/distributed-agent-index_cn.md) 与 [技术文档索引](docs/README.md)。

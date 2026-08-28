@@ -16,7 +16,7 @@
 - MVP 不做结构化 Facet 倒排检索，也不在 Search 后增加 AgentFacts 回源验证阶段；
 - Index 不保存 AgentFacts 原文，只保存由 Agent Server 上传的向量和必要版本元数据。
 
-当前仓库已经完成阶段一：空对象注册、`aegislink.agent-addr/0.2-draft` 响应、`agent_registry` 持久化和幂等重放均已实现，旧 public Resolve 路由已移除。阶段二 Representation Publication 和阶段三 Search 仍是**目标契约**，不得注册占位成功接口。
+当前独立 Index 已完成全部三阶段：空对象注册与幂等重放、pgvector Representation 原子替换，以及按 AgentAddr 聚合的 exact cosine Search。旧 public Resolve 路由已移除。Agent Server 侧自动 Encoder/Publisher/Caller 接入仍是独立产品切片。
 
 ## 2. 核心模型
 
@@ -253,7 +253,7 @@ Content-Type: application/json
 - 首个 HTTP JSON 实现将请求体上限设为 2 MiB；生产接口可根据测量结果改用 float32 binary、Base64 或 Protobuf；
 - 所有数值必须为有限 float32；
 - `revision` 必须严格大于已存 Revision；
-- `sourceSetDigest` 必须覆盖排序后的全部 `vectorId + sourceDigest`，用于幂等审计。
+- `sourceSetDigest` 为 `sha256:` 加 SHA-256 Hex：先按 `vectorId` 排序，再把每个 `vectorId` 与 `sourceDigest` 分别编码为 4-byte Big-endian 字节长度和 UTF-8 字节后依次 Hash，用于幂等审计。
 
 成功返回 `204 No Content`。相同 Revision 和完全相同的请求摘要可幂等返回 `204`；相同或更低 Revision 且内容不同返回 `409 stale_representation_revision`。
 
@@ -416,7 +416,7 @@ erDiagram
 
 ### 7.2 Migration 雏形
 
-固定单一 Encoder Profile 时，应优先使用固定维度列，简化校验和 HNSW 索引：
+固定单一 Encoder Profile 时，初版使用固定维度列且不创建 ANN 索引：
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -446,10 +446,9 @@ CREATE TABLE discovery_fact_vectors (
     PRIMARY KEY (agent_addr, vector_id)
 );
 
-CREATE INDEX discovery_fact_vectors_hnsw_cosine
-    ON discovery_fact_vectors
-    USING hnsw (embedding vector_cosine_ops);
 ```
+
+Exact cosine 是正确性基线；只有 Recall 与延迟评测证明收益后，才通过后续 Goose Migration 增加 HNSW。
 
 运行时 PostgreSQL 操作继续使用 GORM；Migration 继续由 Goose 管理，不使用 `AutoMigrate`。
 
@@ -644,17 +643,15 @@ Publish 使用 AgentAddr 行锁和单事务 replacement。并发 Revision `7`、
 
 ### Slice 2：Representation 发布与更新
 
-- 增加 pgvector Extension、Representation 和 Fact Vector Migration；
-- Agent Server 增加统一 Encoder Profile 与 Publisher Client；
-- Index 实现共享 Token 认证、快照校验和事务 replacement；
-- 测试新增、修改、删除 Fact 后的向量快照正确性。
+- **Index 已实现**：pgvector Extension、Representation/Fact Vector Migration、共享 Token 认证、快照校验、幂等单调 Revision 与事务 replacement；
+- **Index 已验证**：新增、修改、删除、空快照与并发 Revision；
+- Agent Server 统一 Encoder 与自动 Publisher Client 仍是独立接入切片。
 
 ### Slice 3：Vector Search
 
-- Caller Agent Server 使用同一 Encoder 生成 Query Vector；
-- Index 先实现 exact cosine 和 AgentAddr 聚合；
-- 返回 AgentAddr、Score、Matched Vector ID 和 Representation Revision；
-- 建立 exact baseline 后按规模启用 HNSW；
+- **Index 已实现**：exact cosine、AgentAddr 聚合、稳定排序，并返回 AgentAddr、Score、Matched Vector ID 和 Representation Revision；
+- Caller Agent Server 使用同一 Encoder 自动生成 Query Vector 仍是独立接入切片；
+- 建立 exact baseline 后才按规模评估 HNSW；
 - 不增加 LSH、Facts URL Fetch 或结构化倒排旁路。
 
 ## 13. 最终不变量

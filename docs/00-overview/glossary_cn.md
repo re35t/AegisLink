@@ -11,7 +11,7 @@
 - **Profile Version / Context Revision**：`version` 保护 Identity、Confirmed Fact 与 Disclosure Policy 的乐观并发；`contextRevision` 保护 Impression 与 Fact Candidate 变化。确认 Candidate 会同时推进两者。
 - **AgentFacts**：Disclosure Engine 根据允许披露的 Profile subject 生成的签名外部信任/发现清单，不等于 Agent 的私有自我模型。
 - **AgentFacts Publication**：某个已验证 Hostname 下不可变、带 TTL/JWS 且可撤销的 AgentFacts 版本。
-- **Agent Index**：独立 Discovery 进程，当前注册并解析 AgentAddr 导航记录，未来再把有损 Routing Representation 映射到候选；其结果不能替代 Agent Server Facts。
+- **Agent Index**：独立 Discovery 进程，分配 AgentAddr、保存完整 Fact Vector 快照，并通过向量检索返回 AgentAddr 候选；其结果不能替代 Agent Server Facts。
 - **AgentCard**：A2A 通信清单。当前只提供 Owner Draft；由于没有 A2A endpoint，发布就绪检查固定阻塞。
 - **Conversation**：绑定一个 Agent 的持久化对话线程。
 - **Run**：Conversation 内的一次执行尝试，包含不可变的 execution-policy snapshot。

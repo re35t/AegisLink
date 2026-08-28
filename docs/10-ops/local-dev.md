@@ -21,7 +21,9 @@ curl http://127.0.0.1:4331/healthz
 curl http://127.0.0.1:4331/readyz
 ```
 
-It reads `INDEX_SERVER_ADDRESS`, `INDEX_SERVER_SHUTDOWN_TIMEOUT`, `INDEX_DATABASE_URL`, and `INDEX_REGISTRATION_TOKEN`. It does not require `DATABASE_URL`, `MODEL_API_KEY`, or the AgentFacts encryption key. The Registry database is independent from the Agent Server database.
+It reads `INDEX_SERVER_ADDRESS`, `INDEX_SERVER_SHUTDOWN_TIMEOUT`, `INDEX_DATABASE_URL`, `INDEX_REGISTRATION_TOKEN`, and `INDEX_QUERY_TOKEN`. It does not require `DATABASE_URL`, `MODEL_API_KEY`, or the AgentFacts encryption key. The Index pgvector database is independent from the Agent Server database.
+
+To connect Agent Server onboarding, Profile synchronization, and Discovery search to that process, configure `AGENT_INDEX_BASE_URL`, `AGENT_INDEX_REGISTRATION_TOKEN`, and `AGENT_INDEX_QUERY_TOKEN`. Configure the OpenAI-compatible embedding endpoint with `DISCOVERY_ENCODER_BASE_URL` and `DISCOVERY_ENCODER_MODEL`; set `DISCOVERY_ENCODER_API_KEY` when the provider requires authentication. All required Agent Index and encoder fields are enabled as one group; partial configuration is rejected at startup. The encoder must produce the Index profile's fixed 1536-dimensional vectors.
 
 Goose applies ordered migrations when the server opens the database. Runtime persistence uses GORM; `AutoMigrate` is intentionally disabled.
 
