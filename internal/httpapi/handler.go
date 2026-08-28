@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/re35t/AegisLink/internal/account"
 	"github.com/re35t/AegisLink/internal/agent"
+	"github.com/re35t/AegisLink/internal/agentindex"
 	"github.com/re35t/AegisLink/internal/catalog"
 	"github.com/re35t/AegisLink/internal/conversation"
 	"github.com/re35t/AegisLink/internal/discovery"
@@ -21,6 +22,8 @@ type handler struct {
 	accounts      AccountService
 	agents        AgentService
 	profiles      AgentProfileService
+	setup         AgentSetupService
+	agentIndex    AgentIndexService
 	impressions   ImpressionService
 	discovery     DiscoveryService
 	agentCards    AgentCardService
@@ -66,6 +69,10 @@ func (handler *handler) handleError(c *gin.Context, err error) {
 		writeError(c, http.StatusBadRequest, "invalid_agent_instructions", "the Agent instructions are too long or have an invalid version")
 	case errors.Is(err, agent.ErrInvalidProfile):
 		writeError(c, http.StatusBadRequest, "invalid_agent_profile", "the Agent identity or disclosure policy is invalid")
+	case errors.Is(err, agent.ErrIndexSync), errors.Is(err, agentindex.ErrUnavailable):
+		writeError(c, http.StatusServiceUnavailable, "agent_index_sync_failed", "the Profile was saved locally, but Agent discovery is unavailable; retry the sync")
+	case errors.Is(err, agentindex.ErrInvalid):
+		writeError(c, http.StatusBadRequest, "invalid_discovery_query", "provide non-empty input and topK between 1 and 50")
 	case errors.Is(err, impression.ErrNotFound), errors.Is(err, discovery.ErrNotFound):
 		writeError(c, http.StatusNotFound, "resource_not_found", "the requested resource was not found")
 	case errors.Is(err, impression.ErrConflict), errors.Is(err, discovery.ErrConflict):

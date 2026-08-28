@@ -222,6 +222,63 @@ export interface paths {
     patch: operations["updateAgentProfile"];
     trace?: never;
   };
+  "/api/v1/agents/{agentId}/setup": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Save the initial Agent identity and register it with Index */
+    post: operations["configureAgent"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/agents/{agentId}/discovery/sync": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Retry the Agent Profile vector publication to Index */
+    post: operations["syncAgentDiscovery"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/agents/{agentId}/discovery/search": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Encode input and query Index for matching AgentAddr candidates */
+    post: operations["searchAgentDiscovery"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/agents/{agentId}/profile/disclosure-policies": {
     parameters: {
       query?: never;
@@ -1138,6 +1195,26 @@ export interface components {
       expectedVersion: number;
       name?: string;
       description?: string;
+    };
+    ConfigureAgentRequest: {
+      name: string;
+      primaryFocus: string;
+    };
+    AgentDiscoverySearchRequest: {
+      query: string;
+      /** @default 5 */
+      topK: number;
+    };
+    AgentDiscoveryCandidate: {
+      agentAddr: string;
+      /** Format: double */
+      score: number;
+      matchedVectorId: string;
+      /** Format: int64 */
+      representationRevision: number;
+    };
+    AgentDiscoverySearchResponse: {
+      candidates: components["schemas"]["AgentDiscoveryCandidate"][];
       avatarUrl?: string;
     };
     DisclosurePolicyChange: {
@@ -1549,6 +1626,7 @@ export interface components {
       user: components["schemas"]["User"];
       agent: components["schemas"]["Agent"];
       model: components["schemas"]["ModelInfo"];
+      setupRequired: boolean;
     };
     ModelInfo: {
       /** @description Stable identifier for the configured model profile */
@@ -1959,6 +2037,86 @@ export interface operations {
       400: components["responses"]["Error"];
       404: components["responses"]["Error"];
       409: components["responses"]["Error"];
+    };
+  };
+  configureAgent: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ConfigureAgentRequest"];
+      };
+    };
+    responses: {
+      /** @description Agent configured, registered, and published to Index */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentProfile"];
+        };
+      };
+      400: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      503: components["responses"]["Error"];
+    };
+  };
+  syncAgentDiscovery: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Current public and indexable Profile state published */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      404: components["responses"]["Error"];
+      503: components["responses"]["Error"];
+    };
+  };
+  searchAgentDiscovery: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AgentDiscoverySearchRequest"];
+      };
+    };
+    responses: {
+      /** @description Ranked Index candidates */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentDiscoverySearchResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      503: components["responses"]["Error"];
     };
   };
   updateAgentProfileDisclosurePolicies: {

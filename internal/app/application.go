@@ -10,6 +10,7 @@ import (
 	internala2a "github.com/re35t/AegisLink/internal/a2a"
 	"github.com/re35t/AegisLink/internal/account"
 	"github.com/re35t/AegisLink/internal/agent"
+	"github.com/re35t/AegisLink/internal/agentindex"
 	"github.com/re35t/AegisLink/internal/catalog"
 	"github.com/re35t/AegisLink/internal/config"
 	"github.com/re35t/AegisLink/internal/conversation"
@@ -54,6 +55,7 @@ func New(parent context.Context, cfg config.Config, logger *slog.Logger) (*Appli
 	accountRepository := postgres.NewAccountRepository(database)
 	agentRepository := postgres.NewAgentRepository(database)
 	agentProfileRepository := postgres.NewAgentProfileRepository(database)
+	agentIndexRepository := postgres.NewAgentIndexRepository(database)
 	impressionRepository := postgres.NewImpressionRepository(database)
 	discoveryRepository := postgres.NewDiscoveryRepository(database)
 	conversationRepository := postgres.NewConversationRepository(database)
@@ -107,6 +109,27 @@ func New(parent context.Context, cfg config.Config, logger *slog.Logger) (*Appli
 			},
 		}},
 	).WithImpressions(impressionService)
+	var agentIndexService *agentindex.Service
+	if cfg.AgentIndexEnabled() {
+		embedder, embedderErr := agentruntime.NewOpenAICompatibleEmbedder(agentruntime.EmbeddingConfig{
+			BaseURL: cfg.Encoder.BaseURL, APIKey: cfg.Encoder.APIKey, Model: cfg.Encoder.Model,
+			Dimensions: agentindex.EmbeddingDimensions, Timeout: cfg.Encoder.Timeout,
+		})
+		if embedderErr != nil {
+			return closeOnError(embedderErr)
+		}
+		indexClient, clientErr := agentindex.NewHTTPClient(
+			cfg.AgentIndex.BaseURL, cfg.AgentIndex.RegistrationToken, cfg.AgentIndex.QueryToken, cfg.AgentIndex.Timeout,
+		)
+		if clientErr != nil {
+			return closeOnError(clientErr)
+		}
+		agentIndexService, err = agentindex.NewService(agentIndexRepository, profileService, embedder, indexClient)
+		if err != nil {
+			return closeOnError(err)
+		}
+		profileService.WithSynchronizer(agentIndexService)
+	}
 	agentCardService := internala2a.NewService(profileService)
 	discoveryService, err := discovery.NewService(discoveryRepository, profileService, agentCardService, discovery.NetResolver{}, cfg.Security.AgentKeyEncryptionKey)
 	if err != nil {
@@ -125,6 +148,8 @@ func New(parent context.Context, cfg config.Config, logger *slog.Logger) (*Appli
 		Accounts:      accountService,
 		Agents:        agentService,
 		Profiles:      profileService,
+		Setup:         profileService,
+		AgentIndex:    agentIndexService,
 		Impressions:   impressionService,
 		Discovery:     discoveryService,
 		AgentCards:    agentCardService,

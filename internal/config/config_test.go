@@ -64,6 +64,23 @@ func TestValidateCuratorThinkingMode(t *testing.T) {
 	}
 }
 
+func TestValidateRequiresCompleteAgentIndexAndEncoderConfiguration(t *testing.T) {
+	t.Parallel()
+	cfg := validConfig()
+	cfg.AgentIndex.BaseURL = "http://127.0.0.1:4331"
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected partial Agent Index configuration to fail")
+	}
+	cfg.AgentIndex = AgentIndex{
+		BaseURL: "http://127.0.0.1:4331", RegistrationToken: "registration-token-at-least-32-characters",
+		QueryToken: "query-token-at-least-32-characters", Timeout: time.Second,
+	}
+	cfg.Encoder = Encoder{BaseURL: "https://encoder.example.test/v1", APIKey: "secret", Model: "embed-1536", Timeout: time.Second}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("complete Agent Index configuration should be valid: %v", err)
+	}
+}
+
 func validConfig() Config {
 	return Config{
 		Server:   Server{Address: "127.0.0.1:4321", ShutdownTimeout: time.Second},

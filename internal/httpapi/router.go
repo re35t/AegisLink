@@ -11,6 +11,7 @@ import (
 	internala2a "github.com/re35t/AegisLink/internal/a2a"
 	"github.com/re35t/AegisLink/internal/account"
 	"github.com/re35t/AegisLink/internal/agent"
+	"github.com/re35t/AegisLink/internal/agentindex"
 	"github.com/re35t/AegisLink/internal/catalog"
 	"github.com/re35t/AegisLink/internal/conversation"
 	"github.com/re35t/AegisLink/internal/discovery"
@@ -45,6 +46,16 @@ type AgentProfileService interface {
 	UpdatePolicies(context.Context, string, string, int64, []agent.PolicyChange) (agent.Profile, error)
 	ConfirmCandidate(context.Context, string, string, string, int64, int64, agent.ConfirmFactUpdate) (agent.Profile, error)
 	RevokeFact(context.Context, string, string, string, int64) (agent.Profile, error)
+}
+
+type AgentSetupService interface {
+	SetupRequired(context.Context, string, string) (bool, error)
+	Configure(context.Context, string, string, string, string) (agent.Profile, error)
+}
+
+type AgentIndexService interface {
+	Sync(context.Context, string, string) error
+	Search(context.Context, string, string, string, int) ([]agentindex.Candidate, error)
 }
 
 type ImpressionService interface {
@@ -121,6 +132,8 @@ type Dependencies struct {
 	Accounts      AccountService
 	Agents        AgentService
 	Profiles      AgentProfileService
+	Setup         AgentSetupService
+	AgentIndex    AgentIndexService
 	Impressions   ImpressionService
 	Discovery     DiscoveryService
 	AgentCards    AgentCardService
@@ -154,6 +167,8 @@ func NewRouter(dependencies Dependencies, webOrigin string, auth AuthConfig, mod
 		accounts:      dependencies.Accounts,
 		agents:        dependencies.Agents,
 		profiles:      dependencies.Profiles,
+		setup:         dependencies.Setup,
+		agentIndex:    dependencies.AgentIndex,
 		impressions:   dependencies.Impressions,
 		discovery:     dependencies.Discovery,
 		agentCards:    dependencies.AgentCards,
@@ -191,6 +206,9 @@ func NewRouter(dependencies Dependencies, webOrigin string, auth AuthConfig, mod
 	protected.PATCH("/agents/:agentId/instructions", handler.updateAgentInstructions)
 	protected.GET("/agents/:agentId/profile", handler.getAgentProfile)
 	protected.PATCH("/agents/:agentId/profile", handler.updateAgentProfile)
+	protected.POST("/agents/:agentId/setup", handler.configureAgent)
+	protected.POST("/agents/:agentId/discovery/sync", handler.syncAgentDiscovery)
+	protected.POST("/agents/:agentId/discovery/search", handler.searchAgentDiscovery)
 	protected.PATCH("/agents/:agentId/profile/disclosure-policies", handler.updateAgentProfileDisclosurePolicies)
 	protected.GET("/agents/:agentId/impressions", handler.listAgentImpressions)
 	protected.PATCH("/agents/:agentId/impressions/:impressionId", handler.updateAgentImpression)

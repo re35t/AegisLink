@@ -26,7 +26,7 @@ func NewAgentProfileRepository(database *Database) *AgentProfileRepository {
 func (repository *AgentProfileRepository) GetProfile(ctx context.Context, principalID, agentID string) (agent.ProfileRecord, error) {
 	var item agent.ProfileRecord
 	result := repository.database.WithContext(ctx).Table("agent_profiles").
-		Select("agent_id, owner_principal_id, avatar_url, version, context_revision, created_at, updated_at").
+		Select("agent_id, owner_principal_id, avatar_url, version, context_revision, configured_at, created_at, updated_at").
 		Where("owner_principal_id = ? AND agent_id = ?", principalID, agentID).Take(&item)
 	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 		return agent.ProfileRecord{}, agent.ErrNotFound
@@ -35,6 +35,63 @@ func (repository *AgentProfileRepository) GetProfile(ctx context.Context, princi
 		return agent.ProfileRecord{}, fmt.Errorf("get agent profile: %w", result.Error)
 	}
 	return item, nil
+}
+
+func (repository *AgentProfileRepository) ConfigureBasic(ctx context.Context, principalID, agentID, name, primaryFocus string) error {
+	return repository.database.WithContext(ctx).Transaction(func(transaction *gorm.DB) error {
+		var profile struct {
+			ConfiguredAt *time.Time
+		}
+		result := transaction.Table("agent_profiles").Select("configured_at").Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("owner_principal_id = ? AND agent_id = ?", principalID, agentID).Take(&profile)
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return agent.ErrNotFound
+		}
+		if result.Error != nil {
+			return fmt.Errorf("lock Agent setup: %w", result.Error)
+		}
+		if profile.ConfiguredAt != nil {
+			return agent.ErrProfileConflict
+		}
+		now := time.Now().UTC()
+		if result := transaction.Table("agents").Where("owner_principal_id = ? AND id = ?", principalID, agentID).
+			Updates(map[string]any{"name": name, "description": primaryFocus, "updated_at": now}); result.Error != nil {
+			return fmt.Errorf("configure Agent identity: %w", result.Error)
+		}
+		policy := disclosurePolicyRow{
+			OwnerPrincipalID: principalID, AgentID: agentID, SubjectType: agent.SubjectIdentity, SubjectID: agentID,
+			Visibility: agent.VisibilityPublic, Channels: pq.StringArray{string(agent.ChannelAgentFacts)}, Indexable: true,
+			Audiences: pq.StringArray{},
+		}
+		if result := transaction.Clauses(clause.OnConflict{
+			Columns: []clause.Column{{Name: "agent_id"}, {Name: "subject_type"}, {Name: "subject_id"}},
+			DoUpdates: clause.Assignments(map[string]any{
+				"visibility": policy.Visibility, "channels": policy.Channels, "indexable": true,
+				"audiences": policy.Audiences, "updated_at": now,
+			}),
+		}).Create(&policy); result.Error != nil {
+			return fmt.Errorf("configure Agent identity disclosure: %w", result.Error)
+		}
+		if result := transaction.Table("agent_profiles").Where("owner_principal_id = ? AND agent_id = ?", principalID, agentID).
+			Updates(map[string]any{"version": gorm.Expr("version + 1"), "updated_at": now}); result.Error != nil {
+			return fmt.Errorf("advance Agent setup Profile: %w", result.Error)
+		}
+		return revokeActiveAgentFacts(transaction, principalID, agentID)
+	})
+}
+
+func (repository *AgentProfileRepository) CompleteSetup(ctx context.Context, principalID, agentID string) error {
+	now := time.Now().UTC()
+	result := repository.database.WithContext(ctx).Table("agent_profiles").
+		Where("owner_principal_id = ? AND agent_id = ? AND configured_at IS NULL", principalID, agentID).
+		Updates(map[string]any{"configured_at": now, "updated_at": now})
+	if result.Error != nil {
+		return fmt.Errorf("complete Agent setup: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return agent.ErrProfileConflict
+	}
+	return nil
 }
 
 type confirmedFactModel struct {

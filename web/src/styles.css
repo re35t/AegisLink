@@ -296,6 +296,27 @@ select:focus-visible {
     box-shadow 140ms ease;
 }
 
+.auth-form textarea {
+  width: 100%;
+  min-height: 132px;
+  padding: 12px;
+  resize: vertical;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  outline: 0;
+  color: var(--color-text);
+  background: var(--color-surface);
+  line-height: 1.55;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.auth-form textarea:focus {
+  border-color: #60776a;
+  box-shadow: 0 0 0 3px var(--color-focus);
+}
+
 .auth-form input:focus {
   border-color: #60776a;
   box-shadow: 0 0 0 3px var(--color-focus);
@@ -333,6 +354,22 @@ select:focus-visible {
 .auth-submit:hover:not(:disabled),
 .auth-status button:hover:not(:disabled) {
   background: #373e3b;
+}
+
+.setup-sign-out {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  border: 0;
+  color: var(--color-text-secondary);
+  background: transparent;
+  font-size: 12px;
+}
+
+.setup-sign-out:hover:not(:disabled) {
+  color: var(--color-text);
 }
 
 .auth-status {

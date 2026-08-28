@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"sort"
 	"strings"
@@ -23,19 +24,67 @@ type ProfileAgentReader interface {
 }
 
 type ProfileService struct {
-	repository  ProfileRepository
-	agents      ProfileAgentReader
-	providers   []CapabilityProvider
-	impressions ImpressionReader
+	repository   ProfileRepository
+	setup        ProfileSetupRepository
+	agents       ProfileAgentReader
+	providers    []CapabilityProvider
+	impressions  ImpressionReader
+	synchronizer ProfileSynchronizer
 }
 
 func NewProfileService(repository ProfileRepository, agents ProfileAgentReader, providers ...CapabilityProvider) *ProfileService {
-	return &ProfileService{repository: repository, agents: agents, providers: providers}
+	service := &ProfileService{repository: repository, agents: agents, providers: providers}
+	service.setup, _ = repository.(ProfileSetupRepository)
+	return service
 }
 
 func (service *ProfileService) WithImpressions(reader ImpressionReader) *ProfileService {
 	service.impressions = reader
 	return service
+}
+
+func (service *ProfileService) WithSynchronizer(synchronizer ProfileSynchronizer) *ProfileService {
+	service.synchronizer = synchronizer
+	return service
+}
+
+func (service *ProfileService) SetupRequired(ctx context.Context, principalID, agentID string) (bool, error) {
+	record, err := service.repository.GetProfile(ctx, principalID, agentID)
+	if err != nil {
+		return false, err
+	}
+	return record.ConfiguredAt == nil, nil
+}
+
+func (service *ProfileService) Configure(ctx context.Context, principalID, agentID, name, primaryFocus string) (Profile, error) {
+	name = strings.TrimSpace(name)
+	primaryFocus = strings.TrimSpace(primaryFocus)
+	if name == "" || primaryFocus == "" || utf8.RuneCountInString(name) > maximumProfileName || utf8.RuneCountInString(primaryFocus) > maximumProfileDescription {
+		return Profile{}, ErrInvalidProfile
+	}
+	if _, err := service.agents.Get(ctx, principalID, agentID); err != nil {
+		return Profile{}, err
+	}
+	if service.setup == nil {
+		return Profile{}, fmt.Errorf("%w: Profile setup storage is unavailable", ErrIndexSync)
+	}
+	if err := service.setup.ConfigureBasic(ctx, principalID, agentID, name, primaryFocus); err != nil {
+		return Profile{}, err
+	}
+	profile, err := service.Get(ctx, principalID, agentID)
+	if err != nil {
+		return Profile{}, err
+	}
+	if service.synchronizer == nil {
+		return Profile{}, fmt.Errorf("%w: Agent Index is not configured", ErrIndexSync)
+	}
+	if err := service.sync(ctx, principalID, agentID); err != nil {
+		return Profile{}, err
+	}
+	if err := service.setup.CompleteSetup(ctx, principalID, agentID); err != nil {
+		return Profile{}, err
+	}
+	return profile, nil
 }
 
 func (service *ProfileService) Get(ctx context.Context, principalID, agentID string) (Profile, error) {
@@ -154,7 +203,7 @@ func (service *ProfileService) Update(ctx context.Context, principalID, agentID 
 	if err := service.repository.UpdateProfileIdentity(ctx, principalID, agentID, update); err != nil {
 		return Profile{}, err
 	}
-	return service.Get(ctx, principalID, agentID)
+	return service.getAndSync(ctx, principalID, agentID)
 }
 
 func (service *ProfileService) UpdatePolicies(ctx context.Context, principalID, agentID string, expectedVersion int64, changes []PolicyChange) (Profile, error) {
@@ -189,7 +238,7 @@ func (service *ProfileService) UpdatePolicies(ctx context.Context, principalID, 
 	if err := service.repository.UpdateDisclosurePolicies(ctx, principalID, agentID, expectedVersion, changes); err != nil {
 		return Profile{}, err
 	}
-	return service.Get(ctx, principalID, agentID)
+	return service.getAndSync(ctx, principalID, agentID)
 }
 
 func profileSubjects(profile Profile) map[PolicyKey]struct{} {
@@ -232,7 +281,7 @@ func (service *ProfileService) ConfirmCandidate(ctx context.Context, principalID
 	if err := service.repository.ConfirmFact(ctx, principalID, agentID, candidateID, expectedVersion, expectedCandidateVersion, update); err != nil {
 		return Profile{}, err
 	}
-	return service.Get(ctx, principalID, agentID)
+	return service.getAndSync(ctx, principalID, agentID)
 }
 
 func (service *ProfileService) RevokeFact(ctx context.Context, principalID, agentID, factID string, expectedVersion int64) (Profile, error) {
@@ -242,7 +291,28 @@ func (service *ProfileService) RevokeFact(ctx context.Context, principalID, agen
 	if err := service.repository.RevokeFact(ctx, principalID, agentID, factID, expectedVersion); err != nil {
 		return Profile{}, err
 	}
-	return service.Get(ctx, principalID, agentID)
+	return service.getAndSync(ctx, principalID, agentID)
+}
+
+func (service *ProfileService) getAndSync(ctx context.Context, principalID, agentID string) (Profile, error) {
+	profile, err := service.Get(ctx, principalID, agentID)
+	if err != nil {
+		return Profile{}, err
+	}
+	if err := service.sync(ctx, principalID, agentID); err != nil {
+		return Profile{}, err
+	}
+	return profile, nil
+}
+
+func (service *ProfileService) sync(ctx context.Context, principalID, agentID string) error {
+	if service.synchronizer == nil {
+		return nil
+	}
+	if err := service.synchronizer.Sync(ctx, principalID, agentID); err != nil {
+		return fmt.Errorf("%w: %v", ErrIndexSync, err)
+	}
+	return nil
 }
 
 func (service *ProfileService) RuntimeFacts(ctx context.Context, principalID, agentID string) ([]ConfirmedFact, error) {

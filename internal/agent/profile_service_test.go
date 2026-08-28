@@ -98,6 +98,23 @@ func TestProfileServiceValidatesAndSavesDisclosureChanges(t *testing.T) {
 	}
 }
 
+func TestProfileServiceConfiguresAndSyncsBeforeCompletingSetup(t *testing.T) {
+	repository := newProfileRepositoryStub()
+	synchronizer := &profileSynchronizerStub{}
+	service := NewProfileService(repository, profileAgentStub{}).WithSynchronizer(synchronizer)
+
+	profile, err := service.Configure(t.Context(), "owner-1", "agent-1", "  Atlas  ", "  Go systems and API design  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repository.configuredName != "Atlas" || repository.configuredFocus != "Go systems and API design" || !repository.setupCompleted {
+		t.Fatalf("setup was not persisted: %#v", repository)
+	}
+	if synchronizer.calls != 1 || profile.AgentID != "agent-1" {
+		t.Fatalf("setup was not synchronized: calls=%d profile=%#v", synchronizer.calls, profile)
+	}
+}
+
 func TestDisclosurePolicyFiltering(t *testing.T) {
 	public := DisclosurePolicy{Visibility: VisibilityPublic, Channels: []DisclosureChannel{ChannelAgentFacts}}
 	if !public.Allows(ChannelAgentFacts, "", false) || public.Allows(ChannelAgentCard, "", false) {
@@ -128,11 +145,14 @@ func (provider capabilityProviderStub) ProfileCapabilities(context.Context, stri
 }
 
 type profileRepositoryStub struct {
-	record         ProfileRecord
-	facts          []ConfirmedFact
-	policies       map[PolicyKey]DisclosurePolicy
-	identityUpdate ProfileUpdate
-	policyChanges  []PolicyChange
+	record          ProfileRecord
+	facts           []ConfirmedFact
+	policies        map[PolicyKey]DisclosurePolicy
+	identityUpdate  ProfileUpdate
+	policyChanges   []PolicyChange
+	configuredName  string
+	configuredFocus string
+	setupCompleted  bool
 }
 
 func newProfileRepositoryStub() *profileRepositoryStub {
@@ -169,5 +189,24 @@ func (repository *profileRepositoryStub) ConfirmFact(context.Context, string, st
 	return nil
 }
 func (repository *profileRepositoryStub) RevokeFact(context.Context, string, string, string, int64) error {
+	return nil
+}
+func (repository *profileRepositoryStub) ConfigureBasic(_ context.Context, _, _ string, name, focus string) error {
+	repository.configuredName = name
+	repository.configuredFocus = focus
+	repository.record.Version++
+	return nil
+}
+func (repository *profileRepositoryStub) CompleteSetup(context.Context, string, string) error {
+	repository.setupCompleted = true
+	now := time.Now()
+	repository.record.ConfiguredAt = &now
+	return nil
+}
+
+type profileSynchronizerStub struct{ calls int }
+
+func (synchronizer *profileSynchronizerStub) Sync(context.Context, string, string) error {
+	synchronizer.calls++
 	return nil
 }

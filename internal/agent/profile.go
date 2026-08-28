@@ -12,6 +12,7 @@ var (
 	ErrInvalidProfile  = errors.New("invalid agent profile")
 	ErrProfileConflict = errors.New("agent profile version conflict")
 	ErrProfileSubject  = errors.New("agent profile subject not found")
+	ErrIndexSync       = errors.New("agent discovery index sync failed")
 )
 
 type Visibility string
@@ -82,6 +83,7 @@ type ProfileRecord struct {
 	AvatarURL        string
 	Version          int64
 	ContextRevision  int64
+	ConfiguredAt     *time.Time
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 }
@@ -211,6 +213,15 @@ type ProfileRepository interface {
 	UpdateDisclosurePolicies(context.Context, string, string, int64, []PolicyChange) error
 	ConfirmFact(context.Context, string, string, string, int64, int64, ConfirmFactUpdate) error
 	RevokeFact(context.Context, string, string, string, int64) error
+}
+
+type ProfileSetupRepository interface {
+	ConfigureBasic(context.Context, string, string, string, string) error
+	CompleteSetup(context.Context, string, string) error
+}
+
+type ProfileSynchronizer interface {
+	Sync(context.Context, string, string) error
 }
 
 type ImpressionReader interface {

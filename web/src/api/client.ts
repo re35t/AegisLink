@@ -14,6 +14,8 @@ export type AgentCardPreview = components["schemas"]["AgentCardPreview"];
 export type AccountSettings = components["schemas"]["AccountSettingsResponse"];
 export type AuthResponse = components["schemas"]["AuthResponse"];
 export type Bootstrap = components["schemas"]["BootstrapResponse"];
+export type AgentDiscoveryCandidate =
+  components["schemas"]["AgentDiscoveryCandidate"];
 export type Conversation = components["schemas"]["Conversation"];
 export type ConversationDetail = components["schemas"]["ConversationDetail"];
 export type Message = components["schemas"]["Message"];
@@ -67,6 +69,27 @@ export const api = {
       body: JSON.stringify(input),
     }),
   bootstrap: () => request<Bootstrap>("/api/v1/bootstrap"),
+  configureAgent: (
+    agentId: string,
+    input: components["schemas"]["ConfigureAgentRequest"],
+  ) =>
+    request<AgentProfile>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/setup`,
+      { method: "POST", body: JSON.stringify(input) },
+    ),
+  syncAgentDiscovery: (agentId: string) =>
+    request<void>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/discovery/sync`,
+      { method: "POST" },
+    ),
+  searchAgentDiscovery: (
+    agentId: string,
+    input: components["schemas"]["AgentDiscoverySearchRequest"],
+  ) =>
+    request<components["schemas"]["AgentDiscoverySearchResponse"]>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/discovery/search`,
+      { method: "POST", body: JSON.stringify(input) },
+    ),
   listAgents: async () => {
     const response = await request<{ agents: Agent[] }>("/api/v1/agents");
     return response.agents;

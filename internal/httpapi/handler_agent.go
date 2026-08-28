@@ -14,10 +14,17 @@ func (handler *handler) bootstrap(c *gin.Context) {
 		handler.handleError(c, err)
 		return
 	}
+	setupRequired := false
+	if handler.setup != nil {
+		setupRequired, err = handler.setup.SetupRequired(c.Request.Context(), actor.User.ID, agentRecord.ID)
+		if err != nil {
+			handler.handleError(c, err)
+			return
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{
-		"user":  actor.User,
-		"agent": agentRecord,
-		"model": handler.model,
+		"user": actor.User, "agent": agentRecord, "model": handler.model,
+		"setupRequired": setupRequired,
 	})
 }
 

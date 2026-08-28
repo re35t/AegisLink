@@ -364,8 +364,42 @@ func TestAccountRegistrationBindsPrincipalAgentAndSession(t *testing.T) {
 		t.Fatalf("unexpected identity: %#v", identity)
 	}
 	profileRecord, err := NewAgentProfileRepository(database).GetProfile(t.Context(), registration.User.ID, registration.Agent.ID)
-	if err != nil || profileRecord.Version != 1 {
+	if err != nil || profileRecord.Version != 1 || profileRecord.ConfiguredAt != nil {
 		t.Fatalf("default Agent Profile was not created: profile=%#v err=%v", profileRecord, err)
+	}
+	profileRepository := NewAgentProfileRepository(database)
+	if err := profileRepository.ConfigureBasic(t.Context(), registration.User.ID, registration.Agent.ID, "Atlas", "Go systems"); err != nil {
+		t.Fatal(err)
+	}
+	policies, err := profileRepository.ListDisclosurePolicies(t.Context(), registration.User.ID, registration.Agent.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identityPolicy := policies[agent.PolicyKey{SubjectType: agent.SubjectIdentity, SubjectID: registration.Agent.ID}]
+	if identityPolicy.Visibility != agent.VisibilityPublic || !identityPolicy.Indexable || !identityPolicy.Allows(agent.ChannelAgentFacts, "", false) {
+		t.Fatalf("setup identity policy = %#v", identityPolicy)
+	}
+	indexRepository := NewAgentIndexRepository(database)
+	if err := indexRepository.SaveRegistration(t.Context(), registration.User.ID, registration.Agent.ID, "agent_01ARZ3NDEKTSV4RRFFQ69G5FAV"); err != nil {
+		t.Fatal(err)
+	}
+	revision, err := indexRepository.ReserveRevision(t.Context(), registration.User.ID, registration.Agent.ID)
+	if err != nil || revision != 1 {
+		t.Fatalf("reserved revision=%d err=%v", revision, err)
+	}
+	if err := indexRepository.MarkPublished(t.Context(), registration.User.ID, registration.Agent.ID, revision); err != nil {
+		t.Fatal(err)
+	}
+	indexState, err := indexRepository.Get(t.Context(), registration.User.ID, registration.Agent.ID)
+	if err != nil || indexState.AgentAddr == "" || indexState.PublishedRevision != 1 {
+		t.Fatalf("Index state=%#v err=%v", indexState, err)
+	}
+	if err := profileRepository.CompleteSetup(t.Context(), registration.User.ID, registration.Agent.ID); err != nil {
+		t.Fatal(err)
+	}
+	profileRecord, err = profileRepository.GetProfile(t.Context(), registration.User.ID, registration.Agent.ID)
+	if err != nil || profileRecord.ConfiguredAt == nil {
+		t.Fatalf("completed Agent setup profile=%#v err=%v", profileRecord, err)
 	}
 	tokenHash := []byte("01234567890123456789012345678901")
 	expiresAt := time.Now().Add(time.Hour)

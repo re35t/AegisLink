@@ -13,15 +13,17 @@ import (
 )
 
 type Config struct {
-	Server   Server
-	Database Database
-	Auth     Auth
-	Model    Model
-	Curator  Model
-	Runtime  AgentRuntime
-	MCP      MCP
-	Web      Web
-	Security Security
+	Server     Server
+	Database   Database
+	Auth       Auth
+	Model      Model
+	Curator    Model
+	Runtime    AgentRuntime
+	MCP        MCP
+	Web        Web
+	Security   Security
+	AgentIndex AgentIndex
+	Encoder    Encoder
 }
 
 type Server struct {
@@ -65,6 +67,20 @@ type Web struct {
 
 type Security struct {
 	AgentKeyEncryptionKey string
+}
+
+type AgentIndex struct {
+	BaseURL           string
+	RegistrationToken string
+	QueryToken        string
+	Timeout           time.Duration
+}
+
+type Encoder struct {
+	BaseURL string
+	APIKey  string
+	Model   string
+	Timeout time.Duration
 }
 
 func Load() (Config, error) {
@@ -113,6 +129,14 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	indexTimeout, err := durationEnv("AGENT_INDEX_TIMEOUT", 15*time.Second)
+	if err != nil {
+		return Config{}, err
+	}
+	encoderTimeout, err := durationEnv("DISCOVERY_ENCODER_TIMEOUT", 30*time.Second)
+	if err != nil {
+		return Config{}, err
+	}
 
 	driver := strings.TrimSpace(env("MODEL_DRIVER", "deepseek"))
 	cfg := Config{
@@ -148,6 +172,16 @@ func Load() (Config, error) {
 		},
 		Web:      Web{Origin: strings.TrimSpace(env("WEB_ORIGIN", "http://127.0.0.1:5173"))},
 		Security: Security{AgentKeyEncryptionKey: strings.TrimSpace(os.Getenv("AGENT_KEY_ENCRYPTION_KEY"))},
+		AgentIndex: AgentIndex{
+			BaseURL:           strings.TrimSpace(os.Getenv("AGENT_INDEX_BASE_URL")),
+			RegistrationToken: strings.TrimSpace(os.Getenv("AGENT_INDEX_REGISTRATION_TOKEN")),
+			QueryToken:        strings.TrimSpace(os.Getenv("AGENT_INDEX_QUERY_TOKEN")), Timeout: indexTimeout,
+		},
+		Encoder: Encoder{
+			BaseURL: strings.TrimSpace(os.Getenv("DISCOVERY_ENCODER_BASE_URL")),
+			APIKey:  strings.TrimSpace(os.Getenv("DISCOVERY_ENCODER_API_KEY")),
+			Model:   strings.TrimSpace(os.Getenv("DISCOVERY_ENCODER_MODEL")), Timeout: encoderTimeout,
+		},
 	}
 	if err := cfg.Validate(); err != nil {
 		return Config{}, err
@@ -197,6 +231,28 @@ func (cfg Config) Validate() error {
 	if cfg.MCP.Timeout <= 0 {
 		problems = append(problems, errors.New("MCP_TIMEOUT must be positive"))
 	}
+	indexConfigured := cfg.AgentIndex.BaseURL != "" || cfg.AgentIndex.RegistrationToken != "" || cfg.AgentIndex.QueryToken != "" || cfg.Encoder.BaseURL != "" || cfg.Encoder.APIKey != "" || cfg.Encoder.Model != ""
+	if indexConfigured {
+		if cfg.AgentIndex.BaseURL == "" || len(cfg.AgentIndex.RegistrationToken) < 32 || len(cfg.AgentIndex.QueryToken) < 32 {
+			problems = append(problems, errors.New("AGENT_INDEX_* must provide a base URL and registration/query tokens of at least 32 characters"))
+		}
+		if cfg.AgentIndex.Timeout <= 0 {
+			problems = append(problems, errors.New("AGENT_INDEX_TIMEOUT must be positive"))
+		}
+		if cfg.Encoder.BaseURL == "" || cfg.Encoder.Model == "" || cfg.Encoder.Timeout <= 0 {
+			problems = append(problems, errors.New("DISCOVERY_ENCODER_* must provide a base URL, model, and positive timeout; API key is optional"))
+		}
+		if cfg.AgentIndex.BaseURL != "" {
+			if err := validateURL("AGENT_INDEX_BASE_URL", cfg.AgentIndex.BaseURL); err != nil {
+				problems = append(problems, err)
+			}
+		}
+		if cfg.Encoder.BaseURL != "" {
+			if err := validateURL("DISCOVERY_ENCODER_BASE_URL", cfg.Encoder.BaseURL); err != nil {
+				problems = append(problems, err)
+			}
+		}
+	}
 	if err := validateURL("MODEL_BASE_URL", cfg.Model.BaseURL); err != nil {
 		problems = append(problems, err)
 	}
@@ -207,6 +263,10 @@ func (cfg Config) Validate() error {
 		problems = append(problems, err)
 	}
 	return errors.Join(problems...)
+}
+
+func (cfg Config) AgentIndexEnabled() bool {
+	return cfg.AgentIndex.BaseURL != ""
 }
 
 func (cfg Config) EffectiveCurator() Model {
