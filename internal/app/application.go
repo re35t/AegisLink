@@ -135,8 +135,8 @@ func New(parent context.Context, cfg config.Config, logger *slog.Logger) (*Appli
 	if err != nil {
 		return closeOnError(err)
 	}
-	catalogService := catalog.NewService(agentService, mcpService, skillService)
-	agentHarness := harness.New(runtime, memoryService, skillService, mcpService, profileService, impressionService)
+	catalogService := catalog.NewService(agentService, mcpService, skillService, agentIndexService != nil)
+	agentHarness := harness.New(runtime, memoryService, skillService, mcpService, profileService, impressionService, agentIndexService)
 	conversationService := conversation.NewService(
 		root,
 		conversationRepository,

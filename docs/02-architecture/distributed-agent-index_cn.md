@@ -88,7 +88,7 @@ Index 不持有：
 | Agent Server Profile Publisher | 已实现 setup 与变化同步 | 多副本场景的持久重试/Outbox          |
 | PostgreSQL pgvector        | 已实现固定 1536 维 | 按实测容量扩展                   |
 | Discovery Search           | 已实现 exact cosine | 评测达标后另加 HNSW Migration    |
-| Agent Server Discovery Caller | 已实现 Query 编码与接口 | Run 级产品接入                    |
+| Agent Server Discovery Caller | 已实现 Query 编码、接口与 Composer Run 接入 | AgentAddr Resolve 与通信仍不在范围内 |
 | LSH / Hash Index           | 已删除             | 不再实现                         |
 
 公开 HTTP 形状以 `index/contracts/http/v1/openapi.yaml` 为准；后续变更仍必须先更新 OpenAPI，再进入运行时代码。

@@ -52,7 +52,7 @@ Substantial frontend work also follows [`../skills/frontend-engineering/SKILL.md
 
 - ADR 0001 is explicitly superseded by ADR 0004.
 - ADR 0002 is superseded by ADR 0014, which limits Ed25519 signing to AgentFacts publication rather than pretending it is a general Agent identity protocol.
-- ADR 0003–0016 record accepted decisions. ADR 0011 revises the MCP ownership statement in ADR 0007. ADR 0016 defines the independent three-stage Index boundary; the current implementation now covers its initial Register, Publish, and Search slices.
+- ADR 0003–0017 record accepted decisions. ADR 0011 revises the MCP ownership statement in ADR 0007. ADR 0016 defines the independent three-stage Index boundary; the current implementation covers Register, Publish, and Search. ADR 0017 supersedes only ADR 0012's local Discovery behavior and connects Composer Discovery to the standalone Index.
 - [`01-product/personal-agent-os-plan_cn.md`](./01-product/personal-agent-os-plan_cn.md) is a planning record. Its implemented/deferred checklists are useful context, but current code, contracts, migrations, and ADRs take precedence.
 
 The removed prototype documents described a TypeScript CLI, `soul.md`, JSONL history, Chroma/RAG, agent routing, organizations, gRPC, WebSocket, IM adapters, and Kubernetes services that do not exist in this repository. They were short placeholders rather than maintained specifications; Git history remains the archive if that research is needed.

@@ -116,6 +116,10 @@ func (service *Service) Search(ctx context.Context, principalID, agentID, query 
 	if _, err := service.profiles.Get(ctx, principalID, agentID); err != nil {
 		return nil, err
 	}
+	state, err := service.repository.Get(ctx, principalID, agentID)
+	if err != nil {
+		return nil, err
+	}
 	vectors, err := service.embedder.Embed(ctx, []string{norm.NFC.String(query)})
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrUnavailable, err)
@@ -123,7 +127,25 @@ func (service *Service) Search(ctx context.Context, principalID, agentID, query 
 	if err := validateEmbeddings(vectors, 1); err != nil {
 		return nil, err
 	}
-	return service.client.Search(ctx, vectors[0], topK)
+	indexTopK := topK
+	if state.AgentAddr != "" && indexTopK < 50 {
+		indexTopK++
+	}
+	candidates, err := service.client.Search(ctx, vectors[0], indexTopK)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]Candidate, 0, min(topK, len(candidates)))
+	for _, candidate := range candidates {
+		if candidate.AgentAddr == state.AgentAddr {
+			continue
+		}
+		result = append(result, candidate)
+		if len(result) == topK {
+			break
+		}
+	}
+	return result, nil
 }
 
 func (service *Service) lockAgent(principalID, agentID string) func() {

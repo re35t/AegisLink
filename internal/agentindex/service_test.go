@@ -44,9 +44,14 @@ func TestSyncPublishesOnlyPublicIndexableAgentProfileUnits(t *testing.T) {
 }
 
 func TestSearchEncodesInputAndReturnsIndexCandidates(t *testing.T) {
-	index := &clientStub{candidates: []Candidate{{AgentAddr: "agent_01ARZ3NDEKTSV4RRFFQ69G5FAV", Score: .8}}}
+	index := &clientStub{candidates: []Candidate{
+		{AgentAddr: "agent_self", Score: .9},
+		{AgentAddr: "agent_first", Score: .8},
+		{AgentAddr: "agent_second", Score: .7},
+		{AgentAddr: "agent_third", Score: .6},
+	}}
 	encoder := &embedderStub{}
-	service, err := NewService(&repositoryStub{}, profileReaderStub{profile: agent.Profile{AgentID: "agent-1"}}, encoder, index)
+	service, err := NewService(&repositoryStub{state: State{AgentAddr: "agent_self"}}, profileReaderStub{profile: agent.Profile{AgentID: "agent-1"}}, encoder, index)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,8 +59,43 @@ func TestSearchEncodesInputAndReturnsIndexCandidates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result) != 1 || len(encoder.input) != 1 || encoder.input[0] != "Go backend help" || index.topK != 3 {
+	if len(result) != 3 || result[0].AgentAddr != "agent_first" || result[2].AgentAddr != "agent_third" || len(encoder.input) != 1 || encoder.input[0] != "Go backend help" || index.topK != 4 {
 		t.Fatalf("unexpected search: result=%#v input=%q topK=%d", result, encoder.input, index.topK)
+	}
+}
+
+func TestSearchDoesNotOverfetchForUnregisteredAgent(t *testing.T) {
+	index := &clientStub{candidates: []Candidate{{AgentAddr: "agent_first", Score: .8}}}
+	service, err := NewService(&repositoryStub{}, profileReaderStub{profile: agent.Profile{AgentID: "agent-1"}}, &embedderStub{}, index)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.Search(t.Context(), "owner-1", "agent-1", "Go help", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if index.topK != 5 || len(result) != 1 || result[0].AgentAddr != "agent_first" {
+		t.Fatalf("unexpected unregistered search: result=%#v topK=%d", result, index.topK)
+	}
+}
+
+func TestSearchTopKLimitAllowsOneFewerCandidateAfterSelfFiltering(t *testing.T) {
+	candidates := make([]Candidate, 50)
+	for index := range candidates {
+		candidates[index] = Candidate{AgentAddr: "agent_other", Score: float64(50 - index)}
+	}
+	candidates[0].AgentAddr = "agent_self"
+	index := &clientStub{candidates: candidates}
+	service, err := NewService(&repositoryStub{state: State{AgentAddr: "agent_self"}}, profileReaderStub{profile: agent.Profile{AgentID: "agent-1"}}, &embedderStub{}, index)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.Search(t.Context(), "owner-1", "agent-1", "Go help", 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if index.topK != 50 || len(result) != 49 {
+		t.Fatalf("unexpected bounded search: result=%d topK=%d", len(result), index.topK)
 	}
 }
 

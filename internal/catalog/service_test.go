@@ -11,7 +11,7 @@ import (
 )
 
 func TestCatalogProjectsMCPSkillsAndDiscoveryAsDistinctKinds(t *testing.T) {
-	service := NewService(catalogAgentReader{}, catalogMCPReader{}, catalogSkillReader{})
+	service := NewService(catalogAgentReader{}, catalogMCPReader{}, catalogSkillReader{}, true)
 	page, err := service.List(t.Context(), "principal-one", "agent-one", Query{Limit: 50})
 	if err != nil {
 		t.Fatal(err)
@@ -32,10 +32,14 @@ func TestCatalogProjectsMCPSkillsAndDiscoveryAsDistinctKinds(t *testing.T) {
 			t.Fatalf("item %d = %#v, expected %#v", index, item, expected)
 		}
 	}
+	discovery := page.Items[2]
+	if discovery.ID != "discovery:agent-search" || discovery.Label != "Find related Agents" || discovery.Group.Label != "AegisLink Index" {
+		t.Fatalf("discovery item = %#v", discovery)
+	}
 }
 
 func TestCatalogFiltersKindsAndQuery(t *testing.T) {
-	service := NewService(catalogAgentReader{}, catalogMCPReader{}, catalogSkillReader{})
+	service := NewService(catalogAgentReader{}, catalogMCPReader{}, catalogSkillReader{}, true)
 	page, err := service.List(t.Context(), "principal-one", "agent-one", Query{
 		Kinds: []string{"skill"}, Query: "review", Limit: 50,
 	})
@@ -44,6 +48,30 @@ func TestCatalogFiltersKindsAndQuery(t *testing.T) {
 	}
 	if len(page.Items) != 1 || page.Items[0].Kind != "skill" {
 		t.Fatalf("filtered items = %#v", page.Items)
+	}
+}
+
+func TestCatalogMarksDiscoveryOfflineWhenIndexIsNotConfigured(t *testing.T) {
+	service := NewService(catalogAgentReader{}, catalogMCPReader{}, catalogSkillReader{}, false)
+	page, err := service.List(t.Context(), "principal-one", "agent-one", Query{Kinds: []string{"discovery"}, Limit: 50})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) != 1 || page.Items[0].Availability != "server-offline" || page.Items[0].DisabledReason == "" {
+		t.Fatalf("offline discovery item = %#v", page.Items)
+	}
+}
+
+func TestCatalogSearchesDiscoveryByAgentAddrAndIndexTerms(t *testing.T) {
+	service := NewService(catalogAgentReader{}, catalogMCPReader{}, catalogSkillReader{}, true)
+	for _, query := range []string{"related agents", "agentaddr", "index"} {
+		page, err := service.List(t.Context(), "principal-one", "agent-one", Query{Kinds: []string{"discovery"}, Query: query, Limit: 50})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(page.Items) != 1 {
+			t.Fatalf("query %q returned %#v", query, page.Items)
+		}
 	}
 }
 

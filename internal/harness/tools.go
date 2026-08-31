@@ -4,24 +4,22 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/re35t/AegisLink/internal/agentindex"
 	"github.com/re35t/AegisLink/internal/runtime"
 )
 
 var (
 	timeSchema      = json.RawMessage(`{"type":"object","properties":{"timezone":{"type":"string","description":"IANA timezone such as Asia/Shanghai or UTC"}},"required":["timezone"],"additionalProperties":false}`)
-	discoverySchema = json.RawMessage(`{"type":"object","properties":{"query":{"type":"string","description":"Optional capability need inferred from the user request"}},"additionalProperties":false}`)
+	discoverySchema = json.RawMessage(`{"type":"object","properties":{"query":{"type":"string","minLength":1,"maxLength":4000,"description":"Concise semantic search query inferred from the user's request"}},"required":["query"],"additionalProperties":false}`)
 	skillSchema     = json.RawMessage(`{"type":"object","properties":{"name":{"type":"string","description":"Exact enabled Skill name from available_skills"}},"required":["name"],"additionalProperties":false}`)
 	resourceSchema  = json.RawMessage(`{"type":"object","properties":{"name":{"type":"string","description":"Exact enabled Skill name"},"path":{"type":"string","description":"Exact resource path returned by load_skill"}},"required":["name","path"],"additionalProperties":false}`)
 )
 
 type skillInput struct {
 	Name string `json:"name"`
-}
-type capabilityOutput struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
 }
 type skillResourceOutput struct {
 	Name      string `json:"name"`
@@ -49,30 +47,6 @@ func harnessTools(agentContext agentContext) []runtime.Tool {
 				return "", fmt.Errorf("invalid timezone %q", input.Timezone)
 			}
 			return encodeToolResult(map[string]string{"timezone": input.Timezone, "time": time.Now().In(location).Format(time.RFC3339)})
-		},
-	}, {
-		Name: "discover_capabilities", Description: "Inspect the current Agent's enabled Skills and MCP tools so the Agent can explain which capabilities fit the request.", InputSchema: discoverySchema,
-		Invoke: func(_ context.Context, arguments string) (string, error) {
-			var input struct {
-				Query string `json:"query"`
-			}
-			if err := json.Unmarshal([]byte(arguments), &input); err != nil {
-				return "", err
-			}
-			skills := make([]capabilityOutput, 0, len(agentContext.skills))
-			for _, item := range agentContext.skills {
-				skills = append(skills, capabilityOutput{Name: item.name, Description: item.description})
-			}
-			mcpTools := make([]capabilityOutput, 0, len(agentContext.tools))
-			for _, item := range agentContext.tools {
-				mcpTools = append(mcpTools, capabilityOutput{Name: item.Name, Description: item.Description})
-			}
-			return encodeToolResult(struct {
-				Query       string             `json:"query,omitempty"`
-				MemoryCount int                `json:"memoryCount"`
-				Skills      []capabilityOutput `json:"skills"`
-				MCPTools    []capabilityOutput `json:"mcpTools"`
-			}{input.Query, len(agentContext.memories), skills, mcpTools})
 		},
 	}}
 	if len(agentContext.skills) > 0 {
@@ -148,6 +122,33 @@ func harnessTools(agentContext agentContext) []runtime.Tool {
 		}
 	}
 	return append(resolved, agentContext.tools...)
+}
+
+func agentSearchTool(searcher AgentSearcher, principalID, agentID string) runtime.Tool {
+	return runtime.Tool{
+		Name: "discover_agents", Description: "Search public, indexable Agent Profiles for related Agents. Returns only candidates supplied by AegisLink Index, including AgentAddr and similarity metadata.", InputSchema: discoverySchema,
+		Invoke: func(ctx context.Context, arguments string) (string, error) {
+			var input struct {
+				Query string `json:"query"`
+			}
+			if err := json.Unmarshal([]byte(arguments), &input); err != nil {
+				return "", err
+			}
+			input.Query = strings.TrimSpace(input.Query)
+			if input.Query == "" {
+				return "", agentindex.ErrInvalid
+			}
+			candidates, err := searcher.Search(ctx, principalID, agentID, input.Query, 5)
+			if err != nil {
+				return "", err
+			}
+			result := append([]agentindex.Candidate{}, candidates...)
+			return encodeToolResult(struct {
+				Query      string                 `json:"query"`
+				Candidates []agentindex.Candidate `json:"candidates"`
+			}{Query: input.Query, Candidates: result})
+		},
+	}
 }
 
 func encodeToolResult(value any) (string, error) {

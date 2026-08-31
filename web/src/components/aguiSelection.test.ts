@@ -45,7 +45,7 @@ describe("withAegisSelection", () => {
 
   it.each([
     ["skill", "skill:review", "use-skill-once"],
-    ["discovery", "discovery:agent-capabilities", "discover-once"],
+    ["discovery", "discovery:agent-search", "discover-once"],
   ] as const)(
     "forwards the %s capability as a typed action",
     (kind, id, action) => {

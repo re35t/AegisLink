@@ -157,6 +157,38 @@ func TestEinoForcesOnlyTheFirstModelDecision(t *testing.T) {
 	}
 }
 
+func TestEinoDiscoveryFakeModelReturnsEveryAgentAddr(t *testing.T) {
+	t.Parallel()
+	discoveryTool := Tool{
+		Name: "discover_agents", Description: "Find related Agents.", InputSchema: []byte(`{"type":"object"}`),
+		Invoke: func(context.Context, string) (string, error) {
+			return `{"candidates":[{"agentAddr":"agent_first","score":0.91},{"agentAddr":"agent_second","score":0.84}]}`, nil
+		},
+	}
+	fake := &discoveryModel{}
+	agentRuntime := NewWithModel(fake, Options{MaxIterations: 4})
+	var answer strings.Builder
+	var toolEvents []*ToolEvent
+	for output := range agentRuntime.Run(t.Context(), Input{
+		Agent: Agent{Name: "Aegis"}, Messages: []Message{{Role: RoleUser, Content: "find a piano teacher"}}, Tools: []Tool{discoveryTool},
+		ToolChoice: ToolChoice{Mode: ToolChoiceForceOnce, Name: "discover_agents"},
+	}) {
+		if output.Err != nil {
+			t.Fatal(output.Err)
+		}
+		answer.WriteString(output.Delta)
+		if output.Tool != nil {
+			toolEvents = append(toolEvents, output.Tool)
+		}
+	}
+	if !strings.Contains(answer.String(), "agent_first (0.91)") || !strings.Contains(answer.String(), "agent_second (0.84)") {
+		t.Fatalf("final answer omitted an AgentAddr: %q", answer.String())
+	}
+	if len(toolEvents) != 2 || toolEvents[0].Type != ToolStarted || toolEvents[1].Type != ToolCompleted || !strings.Contains(toolEvents[1].Result, "agent_second") {
+		t.Fatalf("tool lifecycle = %#v", toolEvents)
+	}
+}
+
 func TestEinoRejectsIgnoredAndMismatchedForcedTool(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {
@@ -278,6 +310,35 @@ type reactModel struct {
 	tools         []*schema.ToolInfo
 	options       []*model.Options
 	sawToolResult bool
+}
+
+type discoveryModel struct {
+	calls int
+}
+
+func (*discoveryModel) Generate(context.Context, []*schema.Message, ...model.Option) (*schema.Message, error) {
+	return nil, errors.New("unexpected non-streaming model call")
+}
+
+func (fake *discoveryModel) Stream(_ context.Context, input []*schema.Message, _ ...model.Option) (*schema.StreamReader[*schema.Message], error) {
+	fake.calls++
+	if fake.calls == 1 {
+		index := 0
+		return schema.StreamReaderFromArray([]*schema.Message{schema.AssistantMessage("", []schema.ToolCall{{
+			Index: &index, ID: "call-discovery", Type: "function",
+			Function: schema.FunctionCall{Name: "discover_agents", Arguments: `{"query":"piano teacher"}`},
+		}})}), nil
+	}
+	for _, message := range input {
+		if message.Role == schema.Tool && message.ToolCallID == "call-discovery" && strings.Contains(message.Content, "agent_first") && strings.Contains(message.Content, "agent_second") {
+			return schema.StreamReaderFromArray([]*schema.Message{schema.AssistantMessage("agent_first (0.91)\nagent_second (0.84)", nil)}), nil
+		}
+	}
+	return nil, errors.New("Discovery result was not provided to the final model call")
+}
+
+func (fake *discoveryModel) WithTools([]*schema.ToolInfo) (model.ToolCallingChatModel, error) {
+	return fake, nil
 }
 
 type selectedSkillModel struct {

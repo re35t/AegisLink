@@ -14,9 +14,9 @@ import (
 const (
 	mcpMentionPrefix       = "mcp-tool:"
 	skillMentionPrefix     = "skill:"
-	DiscoveryMentionID     = "discovery:agent-capabilities"
-	DiscoveryResourceID    = "agent-capabilities"
-	discoveryCategoryLabel = "AegisLink"
+	DiscoveryMentionID     = "discovery:agent-search"
+	DiscoveryResourceID    = "agent-search"
+	discoveryCategoryLabel = "AegisLink Index"
 )
 
 var categoryOrder = map[string]int{"mcp": 0, "skills": 1, "discovery": 2}
@@ -34,13 +34,14 @@ type SkillReader interface {
 }
 
 type Service struct {
-	agents AgentReader
-	mcp    MCPReader
-	skills SkillReader
+	agents           AgentReader
+	mcp              MCPReader
+	skills           SkillReader
+	discoveryEnabled bool
 }
 
-func NewService(agents AgentReader, mcpReader MCPReader, skillReader SkillReader) *Service {
-	return &Service{agents: agents, mcp: mcpReader, skills: skillReader}
+func NewService(agents AgentReader, mcpReader MCPReader, skillReader SkillReader, discoveryEnabled bool) *Service {
+	return &Service{agents: agents, mcp: mcpReader, skills: skillReader, discoveryEnabled: discoveryEnabled}
 }
 
 func (service *Service) List(ctx context.Context, principalID, agentID string, query Query) (Page, error) {
@@ -110,12 +111,18 @@ func (service *Service) List(ctx context.Context, principalID, agentID string, q
 			})
 		}
 	}
-	if wanted["discovery"] && matches(needle, "Discovery", "Agent capabilities", "Explore enabled MCP tools and Skills") {
+	if wanted["discovery"] && matches(needle, "Discovery", "Find related Agents", "AgentAddr", "AegisLink Index", "public indexable Agent Profiles") {
+		availability := "ready"
+		reason := ""
+		if !service.discoveryEnabled {
+			availability = "server-offline"
+			reason = "Agent Index and the Discovery encoder are not configured."
+		}
 		items = append(items, Item{
 			ID: DiscoveryMentionID, Kind: "discovery", Category: "discovery",
 			Group: Group{ID: "system", Kind: "system", Label: discoveryCategoryLabel},
-			Label: "Agent capabilities", Description: "Discover enabled MCP tools and Skills for this request.",
-			Action: "discover-once", Availability: "ready", ResourceID: DiscoveryResourceID,
+			Label: "Find related Agents", Description: "Search public, indexable Agent Profiles and return matching AgentAddr values.",
+			Action: "discover-once", Availability: availability, DisabledReason: reason, ResourceID: DiscoveryResourceID,
 		})
 	}
 	sort.SliceStable(items, func(left, right int) bool {

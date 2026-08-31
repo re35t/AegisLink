@@ -57,7 +57,8 @@ Do not render raw JSON as the primary successful result. Raw input/output may be
 - The Composer's leading action is a compact `+` button. It opens a narrow first-level menu containing `MCP`, `Skills`, and `Discovery`; selecting a type opens its child list to the right.
 - `@` continues to use the same server-projected catalog and selection state through the assistant-ui Trigger Popover.
 - MCP entries use `mcp-tool / force-tool-once`; Skill entries use `skill / use-skill-once`; Discovery uses `discovery / discover-once`. These types remain distinct in the AG-UI selection and durable Run execution policy.
-- Selecting a Skill forces `load_skill` once with the exact authorized Skill name, then returns to normal inference. Selecting Discovery forces the local `discover_capabilities` tool once; it reports enabled Agent Skills and MCP Tools and does not imply Internet or multi-Agent discovery.
+- Selecting a Skill forces `load_skill` once with the exact authorized Skill name, then returns to normal inference. Selecting Discovery forces `discover_agents` once. The Harness derives a concise query, calls the injected Agent Index service, excludes the current Agent, and returns at most five opaque AgentAddr candidates. The final response lists every returned AgentAddr and score without inventing names or capabilities. AgentAddr Resolve and Agent-to-Agent communication are outside this interaction.
+- Discovery is selectable only when the Agent Index and encoder are configured. Otherwise the Catalog exposes the item as `server-offline`, keeps it disabled, and explains the missing configuration.
 - Disabled MCP Tools and Skills require an explicit enable mutation before selection. Failed enablement keeps the draft and offers retry.
 
 ## Human-in-the-loop and approvals

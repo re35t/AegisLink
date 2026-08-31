@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/re35t/AegisLink/internal/agent"
+	"github.com/re35t/AegisLink/internal/agentindex"
 	"github.com/re35t/AegisLink/internal/catalog"
 	"github.com/re35t/AegisLink/internal/conversation"
 	"github.com/re35t/AegisLink/internal/impression"
@@ -27,7 +28,7 @@ func TestResolveSelectionUsesTypedPolicies(t *testing.T) {
 	}{
 		{conversation.RunSelection{MentionID: "mcp-tool:tool-one", Action: "force-tool-once"}, "force-tool-once", "mcp-tool", "mcp__demo__read"},
 		{conversation.RunSelection{MentionID: "skill:skill-one", Action: "use-skill-once"}, "use-skill-once", "skill", "load_skill"},
-		{conversation.RunSelection{MentionID: catalog.DiscoveryMentionID, Action: "discover-once"}, "discover-once", "discovery", "discover_capabilities"},
+		{conversation.RunSelection{MentionID: catalog.DiscoveryMentionID, Action: "discover-once"}, "discover-once", "discovery", "discover_agents"},
 	} {
 		policy, err := harness.ResolveSelection(t.Context(), "principal-one", "agent-one", test.selection)
 		if err != nil {
@@ -40,9 +41,17 @@ func TestResolveSelectionUsesTypedPolicies(t *testing.T) {
 }
 
 func TestResolveSelectionRejectsDisabledSkill(t *testing.T) {
-	harness := New(&runtimeStub{}, memoryReaderStub{}, disabledSkillReader{}, mcpRuntimeStub{}, factReaderStub{}, impressionReaderStub{})
+	harness := New(&runtimeStub{}, memoryReaderStub{}, disabledSkillReader{}, mcpRuntimeStub{}, factReaderStub{}, impressionReaderStub{}, &agentSearcherStub{})
 	_, err := harness.ResolveSelection(t.Context(), "principal-one", "agent-one", conversation.RunSelection{MentionID: "skill:skill-one", Action: "use-skill-once"})
 	if !errors.Is(err, skills.ErrDisabled) {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestResolveSelectionRejectsDiscoveryWhenIndexIsUnavailable(t *testing.T) {
+	harness := New(&runtimeStub{}, memoryReaderStub{}, skillReaderStub{}, mcpRuntimeStub{}, factReaderStub{}, impressionReaderStub{}, nil)
+	_, err := harness.ResolveSelection(t.Context(), "principal-one", "agent-one", conversation.RunSelection{MentionID: catalog.DiscoveryMentionID, Action: "discover-once"})
+	if !errors.Is(err, agentindex.ErrUnavailable) {
 		t.Fatalf("error = %v", err)
 	}
 }
@@ -54,7 +63,7 @@ func TestRunResolvesContextBuildsToolsAndMapsEvents(t *testing.T) {
 	}
 	items[13].Summary = "current security task"
 	stub := &runtimeStub{events: []runtime.Event{{Tool: &runtime.ToolEvent{Type: runtime.ToolStarted, ID: "call-one", Name: "get_current_time", Arguments: `{}`}}, {Delta: "done"}}}
-	harness := New(stub, memoryReaderStub{}, skillReaderStub{}, mcpRuntimeStub{}, factReaderStub{}, impressionReaderStub{items: items})
+	harness := New(stub, memoryReaderStub{}, skillReaderStub{}, mcpRuntimeStub{}, factReaderStub{}, impressionReaderStub{items: items}, &agentSearcherStub{})
 	outputs, err := harness.Run(t.Context(), conversation.HarnessInput{
 		PrincipalID: "owner", Agent: agent.Agent{ID: "agent", Name: "Chet", Description: "Personal Agent", SystemPrompt: "base"},
 		Messages: []conversation.Message{{Role: "user", Content: "continue security work"}},
@@ -80,7 +89,7 @@ func TestRunResolvesContextBuildsToolsAndMapsEvents(t *testing.T) {
 	if strings.Count(stub.input.Instruction, "confidence=") != 12 {
 		t.Fatalf("expected 12 ranked impressions: %s", stub.input.Instruction)
 	}
-	if len(stub.input.Tools) != 4 || stub.input.Tools[0].Name != "get_current_time" || stub.input.Tools[1].Name != "discover_capabilities" || stub.input.Tools[3].Name != "mcp__demo__read" {
+	if len(stub.input.Tools) != 4 || stub.input.Tools[0].Name != "get_current_time" || stub.input.Tools[1].Name != "load_skill" || stub.input.Tools[2].Name != "mcp__demo__read" || stub.input.Tools[3].Name != "discover_agents" {
 		t.Fatalf("tools = %#v", stub.input.Tools)
 	}
 }
@@ -100,19 +109,54 @@ func TestHarnessToolsLoadSkillResourcesAndInvokeMCP(t *testing.T) {
 		tools: []runtime.Tool{{Name: "mcp__demo__read", InputSchema: json.RawMessage(`{"type":"object"}`), Invoke: func(_ context.Context, arguments string) (string, error) { mcpCalled = true; return arguments, nil }}},
 	}
 	tools := harnessTools(context)
-	loaded, err := tools[2].Invoke(t.Context(), `{"name":"bundle-skill"}`)
+	loaded, err := tools[1].Invoke(t.Context(), `{"name":"bundle-skill"}`)
 	if err != nil || !strings.Contains(loaded, "references/guide.md") || !strings.Contains(loaded, "assets/image.png") {
 		t.Fatalf("manifest=%q err=%v", loaded, err)
 	}
-	resource, err := tools[3].Invoke(t.Context(), `{"name":"bundle-skill","path":"references/guide.md"}`)
+	resource, err := tools[2].Invoke(t.Context(), `{"name":"bundle-skill","path":"references/guide.md"}`)
 	if err != nil || !read || !strings.Contains(resource, "reference body") {
 		t.Fatalf("resource=%q read=%v err=%v", resource, read, err)
 	}
-	if _, err := tools[3].Invoke(t.Context(), `{"name":"bundle-skill","path":"assets/image.png"}`); err == nil {
+	if _, err := tools[2].Invoke(t.Context(), `{"name":"bundle-skill","path":"assets/image.png"}`); err == nil {
 		t.Fatal("binary asset should not be exposed as text")
 	}
-	if _, err := tools[4].Invoke(t.Context(), `{}`); err != nil || !mcpCalled {
+	if _, err := tools[3].Invoke(t.Context(), `{}`); err != nil || !mcpCalled {
 		t.Fatalf("MCP invocation called=%v err=%v", mcpCalled, err)
+	}
+}
+
+func TestDiscoverAgentsToolUsesOwnedAgentAndFixedTopK(t *testing.T) {
+	searcher := &agentSearcherStub{candidates: []agentindex.Candidate{{
+		AgentAddr: "agent_related", Score: .82, MatchedVectorID: "capability:one", RepresentationRevision: 4,
+	}}}
+	tool := agentSearchTool(searcher, "principal-one", "agent-one")
+	result, err := tool.Invoke(t.Context(), `{"query":"  Go backend review  "}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if searcher.principalID != "principal-one" || searcher.agentID != "agent-one" || searcher.query != "Go backend review" || searcher.topK != 5 {
+		t.Fatalf("search call = %#v", searcher)
+	}
+	for _, expected := range []string{`"agentAddr":"agent_related"`, `"score":0.82`, `"matchedVectorId":"capability:one"`, `"representationRevision":4`} {
+		if !strings.Contains(result, expected) {
+			t.Fatalf("result %q missing %q", result, expected)
+		}
+	}
+}
+
+func TestDiscoverAgentsToolHandlesEmptyResultsAndIndexErrors(t *testing.T) {
+	searcher := &agentSearcherStub{}
+	tool := agentSearchTool(searcher, "principal-one", "agent-one")
+	result, err := tool.Invoke(t.Context(), `{"query":"unknown need"}`)
+	if err != nil || !strings.Contains(result, `"candidates":[]`) {
+		t.Fatalf("empty result=%q err=%v", result, err)
+	}
+	if _, err := tool.Invoke(t.Context(), `{"query":"   "}`); !errors.Is(err, agentindex.ErrInvalid) {
+		t.Fatalf("empty query error = %v", err)
+	}
+	searcher.err = agentindex.ErrUnavailable
+	if _, err := tool.Invoke(t.Context(), `{"query":"Go"}`); !errors.Is(err, agentindex.ErrUnavailable) {
+		t.Fatalf("Index error = %v", err)
 	}
 }
 
@@ -136,6 +180,28 @@ func TestRunMapsForcedPolicyAndSkillValidation(t *testing.T) {
 	}
 }
 
+func TestRunForcesDiscoveryFirstAndConstrainsFinalAnswer(t *testing.T) {
+	stub := &runtimeStub{}
+	harness := newTestHarness(stub)
+	outputs, err := harness.Run(t.Context(), conversation.HarnessInput{
+		PrincipalID: "owner", Agent: agent.Agent{ID: "agent", Name: "Aegis"}, Messages: []conversation.Message{{Role: "user", Content: "find a piano teacher"}},
+		Policy: conversation.ExecutionPolicy{Mode: "discover-once", QualifiedToolName: "discover_agents"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range outputs {
+	}
+	if stub.input.ToolChoice.Mode != runtime.ToolChoiceForceOnce || stub.input.ToolChoice.Name != "discover_agents" {
+		t.Fatalf("tool choice = %#v", stub.input.ToolChoice)
+	}
+	for _, expected := range []string{"first action must call discover_agents", "list every returned agentAddr", "Do not infer or invent Agent names", "candidates is empty"} {
+		if !strings.Contains(stub.input.Instruction, expected) {
+			t.Fatalf("instruction missing %q: %s", expected, stub.input.Instruction)
+		}
+	}
+}
+
 type runtimeStub struct {
 	input  runtime.Input
 	events []runtime.Event
@@ -152,7 +218,24 @@ func (stub *runtimeStub) Run(_ context.Context, input runtime.Input) <-chan runt
 }
 
 func newTestHarness(agentRuntime runtime.Runtime) *Harness {
-	return New(agentRuntime, memoryReaderStub{}, skillReaderStub{}, mcpRuntimeStub{}, factReaderStub{}, impressionReaderStub{})
+	return New(agentRuntime, memoryReaderStub{}, skillReaderStub{}, mcpRuntimeStub{}, factReaderStub{}, impressionReaderStub{}, &agentSearcherStub{})
+}
+
+type agentSearcherStub struct {
+	principalID string
+	agentID     string
+	query       string
+	topK        int
+	candidates  []agentindex.Candidate
+	err         error
+}
+
+func (stub *agentSearcherStub) Search(_ context.Context, principalID, agentID, query string, topK int) ([]agentindex.Candidate, error) {
+	stub.principalID = principalID
+	stub.agentID = agentID
+	stub.query = query
+	stub.topK = topK
+	return stub.candidates, stub.err
 }
 
 type memoryReaderStub struct{}

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/re35t/AegisLink/internal/agent"
+	"github.com/re35t/AegisLink/internal/agentindex"
 	"github.com/re35t/AegisLink/internal/impression"
 	"github.com/re35t/AegisLink/internal/mcp"
 	"github.com/re35t/AegisLink/internal/memory"
@@ -36,6 +37,10 @@ type FactReader interface {
 
 type ImpressionReader interface {
 	List(context.Context, string, string, string) ([]impression.Impression, error)
+}
+
+type AgentSearcher interface {
+	Search(context.Context, string, string, string, int) ([]agentindex.Candidate, error)
 }
 
 type agentContext struct {

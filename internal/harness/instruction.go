@@ -27,7 +27,7 @@ func agentInstruction(agentRecord agent.Agent, agentContext agentContext, policy
 	case "use-skill-once":
 		sections = append(sections, fmt.Sprintf("The user explicitly selected the Skill %q for this Run. Your first action must call load_skill with exactly that Skill name, then apply its instructions to the request.", policy.SkillName))
 	case "discover-once":
-		sections = append(sections, "The user explicitly requested capability Discovery. Your first action must call discover_capabilities, then explain which enabled Skills or MCP tools are relevant to the request.")
+		sections = append(sections, "The user explicitly requested Agent Discovery. Your first action must call discover_agents with a concise semantic query derived from the latest user request. After a successful result, list every returned agentAddr exactly as provided together with its score. Do not infer or invent Agent names, capabilities, or addresses that the tool did not return. If candidates is empty, clearly state that no related Agent was found.")
 	}
 	if len(agentContext.memories) > 0 {
 		var block strings.Builder

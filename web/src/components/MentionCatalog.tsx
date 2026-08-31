@@ -70,7 +70,7 @@ const categoryDefinitions: Array<{
 }> = [
   { id: "mcp", label: "MCP", description: "Connected tools" },
   { id: "skills", label: "Skills", description: "Agent instructions" },
-  { id: "discovery", label: "Discovery", description: "Find capabilities" },
+  { id: "discovery", label: "Discovery", description: "Find related Agents" },
 ];
 
 export function MentionCatalog({

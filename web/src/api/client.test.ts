@@ -131,6 +131,28 @@ describe("API client", () => {
     );
   });
 
+  it("uses the owner-scoped Agent Discovery search contract", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ candidates: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await api.searchAgentDiscovery("agent-one", {
+      query: "piano and philosophy",
+      topK: 5,
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v1/agents/agent-one/discovery/search",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ query: "piano and philosophy", topK: 5 }),
+      }),
+    );
+  });
+
   it("uses the owner-only versioned Agent instructions contract", async () => {
     const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(() =>
       Promise.resolve(

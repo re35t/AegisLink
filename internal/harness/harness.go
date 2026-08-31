@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/re35t/AegisLink/internal/agentindex"
 	"github.com/re35t/AegisLink/internal/catalog"
 	"github.com/re35t/AegisLink/internal/conversation"
 	"github.com/re35t/AegisLink/internal/runtime"
@@ -19,10 +20,11 @@ type Harness struct {
 	mcp         MCPRuntime
 	facts       FactReader
 	impressions ImpressionReader
+	agentSearch AgentSearcher
 }
 
-func New(agentRuntime runtime.Runtime, memories MemoryReader, skillReader SkillReader, mcpRuntime MCPRuntime, facts FactReader, impressions ImpressionReader) *Harness {
-	return &Harness{runtime: agentRuntime, memories: memories, skills: skillReader, mcp: mcpRuntime, facts: facts, impressions: impressions}
+func New(agentRuntime runtime.Runtime, memories MemoryReader, skillReader SkillReader, mcpRuntime MCPRuntime, facts FactReader, impressions ImpressionReader, agentSearch AgentSearcher) *Harness {
+	return &Harness{runtime: agentRuntime, memories: memories, skills: skillReader, mcp: mcpRuntime, facts: facts, impressions: impressions, agentSearch: agentSearch}
 }
 
 func (harness *Harness) ResolveSelection(ctx context.Context, principalID, agentID string, selection conversation.RunSelection) (conversation.ExecutionPolicy, error) {
@@ -56,7 +58,10 @@ func (harness *Harness) ResolveSelection(ctx context.Context, principalID, agent
 		if selection.MentionID != catalog.DiscoveryMentionID {
 			return conversation.ExecutionPolicy{}, catalog.ErrInvalid
 		}
-		return conversation.ExecutionPolicy{Mode: "discover-once", Kind: "discovery", Action: selection.Action, MentionID: selection.MentionID, ResourceID: catalog.DiscoveryResourceID, Label: "Agent capabilities", QualifiedToolName: "discover_capabilities"}, nil
+		if harness.agentSearch == nil {
+			return conversation.ExecutionPolicy{}, agentindex.ErrUnavailable
+		}
+		return conversation.ExecutionPolicy{Mode: "discover-once", Kind: "discovery", Action: selection.Action, MentionID: selection.MentionID, ResourceID: catalog.DiscoveryResourceID, Label: "Find related Agents", QualifiedToolName: "discover_agents"}, nil
 	default:
 		return conversation.ExecutionPolicy{}, catalog.ErrInvalid
 	}
@@ -89,10 +94,14 @@ func (harness *Harness) Run(ctx context.Context, input conversation.HarnessInput
 			}
 		}
 	}
+	tools := harnessTools(agentContext)
+	if harness.agentSearch != nil {
+		tools = append(tools, agentSearchTool(harness.agentSearch, input.PrincipalID, input.Agent.ID))
+	}
 	events := harness.runtime.Run(ctx, runtime.Input{
 		Agent:       runtime.Agent{Name: input.Agent.Name, Description: input.Agent.Description},
 		Instruction: agentInstruction(input.Agent, agentContext, input.Policy), Messages: messages,
-		Tools: harnessTools(agentContext), ToolChoice: choice,
+		Tools: tools, ToolChoice: choice,
 	})
 	output := make(chan conversation.HarnessOutput)
 	go func() {
