@@ -7,6 +7,8 @@ cd "$repo_root"
 
 declare -a service_pids=()
 agent_key_override="${AGENT_KEY_ENCRYPTION_KEY:-}"
+dev_state_dir="$repo_root/.aegislink-dev"
+dev_pid_file="$dev_state_dir/dev.pid"
 
 load_env_file() {
   local path=$1
@@ -42,12 +44,16 @@ cleanup() {
     done
   fi
 
+  if [[ -f "$dev_pid_file" ]] && [[ "$(<"$dev_pid_file")" == "$$" ]]; then
+    rm -f "$dev_pid_file"
+  fi
+
   printf 'Development PostgreSQL containers remain running; data volumes are preserved.\n'
   exit "$status"
 }
 
 trap 'exit 130' INT
-trap 'exit 143' TERM
+trap 'exit 0' TERM
 trap cleanup EXIT
 
 for command_name in docker go openssl pnpm setsid; do
@@ -57,11 +63,21 @@ for command_name in docker go openssl pnpm setsid; do
   fi
 done
 
+umask 077
+mkdir -p "$dev_state_dir"
+if [[ -s "$dev_pid_file" ]]; then
+  existing_pid="$(<"$dev_pid_file")"
+  if [[ "$existing_pid" =~ ^[0-9]+$ ]] && kill -0 "$existing_pid" 2>/dev/null; then
+    printf 'AegisLink development stack is already running (PID %s).\n' "$existing_pid" >&2
+    printf 'Run make dev-stop before starting another stack.\n' >&2
+    exit 1
+  fi
+  rm -f "$dev_pid_file"
+fi
+printf '%s\n' "$$" >"$dev_pid_file"
+
 if [[ -z "${AGENT_KEY_ENCRYPTION_KEY:-}" ]]; then
-  dev_state_dir="$repo_root/.aegislink-dev"
   dev_agent_key_file="$dev_state_dir/agent-key"
-  umask 077
-  mkdir -p "$dev_state_dir"
   if [[ ! -s "$dev_agent_key_file" ]]; then
     openssl rand -base64 32 >"$dev_agent_key_file"
     printf 'Generated a stable local Agent encryption key in .aegislink-dev/agent-key.\n'

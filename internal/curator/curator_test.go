@@ -28,6 +28,11 @@ func TestCurateUsesNoToolRuntimeAndMapsResponse(t *testing.T) {
 	if len(stub.input.Messages) != 1 || !strings.Contains(stub.input.Messages[0].Content, "<curation_evidence>") {
 		t.Fatalf("curator evidence message = %#v", stub.input.Messages)
 	}
+	for _, expected := range []string{"One explicit first-person statement can be enough", "propose the candidate so the owner can decide", "Do not propose secrets"} {
+		if !strings.Contains(stub.input.Instruction, expected) {
+			t.Fatalf("curator instruction missing %q: %s", expected, stub.input.Instruction)
+		}
+	}
 	if len(result.Impressions) != 1 || result.Impressions[0].TargetID != "new-one" || len(result.Facts) != 1 {
 		t.Fatalf("curation = %#v", result)
 	}

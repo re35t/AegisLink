@@ -117,6 +117,62 @@ func TestOfficialA2AHandlerUsesSessionAuthAndPersistsTaskSemantics(t *testing.T)
 	}
 }
 
+func TestOwnerSendMessageWaitsForTerminalA2ATask(t *testing.T) {
+	repository := &collaborationRepositoryStub{}
+	agentRuntime := &delayedRuntimeStub{started: make(chan struct{}), release: make(chan struct{})}
+	service, err := NewService(repository, agentReaderStub{}, profileReaderStub{}, &runtimeStub{}, "test-encryption-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, tokenHash, encryptedToken, tokenNonce, err := service.newSessionToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository.authenticated = Session{
+		ID: "session-blocking", RequesterOwnerPrincipalID: "owner-a", RequesterAgentID: "agent-a",
+		TargetOwnerPrincipalID: "owner-b", TargetAgentID: "agent-b", TargetAgentAddr: testAgentAddr,
+		Status: "active", Scopes: defaultScopes(), TokenHash: tokenHash, EncryptedToken: encryptedToken,
+		TokenNonce: tokenNonce, ExpiresAt: time.Now().Add(time.Hour),
+	}
+	executor := NewA2AExecutor(repository, agentReaderStub{}, profileReaderStub{}, agentRuntime)
+	handler := a2asrv.NewHandler(executor, a2asrv.WithCallInterceptors(NewA2AAuthenticator(service)))
+	service.WithA2AHandler(handler)
+
+	type sendResult struct {
+		task *a2a.Task
+		err  error
+	}
+	result := make(chan sendResult, 1)
+	go func() {
+		task, sendErr := service.SendMessage(t.Context(), "owner-a", "agent-a", "session-blocking", "Need the answer", "message-blocking")
+		result <- sendResult{task: task, err: sendErr}
+	}()
+
+	select {
+	case <-agentRuntime.started:
+	case <-time.After(time.Second):
+		t.Fatal("collaboration invocation did not start")
+	}
+	select {
+	case early := <-result:
+		t.Fatalf("SendMessage returned before the Collaboration Invocation completed: task=%#v err=%v", early.task, early.err)
+	default:
+	}
+	close(agentRuntime.release)
+
+	select {
+	case completed := <-result:
+		if completed.err != nil {
+			t.Fatal(completed.err)
+		}
+		if completed.task == nil || completed.task.Status.State != a2a.TaskStateCompleted || len(completed.task.Artifacts) != 1 || completed.task.Artifacts[0].Parts[0].Text() != "delayed answer" {
+			t.Fatalf("terminal A2A task=%#v", completed.task)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("SendMessage did not return the terminal A2A Task")
+	}
+}
+
 func TestOfficialA2AJSONRPCClientUsesPublishedCardAndSessionCapability(t *testing.T) {
 	token := "cls_http-test-capability"
 	hash := sha256.Sum256([]byte(token))
@@ -171,6 +227,26 @@ func TestOfficialA2AJSONRPCClientUsesPublishedCardAndSessionCapability(t *testin
 type runtimeStub struct {
 	events []runtime.Event
 	inputs []runtime.Input
+}
+
+type delayedRuntimeStub struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (stub *delayedRuntimeStub) Run(ctx context.Context, _ runtime.Input) <-chan runtime.Event {
+	result := make(chan runtime.Event, 1)
+	go func() {
+		defer close(result)
+		close(stub.started)
+		select {
+		case <-stub.release:
+			result <- runtime.Event{Delta: "delayed answer"}
+		case <-ctx.Done():
+			result <- runtime.Event{Err: ctx.Err()}
+		}
+	}()
+	return result
 }
 
 func (stub *runtimeStub) Run(_ context.Context, input runtime.Input) <-chan runtime.Event {

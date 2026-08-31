@@ -192,6 +192,44 @@ func TestRequestAgentAssistanceUsesBoundedIdempotencyKey(t *testing.T) {
 	}
 }
 
+func TestRequestAgentAssistanceReturnsPolicyDenialAsNormalResult(t *testing.T) {
+	collaborator := &collaboratorStub{err: collaboration.ErrForbidden}
+	tool := collaborationTools(collaborator, "principal-one", "agent-one", "run-one")[0]
+	result, err := tool.Invoke(t.Context(), `{"targetAgentAddr":"agent_01M13S2SWBFTYEDQTAVNC7FACB","purpose":"piano advice"}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{`"status":"rejected"`, `"decisionCode":"target_not_accepting"`, `"scopes":[]`} {
+		if !strings.Contains(result, expected) {
+			t.Fatalf("result %q missing %q", result, expected)
+		}
+	}
+
+	collaborator.err = collaboration.ErrUnavailable
+	if _, err := tool.Invoke(t.Context(), `{"targetAgentAddr":"agent_01M13S2SWBFTYEDQTAVNC7FACB","purpose":"piano advice"}`); !errors.Is(err, collaboration.ErrUnavailable) {
+		t.Fatalf("unavailable error = %v", err)
+	}
+}
+
+func TestRunAddsSessionScopedCollaborationInstructions(t *testing.T) {
+	stub := &runtimeStub{}
+	harness := New(stub, memoryReaderStub{}, skillReaderStub{}, mcpRuntimeStub{}, factReaderStub{}, impressionReaderStub{}, &agentSearcherStub{}, &collaboratorStub{})
+	outputs, err := harness.Run(t.Context(), conversation.HarnessInput{
+		PrincipalID: "owner", RunID: "run-one", Agent: agent.Agent{ID: "agent", Name: "Aegis"},
+		Messages: []conversation.Message{{Role: "user", Content: "contact the piano agent"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range outputs {
+	}
+	for _, expected := range []string{"Never use a prior rejection", "request that exact candidate", "highest-ranked current candidate first", "Do not skip a candidate because of historical outcomes", "preserve the user's concrete topic", "request_agent_assistance only negotiates a Session", "normally waits for a terminal A2A Task", "answer from its artifacts", "never spin-poll", "get_collaboration_task", "do not repeat the same target in the same Run"} {
+		if !strings.Contains(stub.input.Instruction, expected) {
+			t.Fatalf("instruction missing %q: %s", expected, stub.input.Instruction)
+		}
+	}
+}
+
 func TestRunMapsForcedPolicyAndSkillValidation(t *testing.T) {
 	stub := &runtimeStub{}
 	harness := newTestHarness(stub)
@@ -264,11 +302,12 @@ type agentSearcherStub struct {
 
 type collaboratorStub struct {
 	idempotencyKey string
+	err            error
 }
 
 func (stub *collaboratorStub) RequestAssistance(_ context.Context, _, _, targetAgentAddr, _, idempotencyKey string) (collaboration.AssistanceRequest, error) {
 	stub.idempotencyKey = idempotencyKey
-	return collaboration.AssistanceRequest{ID: "request-one", TargetAgentAddr: targetAgentAddr, Status: "accepted"}, nil
+	return collaboration.AssistanceRequest{ID: "request-one", TargetAgentAddr: targetAgentAddr, Status: "accepted"}, stub.err
 }
 
 func (*collaboratorStub) SendMessage(context.Context, string, string, string, string, string) (*a2a.Task, error) {

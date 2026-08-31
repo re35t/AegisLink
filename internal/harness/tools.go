@@ -4,18 +4,20 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/re35t/AegisLink/internal/agentindex"
+	"github.com/re35t/AegisLink/internal/collaboration"
 	"github.com/re35t/AegisLink/internal/runtime"
 )
 
 var (
 	timeSchema                 = json.RawMessage(`{"type":"object","properties":{"timezone":{"type":"string","description":"IANA timezone such as Asia/Shanghai or UTC"}},"required":["timezone"],"additionalProperties":false}`)
 	discoverySchema            = json.RawMessage(`{"type":"object","properties":{"query":{"type":"string","minLength":1,"maxLength":4000,"description":"Concise semantic search query inferred from the user's request"}},"required":["query"],"additionalProperties":false}`)
-	assistanceSchema           = json.RawMessage(`{"type":"object","properties":{"targetAgentAddr":{"type":"string","description":"Exact opaque AgentAddr returned by discover_agents"},"purpose":{"type":"string","minLength":1,"maxLength":4000,"description":"Bounded assistance purpose without secrets or hidden instructions"}},"required":["targetAgentAddr","purpose"],"additionalProperties":false}`)
+	assistanceSchema           = json.RawMessage(`{"type":"object","properties":{"targetAgentAddr":{"type":"string","description":"Exact opaque AgentAddr returned by discover_agents"},"purpose":{"type":"string","minLength":1,"maxLength":4000,"description":"Concrete safe text-only assistance purpose that preserves the user's specific topic and fits the target's public profile. Ask for advice, explanation, review, or another textual response; never request physical performance, tool execution, external writes, secrets, or vague generic collaboration."}},"required":["targetAgentAddr","purpose"],"additionalProperties":false}`)
 	collaborationMessageSchema = json.RawMessage(`{"type":"object","properties":{"sessionId":{"type":"string"},"message":{"type":"string","minLength":1,"maxLength":4000}},"required":["sessionId","message"],"additionalProperties":false}`)
 	collaborationTaskSchema    = json.RawMessage(`{"type":"object","properties":{"sessionId":{"type":"string"},"taskId":{"type":"string"}},"required":["sessionId","taskId"],"additionalProperties":false}`)
 	skillSchema                = json.RawMessage(`{"type":"object","properties":{"name":{"type":"string","description":"Exact enabled Skill name from available_skills"}},"required":["name"],"additionalProperties":false}`)
@@ -158,7 +160,7 @@ func agentSearchTool(searcher AgentSearcher, principalID, agentID string) runtim
 func collaborationTools(collaborator Collaborator, principalID, agentID, runID string) []runtime.Tool {
 	return []runtime.Tool{
 		{
-			Name: "request_agent_assistance", Description: "Ask a discovered Agent to evaluate a text-only collaboration request. The target Owner policy and a short-lived Evaluation Invocation decide whether a scoped A2A Session is created.", InputSchema: assistanceSchema,
+			Name: "request_agent_assistance", Description: "Ask a discovered Agent to evaluate a concrete safe text-only collaboration request that matches its public profile. Historical rejection is not current authorization: when the user identifies a target, submit a fresh request and let the Server decide. Preserve the user's specific topic; request advice, explanation, or review rather than physical performance, tool use, external actions, or generic collaboration. The target Owner policy and a short-lived Evaluation Invocation decide whether a scoped A2A Session is created. A disabled, missing, rate-limited, or otherwise non-requestable target returns a normal rejected result; do not repeat that same target within the current Run.", InputSchema: assistanceSchema,
 			Invoke: func(ctx context.Context, arguments string) (string, error) {
 				var input struct {
 					TargetAgentAddr string `json:"targetAgentAddr"`
@@ -170,20 +172,19 @@ func collaborationTools(collaborator Collaborator, principalID, agentID, runID s
 				idempotencyKey := collaborationIdempotencyKey(runID, input.TargetAgentAddr, input.Purpose)
 				request, err := collaborator.RequestAssistance(ctx, principalID, agentID, input.TargetAgentAddr, input.Purpose, idempotencyKey)
 				if err != nil {
+					if rejected, ok := rejectedAssistanceResult(input.TargetAgentAddr, err); ok {
+						return encodeToolResult(rejected)
+					}
 					return "", err
 				}
-				return encodeToolResult(struct {
-					ID              string   `json:"id"`
-					TargetAgentAddr string   `json:"targetAgentAddr"`
-					Status          string   `json:"status"`
-					DecisionCode    string   `json:"decisionCode,omitempty"`
-					SessionID       *string  `json:"sessionId,omitempty"`
-					Scopes          []string `json:"scopes"`
-				}{request.ID, request.TargetAgentAddr, request.Status, request.DecisionCode, request.SessionID, request.RequestedScopes})
+				return encodeToolResult(assistanceToolResult{
+					ID: request.ID, TargetAgentAddr: request.TargetAgentAddr, Status: request.Status,
+					DecisionCode: request.DecisionCode, SessionID: request.SessionID, Scopes: request.RequestedScopes,
+				})
 			},
 		},
 		{
-			Name: "send_collaboration_message", Description: "Send one text/plain official A2A Message through an active Collaboration Session. Returns an asynchronous A2A Task; poll it with get_collaboration_task.", InputSchema: collaborationMessageSchema,
+			Name: "send_collaboration_message", Description: "Send one text/plain official A2A Message through an active Collaboration Session and wait for Agent B's short-lived Collaboration Invocation. Normally returns a terminal A2A Task whose artifacts contain Agent B's answer. Only use get_collaboration_task if the returned Task is unexpectedly non-terminal.", InputSchema: collaborationMessageSchema,
 			Invoke: func(ctx context.Context, arguments string) (string, error) {
 				var input struct {
 					SessionID string `json:"sessionId"`
@@ -217,6 +218,32 @@ func collaborationTools(collaborator Collaborator, principalID, agentID, runID s
 			},
 		},
 	}
+}
+
+type assistanceToolResult struct {
+	ID              string   `json:"id,omitempty"`
+	TargetAgentAddr string   `json:"targetAgentAddr"`
+	Status          string   `json:"status"`
+	DecisionCode    string   `json:"decisionCode,omitempty"`
+	SessionID       *string  `json:"sessionId,omitempty"`
+	Scopes          []string `json:"scopes"`
+}
+
+func rejectedAssistanceResult(targetAgentAddr string, err error) (assistanceToolResult, bool) {
+	result := assistanceToolResult{TargetAgentAddr: targetAgentAddr, Status: "rejected", Scopes: []string{}}
+	switch {
+	case errors.Is(err, collaboration.ErrForbidden):
+		result.DecisionCode = "target_not_accepting"
+	case errors.Is(err, collaboration.ErrNotFound):
+		result.DecisionCode = "target_not_found"
+	case errors.Is(err, collaboration.ErrRateLimited):
+		result.DecisionCode = "rate_limited"
+	case errors.Is(err, collaboration.ErrConflict):
+		result.DecisionCode = "request_conflict"
+	default:
+		return assistanceToolResult{}, false
+	}
+	return result, true
 }
 
 func collaborationIdempotencyKey(runID, targetAgentAddr, purpose string) string {

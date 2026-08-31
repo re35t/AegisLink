@@ -275,7 +275,12 @@ func (service *Service) SendMessage(ctx context.Context, principalID, agentID, s
 	message.ContextID = session.ID
 	result, err := service.a2a.SendMessage(callCtx, &a2a.SendMessageRequest{
 		Tenant: session.TargetAgentAddr, Message: message,
-		Config: &a2a.SendMessageConfig{ReturnImmediately: true, AcceptedOutputModes: []string{"text/plain"}},
+		// The owner-facing tool call must receive Agent B's answer before Agent A
+		// resumes its ReAct loop. Returning on the submitted/working event makes
+		// Agent A burn its bounded model iterations by polling a task that normally
+		// needs several seconds to finish. This is the official A2A blocking-send
+		// mode; public A2A callers can still request ReturnImmediately themselves.
+		Config: &a2a.SendMessageConfig{ReturnImmediately: false, AcceptedOutputModes: []string{"text/plain"}},
 	})
 	if err != nil {
 		return nil, err

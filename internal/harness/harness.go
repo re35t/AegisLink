@@ -106,9 +106,13 @@ func (harness *Harness) Run(ctx context.Context, input conversation.HarnessInput
 	if harness.collaborator != nil {
 		tools = append(tools, collaborationTools(harness.collaborator, input.PrincipalID, input.Agent.ID, input.RunID)...)
 	}
+	instruction := agentInstruction(input.Agent, agentContext, input.Policy)
+	if harness.collaborator != nil {
+		instruction += "\n\n" + collaborationInstruction
+	}
 	events := harness.runtime.Run(ctx, runtime.Input{
 		Agent:       runtime.Agent{Name: input.Agent.Name, Description: input.Agent.Description},
-		Instruction: agentInstruction(input.Agent, agentContext, input.Policy), Messages: messages,
+		Instruction: instruction, Messages: messages,
 		Tools: tools, ToolChoice: choice,
 	})
 	output := make(chan conversation.HarnessOutput)
