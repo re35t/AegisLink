@@ -6,20 +6,20 @@
 cp .env.example .env
 # Set MODEL_API_KEY in .env.
 pnpm install
-make dev-db
-make dev-server
+make dev
 ```
 
-Run `make dev-web` in another terminal. The default Web URL is `http://127.0.0.1:5173`, the API is `http://127.0.0.1:4321`, and development PostgreSQL is exposed on `127.0.0.1:55432`.
+`make dev` loads `.env` followed by `.env.local`, waits for both development PostgreSQL databases, then supervises the Agent Server, standalone Index, and Vite Web application in one terminal. The default Web URL is `http://127.0.0.1:5173`, the API is `http://127.0.0.1:4321`, Index is `http://127.0.0.1:4331`, and the two PostgreSQL databases are exposed on `127.0.0.1:55432` and `127.0.0.1:55434`.
 
-The standalone Index is optional and runs with its own PostgreSQL database:
+If neither environment file sets `AGENT_KEY_ENCRYPTION_KEY`, `make dev` generates a stable base64-encoded 32-byte key for local development and stores it in the Git-ignored, permission-restricted `.aegislink-dev/agent-key`. Later starts reuse that key so AgentFacts and Collaboration Session ciphertext remains decryptable across restarts. An explicitly configured environment value always takes precedence.
+
+Press `Ctrl-C` to stop all three local processes. Development database containers keep running and their named volumes are preserved. Stop them explicitly when desired:
 
 ```bash
-make dev-index-db
-make dev-index
-curl http://127.0.0.1:4331/healthz
-curl http://127.0.0.1:4331/readyz
+docker compose stop postgres index-postgres
 ```
+
+The existing `make dev-db`, `make dev-server`, `make dev-index-db`, `make dev-index`, and `make dev-web` targets remain available for granular startup.
 
 It reads `INDEX_SERVER_ADDRESS`, `INDEX_SERVER_SHUTDOWN_TIMEOUT`, `INDEX_DATABASE_URL`, `INDEX_REGISTRATION_TOKEN`, and `INDEX_QUERY_TOKEN`. It does not require `DATABASE_URL`, `MODEL_API_KEY`, or the AgentFacts encryption key. The Index pgvector database is independent from the Agent Server database.
 
@@ -27,7 +27,7 @@ To connect Agent Server onboarding, Profile synchronization, and Discovery searc
 
 Goose applies ordered migrations when the server opens the database. Runtime persistence uses GORM; `AutoMigrate` is intentionally disabled.
 
-Curator configuration is optional: every empty provider/model field falls back to the corresponding `MODEL_*` value. Curator requests use JSON Output and `CURATOR_MODEL_THINKING=disabled` by default; the thinking switch is applied by the DeepSeek driver. AgentFacts publication remains unavailable until `AGENT_KEY_ENCRYPTION_KEY` contains the base64 encoding of exactly 32 random bytes. Keep this key stable and secret; changing it requires signing-key rotation.
+Curator configuration is optional: every empty provider/model field falls back to the corresponding `MODEL_*` value. Curator requests use JSON Output and `CURATOR_MODEL_THINKING=disabled` by default; the thinking switch is applied by the DeepSeek driver. AgentFacts publication and cross-Agent Collaboration require `AGENT_KEY_ENCRYPTION_KEY` to contain the base64 encoding of exactly 32 random bytes. Keep this key stable and secret; changing it requires signing-key rotation and invalidates unexpired Collaboration Sessions.
 
 ## Validate
 

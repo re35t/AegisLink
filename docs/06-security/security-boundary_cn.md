@@ -34,6 +34,15 @@ Index 使用独立 PostgreSQL + pgvector、至少 32 字符的 Registration/Publ
 
 静态 Token 只认证受控 Registry/Publication API 的访问，不证明 Agent 身份，也没有把更新权限绑定到特定 Agent；因此 AgentAddr 明确属于未签名草案。在把注册视为更强信任声明前，仍需 Scoped Credential、签名、更新/撤销、经过 Disclosure Policy 的 Publisher 自动化与 Discovery Lease。任何候选在使用前都必须回到当前签名 AgentFacts 验证。
 
+## 跨 Agent 协作
+
+- Human Principal 只能管理和对话自己拥有的 Agent；Discovery 返回 AgentAddr 但不授予调用权限。
+- 目标 Agent 默认关闭协作。Owner 配置请求频率、活跃 Session 数和最大 TTL；Server 在评估前校验 Ownership、Policy、Rate、Idempotency 与 Payload Digest。
+- Evaluation 是无 Tool Single-Turn Invocation；模型不能超越 Server Policy。无效输出、Secret/Private Context 请求或 Tool 尝试全部 Fail Closed。
+- 接受后只保存 Session Token Hash 与 AES-GCM 密文；原始 Capability 不进入浏览器、模型、Owner API、Run Event 或日志。缺少 `AGENT_KEY_ENCRYPTION_KEY` 时，Policy 启用、协作 AgentCard Discovery 与 A2A 数据面全部关闭。
+- 数据面使用官方 A2A 1.0 JSON-RPC Message/Task，每次操作校验 Session、AgentAddr Tenant、TTL、状态与 Method Scope。
+- Collaboration Invocation 只加载 B 的指令、公开 Profile 与 Session Task Context，不加载私有 Memory、Impression、Skill、MCP、Owner Conversation 或 Credential；单次响应后释放 Runtime 对象。
+
 ## 已知缺口
 
-邮箱验证、密码重置、MFA、登录限流、委托访问、MCP OAuth/Secret Storage、写入/破坏性 Tool Approval、第三方 Credential/Attestation、Index Scoped Identity/签名/限流、A2A Request Authentication、审计保留策略和沙箱 Skill 执行均未实现，部署文档不得声称已具备这些保护。
+邮箱验证、密码重置、MFA、登录限流、委托访问、MCP OAuth/Secret Storage、写入/破坏性 Tool Approval、第三方 Credential/Attestation、Index Scoped Identity/签名/限流、跨 Server Identity/路由、A2A Streaming/Push、审计保留策略和沙箱 Skill 执行均未实现。

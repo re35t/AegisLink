@@ -10,6 +10,7 @@ output/
 *.log
 .env
 .env.local
+.aegislink-dev/
 .cache/
 *.tsbuildinfo
 data/agents/*/conversations.jsonl

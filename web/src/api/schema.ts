@@ -518,6 +518,114 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/agents/{agentId}/collaboration-policy": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    get: operations["getAgentCollaborationPolicy"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch: operations["updateAgentCollaborationPolicy"];
+    trace?: never;
+  };
+  "/api/v1/agents/{agentId}/collaborations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    get: operations["getAgentCollaborations"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/agents/{agentId}/collaboration-sessions/{sessionId}/revoke": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+        sessionId: string;
+      };
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["revokeCollaborationSession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/a2a/agents/{agentAddr}/agent-card": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentAddr: string;
+      };
+      cookie?: never;
+    };
+    get: operations["getCollaborationAgentCard"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/a2a/agents/{agentAddr}/.well-known/agent-card.json": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentAddr: string;
+      };
+      cookie?: never;
+    };
+    get: operations["discoverCollaborationAgentCard"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/a2a": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Official A2A 1.0 JSON-RPC endpoint gated by a Collaboration Session capability */
+    post: operations["handleA2AJsonRpc"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/.well-known/agentfacts.json": {
     parameters: {
       query?: never;
@@ -1298,6 +1406,67 @@ export interface components {
         publishable: boolean;
         blockers: string[];
       };
+    };
+    CollaborationPolicy: {
+      agentId: string;
+      enabled: boolean;
+      /** Format: int64 */
+      revision: number;
+      /** Format: int64 */
+      maxSessionTtlSeconds: number;
+      maxRequestsPerHour: number;
+      maxActiveSessions: number;
+      encryptionReady: boolean;
+      /** Format: date-time */
+      updatedAt: string;
+    };
+    UpdateCollaborationPolicyRequest: {
+      /** Format: int64 */
+      expectedRevision: number;
+      enabled: boolean;
+      /** Format: int64 */
+      maxSessionTtlSeconds: number;
+      maxRequestsPerHour: number;
+      maxActiveSessions: number;
+    };
+    AssistanceRequest: {
+      id: string;
+      requesterAgentId: string;
+      targetAgentId: string;
+      targetAgentAddr: string;
+      purpose: string;
+      requestedScopes: string[];
+      /** @enum {string} */
+      status: "evaluating" | "accepted" | "rejected" | "failed";
+      decisionCode?: string;
+      sessionId?: string;
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: date-time */
+      evaluatedAt?: string;
+    };
+    CollaborationSession: {
+      id: string;
+      assistanceRequestId: string;
+      requesterAgentId: string;
+      targetAgentId: string;
+      targetAgentAddr: string;
+      /** @enum {string} */
+      status: "active" | "revoked" | "expired";
+      scopes: string[];
+      /** Format: date-time */
+      expiresAt: string;
+      /** Format: date-time */
+      lastUsedAt?: string;
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: date-time */
+      revokedAt?: string;
+    };
+    CollaborationOverview: {
+      policy: components["schemas"]["CollaborationPolicy"];
+      requests: components["schemas"]["AssistanceRequest"][];
+      sessions: components["schemas"]["CollaborationSession"][];
     };
     AgentFactsClaim: {
       id: string;
@@ -2516,6 +2685,181 @@ export interface operations {
         };
       };
       404: components["responses"]["Error"];
+    };
+  };
+  getAgentCollaborationPolicy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Owner-only collaboration admission policy */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CollaborationPolicy"];
+        };
+      };
+      404: components["responses"]["Error"];
+    };
+  };
+  updateAgentCollaborationPolicy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["UpdateCollaborationPolicyRequest"];
+      };
+    };
+    responses: {
+      /** @description Collaboration policy updated */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CollaborationPolicy"];
+        };
+      };
+      400: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+    };
+  };
+  getAgentCollaborations: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Owner-only assistance request and Collaboration Session audit view */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CollaborationOverview"];
+        };
+      };
+      404: components["responses"]["Error"];
+    };
+  };
+  revokeCollaborationSession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentId: components["parameters"]["AgentId"];
+        sessionId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Collaboration Session capability revoked */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      404: components["responses"]["Error"];
+    };
+  };
+  getCollaborationAgentCard: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentAddr: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Official A2A 1.0 AgentCard for an Agent accepting collaboration */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+      404: components["responses"]["Error"];
+    };
+  };
+  discoverCollaborationAgentCard: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        agentAddr: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Official A2A 1.0 well-known AgentCard for an Agent accepting collaboration */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
+      404: components["responses"]["Error"];
+    };
+  };
+  handleA2AJsonRpc: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          [key: string]: unknown;
+        };
+      };
+    };
+    responses: {
+      /** @description Official A2A JSON-RPC response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: unknown;
+          };
+        };
+      };
     };
   };
   getPublicAgentFacts: {

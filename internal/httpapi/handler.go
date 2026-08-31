@@ -10,6 +10,7 @@ import (
 	"github.com/re35t/AegisLink/internal/agent"
 	"github.com/re35t/AegisLink/internal/agentindex"
 	"github.com/re35t/AegisLink/internal/catalog"
+	"github.com/re35t/AegisLink/internal/collaboration"
 	"github.com/re35t/AegisLink/internal/conversation"
 	"github.com/re35t/AegisLink/internal/discovery"
 	"github.com/re35t/AegisLink/internal/impression"
@@ -32,6 +33,8 @@ type handler struct {
 	skills        SkillService
 	mcp           MCPService
 	catalog       CatalogService
+	collaboration CollaborationService
+	a2aEndpoint   string
 	auth          AuthConfig
 	model         ModelInfo
 	logger        *slog.Logger
@@ -91,6 +94,18 @@ func (handler *handler) handleError(c *gin.Context, err error) {
 		writeError(c, http.StatusBadRequest, "invalid_message", "the message is empty or too long")
 	case errors.Is(err, catalog.ErrInvalid):
 		writeError(c, http.StatusBadRequest, "invalid_mentions_query", "mention query, kinds, cursor, or limit is invalid")
+	case errors.Is(err, collaboration.ErrNotFound):
+		writeError(c, http.StatusNotFound, "collaboration_not_found", "the collaboration resource was not found")
+	case errors.Is(err, collaboration.ErrForbidden), errors.Is(err, collaboration.ErrEvaluationDeny):
+		writeError(c, http.StatusForbidden, "collaboration_forbidden", "the target Agent does not permit this collaboration")
+	case errors.Is(err, collaboration.ErrInvalid):
+		writeError(c, http.StatusBadRequest, "invalid_collaboration", "the collaboration request or policy is invalid")
+	case errors.Is(err, collaboration.ErrConflict):
+		writeError(c, http.StatusConflict, "collaboration_conflict", "the collaboration resource changed or the idempotency key conflicts")
+	case errors.Is(err, collaboration.ErrRateLimited):
+		writeError(c, http.StatusTooManyRequests, "collaboration_rate_limited", "the collaboration admission limit has been reached")
+	case errors.Is(err, collaboration.ErrUnavailable):
+		writeError(c, http.StatusServiceUnavailable, "collaboration_unavailable", "collaboration is not configured or the evaluation failed")
 	case errors.Is(err, memory.ErrInvalid):
 		writeError(c, http.StatusBadRequest, "invalid_memory", "memory kind, content, source, or confidence is invalid")
 	case errors.Is(err, memory.ErrNotFound):

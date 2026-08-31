@@ -33,6 +33,10 @@ DNS 验证并启用发布后，服务端只按真实 HTTP `Host` 精确选择 Ag
 
 独立契约 [`../../index/contracts/http/v1/openapi.yaml`](../../index/contracts/http/v1/openapi.yaml) 暴露 Health/Readiness 和带 Bearer 认证的三阶段 Index：只接受空对象且支持幂等重放的 AgentAddr Registration、完整 Representation 替换与 Query Vector Search；不暴露公开 Resolve 或 AgentFacts 原文。
 
+## 官方 A2A 协作
+
+`GET /a2a/agents/{agentAddr}/.well-known/agent-card.json` 只为 Owner 已启用协作的 Agent 返回官方 A2A 1.0 AgentCard；`/a2a/agents/{agentAddr}/agent-card` 保留为显式 API 别名。Card 声明共享 JSON-RPC Interface、AgentAddr Tenant、`text/plain` 与不透明 Bearer Session。`POST /a2a` 由官方 Go SDK 处理 Session Scoped SendMessage、Get/List Task 与 Cancel Task；不接受普通用户 Cookie，也不支持 Streaming、Push 或外部 Capability 签发。
+
 ## 未提供接口
 
-Agent Server 契约当前没有公开 AgentCard/A2A Invocation、Index/Search/Registration、第三方 Attestation、WebSocket、gRPC、Organization、跨 Agent Routing 或第三方 SDK 契约；独立 Index 尚无 Search、更新、撤销、签名或 AgentFacts 验证接口。
+Agent Server 不提供跨 Server 联邦路由、Accepted Collaboration Session 之外的公开 A2A 调用、第三方 Attestation、WebSocket、gRPC、Organization 或外部 Session 签发接口。

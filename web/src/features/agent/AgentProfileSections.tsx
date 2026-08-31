@@ -632,8 +632,8 @@ export function PublicationSection({ agentId }: { agentId: string }) {
           <h2 id="publication-title">AgentFacts publication</h2>
           <p>
             {t(
-              "Publish only explicitly disclosed claims under a verified hostname. AgentCard remains an owner-only draft until an A2A endpoint exists.",
-              "仅在已验证域名下发布明确允许披露的声明。AgentCard 在存在 A2A endpoint 前仍只是 Owner Draft。",
+              "Publish only explicitly disclosed claims under a verified hostname. This general AgentCard remains an owner Draft; text-only collaboration publishes a separate Session-scoped card.",
+              "仅在已验证域名下发布明确允许披露的声明。这个通用 AgentCard 仍是 Owner Draft；仅文本协作会发布独立的 Session Scoped Card。",
             )}
           </p>
         </div>

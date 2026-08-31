@@ -7,11 +7,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/a2aproject/a2a-go/v2/a2asrv"
 	internala2a "github.com/re35t/AegisLink/internal/a2a"
 	"github.com/re35t/AegisLink/internal/account"
 	"github.com/re35t/AegisLink/internal/agent"
 	"github.com/re35t/AegisLink/internal/agentindex"
 	"github.com/re35t/AegisLink/internal/catalog"
+	"github.com/re35t/AegisLink/internal/collaboration"
 	"github.com/re35t/AegisLink/internal/config"
 	"github.com/re35t/AegisLink/internal/conversation"
 	"github.com/re35t/AegisLink/internal/curator"
@@ -56,6 +58,8 @@ func New(parent context.Context, cfg config.Config, logger *slog.Logger) (*Appli
 	agentRepository := postgres.NewAgentRepository(database)
 	agentProfileRepository := postgres.NewAgentProfileRepository(database)
 	agentIndexRepository := postgres.NewAgentIndexRepository(database)
+	collaborationRepository := postgres.NewCollaborationRepository(database)
+	collaborationTaskStore := postgres.NewCollaborationTaskStore(database)
 	impressionRepository := postgres.NewImpressionRepository(database)
 	discoveryRepository := postgres.NewDiscoveryRepository(database)
 	conversationRepository := postgres.NewConversationRepository(database)
@@ -131,12 +135,25 @@ func New(parent context.Context, cfg config.Config, logger *slog.Logger) (*Appli
 		profileService.WithSynchronizer(agentIndexService)
 	}
 	agentCardService := internala2a.NewService(profileService)
+	collaborationService, err := collaboration.NewService(collaborationRepository, agentService, profileService, curatorRuntime, cfg.Security.AgentKeyEncryptionKey)
+	if err != nil {
+		return closeOnError(err)
+	}
+	collaborationExecutor := collaboration.NewA2AExecutor(collaborationRepository, agentService, profileService, runtime)
+	a2aRequestHandler := a2asrv.NewHandler(
+		collaborationExecutor,
+		a2asrv.WithTaskStore(collaborationTaskStore),
+		a2asrv.WithCallInterceptors(collaboration.NewA2AAuthenticator(collaborationService)),
+		a2asrv.WithAgentInactivityTimeout(cfg.Model.Timeout),
+	)
+	collaborationService.WithA2AHandler(a2aRequestHandler)
+	a2aHTTPHandler := a2asrv.NewJSONRPCHandler(a2aRequestHandler)
 	discoveryService, err := discovery.NewService(discoveryRepository, profileService, agentCardService, discovery.NetResolver{}, cfg.Security.AgentKeyEncryptionKey)
 	if err != nil {
 		return closeOnError(err)
 	}
 	catalogService := catalog.NewService(agentService, mcpService, skillService, agentIndexService != nil)
-	agentHarness := harness.New(runtime, memoryService, skillService, mcpService, profileService, impressionService, agentIndexService)
+	agentHarness := harness.New(runtime, memoryService, skillService, mcpService, profileService, impressionService, agentIndexService, collaborationService)
 	conversationService := conversation.NewService(
 		root,
 		conversationRepository,
@@ -158,6 +175,9 @@ func New(parent context.Context, cfg config.Config, logger *slog.Logger) (*Appli
 		Skills:        skillService,
 		MCP:           mcpService,
 		Catalog:       catalogService,
+		Collaboration: collaborationService,
+		A2AHandler:    a2aHTTPHandler,
+		A2AEndpoint:   cfg.Collaboration.PublicBaseURL + "/a2a",
 	}, cfg.Web.Origin, httpapi.AuthConfig{
 		CookieName: authCookieName, CookieSecure: cfg.Auth.CookieSecure,
 	}, httpapi.ModelInfo{

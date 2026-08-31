@@ -3995,6 +3995,47 @@ select:focus-visible {
   align-items: end;
   margin-top: 22px;
 }
+.collaboration-policy-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 22px;
+}
+.collaboration-policy-grid > label {
+  display: grid;
+  gap: 7px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 650;
+}
+.collaboration-policy-grid input[type="number"] {
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  color: var(--color-text);
+  background: var(--color-surface);
+}
+.collaboration-toggle {
+  grid-column: 1 / -1;
+  grid-template-columns: auto minmax(0, 1fr) !important;
+  align-items: center;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--color-surface-subtle);
+}
+.collaboration-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: #6e8338;
+}
+.collaboration-toggle span {
+  display: grid;
+  gap: 3px;
+}
+.collaboration-save {
+  grid-column: 1 / -1;
+}
 .publication-grid label,
 .publication-grid > div {
   display: grid;
@@ -4388,6 +4429,7 @@ select:focus-visible {
   }
   .profile-object-row,
   .publication-grid,
+  .collaboration-policy-grid,
   .token-form,
   .one-time-secret,
   .candidate-identity-fields {

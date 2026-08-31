@@ -28,6 +28,15 @@ Agent signing uses Ed25519. Private keys are encrypted with AES-256-GCM under th
 - Repository integration tests are destructive and only accept a database name ending in `_test`. The dedicated Compose test service is separate from development data.
 - Skill imports reject traversal, absolute paths, symlinks, duplicate normalized paths, oversized archives/files, and undeclared roots. Stored scripts have no execution authority.
 
+## Cross-Agent collaboration
+
+- A Human Principal can manage and converse with owned Agents only. Discovery returns opaque AgentAddr candidates and grants no invocation authority.
+- Target Agents default to collaboration disabled. The target Owner sets request/hour, active-Session, and maximum-TTL limits; the Server rechecks ownership, target policy, rate, idempotency, and duplicate payload digest before evaluation.
+- Evaluation is a no-Tool single-turn invocation. A model acceptance cannot exceed Server policy. Invalid output, ambiguity, secret requests, private-context requests, or attempted Tool use fail closed.
+- Accepted requests create a short-lived capability Session. Only its SHA-256 token hash and AES-GCM ciphertext are stored; the raw capability is never returned to the browser, Owner API, model, Run Event, or log. Missing `AGENT_KEY_ENCRYPTION_KEY` disables policy opt-in, collaboration AgentCard discovery, and the A2A data plane.
+- The data plane uses official A2A 1.0 JSON-RPC Messages and Tasks. Every operation authenticates the Session, tenant AgentAddr, TTL, status, and method scope. Tasks are PostgreSQL-backed and isolated by Session ownership.
+- Collaboration Invocations load target instructions plus public collaboration Profile and Session Task context only. They load no private Memory, Impression, Skill, MCP Tool, owner Conversation, or credential. Runtime objects are process-local and discarded after one response; only status/failure audit metadata remains.
+
 ## Standalone Index
 
 The Index uses separate PostgreSQL + pgvector, a static Registration/Publication Bearer Token of at least 32 characters, and a separate Query Token. The HTTP boundary compares Tokens in constant time and never logs headers, request bodies, or complete vectors. Registration persists only a SHA-256 Token-scoped idempotency digest. Publication accepts only disclosure-approved vectors and digests produced by an Agent Server, never Fact text. There is no Facts URL, LSH input, outbound fetch path, or public resolution.
@@ -36,4 +45,4 @@ The static Token authenticates access to the controlled Registry/Publication API
 
 ## Known gaps
 
-Email verification, password reset, MFA, login rate limiting, delegated access, MCP OAuth/secret storage, write/destructive Tool Approval, third-party Agent credentials/attestations, Index scoped identity/signing/rate limiting, A2A request authentication, audit retention policy, and sandboxed Skill execution are not implemented. Deployment documentation must not claim these protections.
+Email verification, password reset, MFA, login rate limiting, delegated access, MCP OAuth/secret storage, write/destructive Tool Approval, third-party Agent credentials/attestations, Index scoped identity/signing/rate limiting, federated Server identity/routing, A2A streaming/push notification, audit retention policy, and sandboxed Skill execution are not implemented.

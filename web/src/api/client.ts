@@ -11,6 +11,9 @@ export type FactCandidate = components["schemas"]["FactCandidate"];
 export type AgentPublication = components["schemas"]["AgentPublication"];
 export type AgentAccessToken = components["schemas"]["AgentAccessToken"];
 export type AgentCardPreview = components["schemas"]["AgentCardPreview"];
+export type CollaborationPolicy = components["schemas"]["CollaborationPolicy"];
+export type CollaborationOverview =
+  components["schemas"]["CollaborationOverview"];
 export type AccountSettings = components["schemas"]["AccountSettingsResponse"];
 export type AuthResponse = components["schemas"]["AuthResponse"];
 export type Bootstrap = components["schemas"]["BootstrapResponse"];
@@ -213,6 +216,23 @@ export const api = {
   getAgentCardPreview: (agentId: string) =>
     request<AgentCardPreview>(
       `/api/v1/agents/${encodeURIComponent(agentId)}/agent-card-preview`,
+    ),
+  getAgentCollaborations: (agentId: string) =>
+    request<CollaborationOverview>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/collaborations`,
+    ),
+  updateAgentCollaborationPolicy: (
+    agentId: string,
+    input: components["schemas"]["UpdateCollaborationPolicyRequest"],
+  ) =>
+    request<CollaborationPolicy>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/collaboration-policy`,
+      { method: "PATCH", body: JSON.stringify(input) },
+    ),
+  revokeCollaborationSession: (agentId: string, sessionId: string) =>
+    request<void>(
+      `/api/v1/agents/${encodeURIComponent(agentId)}/collaboration-sessions/${encodeURIComponent(sessionId)}/revoke`,
+      { method: "POST" },
     ),
   listMemories: async (agentId: string) => {
     const response = await request<{ memories: Memory[] }>(

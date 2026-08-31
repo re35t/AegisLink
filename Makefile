@@ -1,4 +1,7 @@
-.PHONY: dev-db dev-test-db dev-index-db dev-index-test-db dev-server dev-index dev-web generate check test test-integration test-index-integration build
+.PHONY: dev dev-db dev-test-db dev-index-db dev-index-test-db dev-server dev-index dev-web generate check test test-integration test-index-integration build
+
+dev:
+	./scripts/dev.sh
 
 dev-db:
 	docker compose up -d postgres

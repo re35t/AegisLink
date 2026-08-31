@@ -30,13 +30,15 @@ import {
   OverviewSection,
   PublicationSection,
 } from "./AgentProfileSections";
+import { CollaborationSection } from "./CollaborationSection";
 
 export type AgentProfileSection =
   | "configuration"
   | "overview"
   | "impressions"
   | "facts"
-  | "publication";
+  | "publication"
+  | "collaboration";
 
 export function AgentProfilePage({
   agentId,
@@ -134,6 +136,7 @@ export function AgentProfilePage({
             "impressions",
             "facts",
             "publication",
+            "collaboration",
           ] as const
         ).map((item) => (
           <Link
@@ -150,7 +153,9 @@ export function AgentProfilePage({
                   ? "Impressions"
                   : item === "facts"
                     ? t("Facts", "事实")
-                    : t("Publication", "发布")}
+                    : item === "publication"
+                      ? t("Publication", "发布")
+                      : t("Collaboration", "协作")}
             {item === "facts" && profile.data?.pendingFactCount ? (
               <span>{profile.data.pendingFactCount}</span>
             ) : null}
@@ -359,6 +364,9 @@ function AgentProfileContent({
         </>
       )}
       {section === "publication" && <PublicationSection agentId={agentId} />}
+      {section === "collaboration" && (
+        <CollaborationSection agentId={agentId} />
+      )}
     </div>
   );
 }

@@ -14,17 +14,22 @@ import (
 )
 
 type Harness struct {
-	runtime     runtime.Runtime
-	memories    MemoryReader
-	skills      SkillReader
-	mcp         MCPRuntime
-	facts       FactReader
-	impressions ImpressionReader
-	agentSearch AgentSearcher
+	runtime      runtime.Runtime
+	memories     MemoryReader
+	skills       SkillReader
+	mcp          MCPRuntime
+	facts        FactReader
+	impressions  ImpressionReader
+	agentSearch  AgentSearcher
+	collaborator Collaborator
 }
 
-func New(agentRuntime runtime.Runtime, memories MemoryReader, skillReader SkillReader, mcpRuntime MCPRuntime, facts FactReader, impressions ImpressionReader, agentSearch AgentSearcher) *Harness {
-	return &Harness{runtime: agentRuntime, memories: memories, skills: skillReader, mcp: mcpRuntime, facts: facts, impressions: impressions, agentSearch: agentSearch}
+func New(agentRuntime runtime.Runtime, memories MemoryReader, skillReader SkillReader, mcpRuntime MCPRuntime, facts FactReader, impressions ImpressionReader, agentSearch AgentSearcher, collaborators ...Collaborator) *Harness {
+	var collaborator Collaborator
+	if len(collaborators) > 0 {
+		collaborator = collaborators[0]
+	}
+	return &Harness{runtime: agentRuntime, memories: memories, skills: skillReader, mcp: mcpRuntime, facts: facts, impressions: impressions, agentSearch: agentSearch, collaborator: collaborator}
 }
 
 func (harness *Harness) ResolveSelection(ctx context.Context, principalID, agentID string, selection conversation.RunSelection) (conversation.ExecutionPolicy, error) {
@@ -97,6 +102,9 @@ func (harness *Harness) Run(ctx context.Context, input conversation.HarnessInput
 	tools := harnessTools(agentContext)
 	if harness.agentSearch != nil {
 		tools = append(tools, agentSearchTool(harness.agentSearch, input.PrincipalID, input.Agent.ID))
+	}
+	if harness.collaborator != nil {
+		tools = append(tools, collaborationTools(harness.collaborator, input.PrincipalID, input.Agent.ID, input.RunID)...)
 	}
 	events := harness.runtime.Run(ctx, runtime.Input{
 		Agent:       runtime.Agent{Name: input.Agent.Name, Description: input.Agent.Description},

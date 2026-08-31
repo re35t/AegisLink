@@ -13,17 +13,18 @@ import (
 )
 
 type Config struct {
-	Server     Server
-	Database   Database
-	Auth       Auth
-	Model      Model
-	Curator    Model
-	Runtime    AgentRuntime
-	MCP        MCP
-	Web        Web
-	Security   Security
-	AgentIndex AgentIndex
-	Encoder    Encoder
+	Server        Server
+	Database      Database
+	Auth          Auth
+	Model         Model
+	Curator       Model
+	Runtime       AgentRuntime
+	MCP           MCP
+	Web           Web
+	Security      Security
+	AgentIndex    AgentIndex
+	Encoder       Encoder
+	Collaboration Collaboration
 }
 
 type Server struct {
@@ -81,6 +82,10 @@ type Encoder struct {
 	APIKey  string
 	Model   string
 	Timeout time.Duration
+}
+
+type Collaboration struct {
+	PublicBaseURL string
 }
 
 func Load() (Config, error) {
@@ -182,6 +187,7 @@ func Load() (Config, error) {
 			APIKey:  strings.TrimSpace(os.Getenv("DISCOVERY_ENCODER_API_KEY")),
 			Model:   strings.TrimSpace(os.Getenv("DISCOVERY_ENCODER_MODEL")), Timeout: encoderTimeout,
 		},
+		Collaboration: Collaboration{PublicBaseURL: strings.TrimRight(strings.TrimSpace(env("A2A_PUBLIC_BASE_URL", "http://127.0.0.1:4321")), "/")},
 	}
 	if err := cfg.Validate(); err != nil {
 		return Config{}, err
@@ -261,6 +267,11 @@ func (cfg Config) Validate() error {
 	}
 	if err := validateURL("WEB_ORIGIN", cfg.Web.Origin); err != nil {
 		problems = append(problems, err)
+	}
+	if cfg.Collaboration.PublicBaseURL != "" {
+		if err := validateURL("A2A_PUBLIC_BASE_URL", cfg.Collaboration.PublicBaseURL); err != nil {
+			problems = append(problems, err)
+		}
 	}
 	return errors.Join(problems...)
 }

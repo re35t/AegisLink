@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/gin-gonic/gin"
 	"github.com/oklog/ulid/v2"
 	internala2a "github.com/re35t/AegisLink/internal/a2a"
@@ -13,6 +14,7 @@ import (
 	"github.com/re35t/AegisLink/internal/agent"
 	"github.com/re35t/AegisLink/internal/agentindex"
 	"github.com/re35t/AegisLink/internal/catalog"
+	"github.com/re35t/AegisLink/internal/collaboration"
 	"github.com/re35t/AegisLink/internal/conversation"
 	"github.com/re35t/AegisLink/internal/discovery"
 	"github.com/re35t/AegisLink/internal/impression"
@@ -128,6 +130,14 @@ type CatalogService interface {
 	List(context.Context, string, string, catalog.Query) (catalog.Page, error)
 }
 
+type CollaborationService interface {
+	GetPolicy(context.Context, string, string) (collaboration.Policy, error)
+	UpdatePolicy(context.Context, string, string, collaboration.PolicyUpdate) (collaboration.Policy, error)
+	Overview(context.Context, string, string) (collaboration.Overview, error)
+	RevokeSession(context.Context, string, string, string) error
+	AgentCard(context.Context, string, string) (a2a.AgentCard, error)
+}
+
 type Dependencies struct {
 	Accounts      AccountService
 	Agents        AgentService
@@ -142,6 +152,9 @@ type Dependencies struct {
 	Skills        SkillService
 	MCP           MCPService
 	Catalog       CatalogService
+	Collaboration CollaborationService
+	A2AHandler    http.Handler
+	A2AEndpoint   string
 }
 
 type AuthConfig struct {
@@ -177,6 +190,8 @@ func NewRouter(dependencies Dependencies, webOrigin string, auth AuthConfig, mod
 		skills:        dependencies.Skills,
 		mcp:           dependencies.MCP,
 		catalog:       dependencies.Catalog,
+		collaboration: dependencies.Collaboration,
+		a2aEndpoint:   dependencies.A2AEndpoint,
 		auth:          auth,
 		model:         model,
 		logger:        logger,
@@ -188,6 +203,13 @@ func NewRouter(dependencies Dependencies, webOrigin string, auth AuthConfig, mod
 	router.GET("/.well-known/jwks.json", handler.getAgentFactsJWKS)
 	router.GET("/.well-known/agentfacts-revocations.json", handler.getAgentFactsRevocations)
 	router.POST("/agentfacts/query", handler.queryAgentFacts)
+	if dependencies.Collaboration != nil {
+		router.GET("/a2a/agents/:agentAddr/agent-card", handler.getCollaborationAgentCard)
+		router.GET("/a2a/agents/:agentAddr/.well-known/agent-card.json", handler.getCollaborationAgentCard)
+	}
+	if dependencies.A2AHandler != nil {
+		router.Any("/a2a", gin.WrapH(dependencies.A2AHandler))
+	}
 	api := router.Group("/api/v1")
 	api.POST("/auth/register", handler.register)
 	api.POST("/auth/login", handler.login)
@@ -224,6 +246,10 @@ func NewRouter(dependencies Dependencies, webOrigin string, auth AuthConfig, mod
 	protected.POST("/agents/:agentId/access-tokens", handler.createAgentAccessToken)
 	protected.DELETE("/agents/:agentId/access-tokens/:tokenId", handler.revokeAgentAccessToken)
 	protected.GET("/agents/:agentId/agent-card-preview", handler.getAgentCardPreview)
+	protected.GET("/agents/:agentId/collaboration-policy", handler.getCollaborationPolicy)
+	protected.PATCH("/agents/:agentId/collaboration-policy", handler.updateCollaborationPolicy)
+	protected.GET("/agents/:agentId/collaborations", handler.getCollaborations)
+	protected.POST("/agents/:agentId/collaboration-sessions/:sessionId/revoke", handler.revokeCollaborationSession)
 	protected.GET("/agents/:agentId/memories", handler.listMemories)
 	protected.POST("/agents/:agentId/memories", handler.createMemory)
 	protected.PATCH("/agents/:agentId/memories/:memoryId", handler.updateMemory)

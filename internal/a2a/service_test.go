@@ -13,7 +13,7 @@ func TestPreviewMapsDisclosedSkillsButRemainsBlockedWithoutEndpoint(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if preview.Readiness.Publishable || len(preview.Readiness.Blockers) != 1 || preview.Readiness.Blockers[0] != "a2a-endpoint-missing" {
+	if preview.Readiness.Publishable || len(preview.Readiness.Blockers) != 1 || preview.Readiness.Blockers[0] != "general-a2a-publication-disabled" {
 		t.Fatalf("readiness = %#v", preview.Readiness)
 	}
 	if len(preview.Draft.SupportedInterfaces) != 0 || len(preview.Draft.Skills) != 1 || preview.Draft.Skills[0].ID != "skill:review" {

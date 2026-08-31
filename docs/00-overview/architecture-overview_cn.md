@@ -33,7 +33,7 @@ flowchart LR
 - **Owner/控制链**：REST 管理 Account、Agent、Profile、Memory、Skill、MCP、Publication 和历史资源。
 - **执行链**：AG-UI 只承载活动 Run；`conversation` 从 PostgreSQL 重新加载权威 Agent 与历史，Harness 再解析上下文和授权能力后调用 Runtime。
 - **认知维护链**：只有成功 Run 才产生持久 Curator Job；Worker 异步维护可能有误的 Impression 和待确认 Fact Candidate。
-- **对外发布链**：Disclosure Engine 从私有 Profile 构建 AgentFacts；AgentCard 没有真实 A2A interface 时只允许 Owner 预览。
+- **对外发布链**：Disclosure Engine 从私有 Profile 构建 AgentFacts；通用能力 AgentCard 仍只允许 Owner 预览，启用协作的 Agent 另行公开仅文本、Session Secured 的真实 A2A Card。
 
 这四条链共享 Agent/Principal 所有权和 PostgreSQL 事务，但不共享传输类型或信任等级。尤其是 AG-UI 输入不能授权 Tool，Curator 输出不能直接成为 Confirmed Fact，Profile 内容也不能绕过 Disclosure Policy 进入网络。
 
@@ -65,7 +65,8 @@ flowchart LR
 | `internal/impression`   | Impression/Fact Candidate 领域规则与持久 Worker                         |
 | `internal/agent`        | Agent、AgentProfile 聚合、版本与 Disclosure Policy                      |
 | `internal/discovery`    | AgentFacts 过滤、签名、Token Query、JWKS 与撤销                         |
-| `internal/a2a`          | 官方 A2A 类型映射和 AgentCard Readiness，不提供调用端点                 |
+| `internal/a2a`          | Owner AgentCard Draft 投影                                               |
+| `internal/collaboration`| Assistance 准入、Scoped Session、官方 A2A Adapter 与临时 Invocation      |
 | `internal/postgres`     | 所有运行时 PostgreSQL 操作、GORM Model/Clause/Transaction               |
 | `contracts/http/v1`     | OpenAPI 权威契约；生成 Web TypeScript 类型                              |
 | `migrations`            | 只增不改的 Goose Schema 历史                                            |
@@ -80,6 +81,6 @@ Web 通过 REST 加载持久资源，活动 Run 使用 AG-UI SSE，`/runs/{runId
 
 ## 当前范围
 
-已实现：认证、注册时创建一个默认 Personal Agent、包含模型 Impression 和 Owner-confirmed Fact 的内部 Agent Profile、Runtime 注入、已验证域名下的 AgentFacts 发布、Owner-only AgentCard Draft、Agent 范围 Memory、版本化 Skill Bundle、Principal 所有的 MCP Library 与 Agent Binding、类型化能力选择、只读 Tool 执行、可回放 Conversation，以及独立 Index 三阶段初版。
+已实现：认证、默认 Personal Agent、内部 Agent Profile、Runtime 注入、AgentFacts 发布、Agent 范围 Memory、版本化 Skill、MCP Binding、只读 Tool、可回放 Conversation、独立 Index 三阶段初版，以及同一 Server 内 Owner 显式启用、Session Scoped 的官方 A2A 1.0 文本协作。
 
-未实现：Agent Server 自动 Vector Publisher/Caller 接入、pgvector HNSW、Scoped Publisher Credential、公开 AgentCard/A2A Endpoint、第三方 Credential/Attestation、长期 Memory 自动提取与向量检索、写入/破坏性 Tool Approval、MCP OAuth/Secret Storage、委托访问、跨 Agent 路由、Organization、WebSocket、gRPC、Redis 或 Kubernetes 部署。Index 不再规划 LSH 或 Facts URL 回源链路。
+未实现：跨 Server 联邦路由、Accepted Session 之外的公开调用、A2A Streaming/Push、pgvector HNSW、Scoped Index Publisher Credential、第三方 Credential/Attestation、长期 Memory 自动提取与向量检索、写入/破坏性 Tool Approval、MCP OAuth/Secret Storage、委托访问、Organization、WebSocket、gRPC、Redis 或 Kubernetes 部署。

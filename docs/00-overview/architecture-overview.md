@@ -33,7 +33,7 @@ flowchart LR
 - **Owner/control path:** REST manages Account, Agent, Profile, Memory, Skill, MCP, Publication, and history resources.
 - **Execution path:** AG-UI carries only active Runs. `conversation` reloads the authoritative Agent and history; Harness resolves context and authorized capabilities before invoking Runtime.
 - **Cognitive maintenance path:** only a successful Run creates a durable curator job. The worker asynchronously maintains fallible Impressions and reviewable Fact Candidates.
-- **Publication path:** the Disclosure Engine builds AgentFacts from the private Profile. AgentCard remains owner-preview only until a real A2A interface exists.
+- **Publication path:** the Disclosure Engine builds AgentFacts from the private Profile. The broad capability AgentCard remains owner-preview only; collaboration-enabled Agents expose a separate text-only, Session-secured card for the real A2A interface.
 
 The paths share Principal/Agent ownership and PostgreSQL transactions, but not transport types or trust levels. AG-UI input cannot authorize a Tool, curator output cannot directly become a Confirmed Fact, and Profile content cannot bypass Disclosure Policy to reach the network.
 
@@ -65,7 +65,8 @@ The dependency direction is `HTTP -> service/orchestrator -> repository or Runti
 | `internal/impression`   | Impression/Fact Candidate rules and the durable worker                              |
 | `internal/agent`        | Agent and AgentProfile aggregation, revisions, and Disclosure Policy                |
 | `internal/discovery`    | AgentFacts filtering, signing, token query, JWKS, and revocation                    |
-| `internal/a2a`          | Official A2A type mapping and AgentCard readiness, without an invocation endpoint   |
+| `internal/a2a`          | Owner AgentCard Draft projection                                                     |
+| `internal/collaboration`| Assistance admission, scoped Sessions, official A2A adapter, and ephemeral invocation|
 | `internal/postgres`     | All runtime PostgreSQL operations and GORM models/clauses/transactions              |
 | `contracts/http/v1`     | Authoritative OpenAPI contract and generated Web types                              |
 | `migrations`            | Append-only Goose schema history                                                    |
@@ -74,12 +75,12 @@ The dependency direction is `HTTP -> service/orchestrator -> repository or Runti
 
 ## Persistence and execution
 
-PostgreSQL is authoritative for accounts, Agents, Profiles, Impressions, Fact candidates and confirmations, curator jobs, AgentFacts publications, Conversations, Messages, Runs, Run Events, Memory, Skill packages and bindings, and MCP library/binding state. Active Eino execution is process-local. Startup applies Goose migrations, marks interrupted Runs failed, and then starts the curator worker so retryable work can resume.
+PostgreSQL is authoritative for accounts, Agents, Profiles, Impressions, Fact candidates and confirmations, curator jobs, AgentFacts publications, Conversations, Messages, Runs, Run Events, Memory, Skill packages and bindings, MCP library/binding state, Assistance Requests, Collaboration Sessions, A2A Tasks, and invocation audit metadata. Active Eino execution remains process-local and is discarded after each invocation.
 
 The Web loads durable resources through REST. An active Run uses AG-UI SSE, while `/runs/{runId}/events` remains the persisted replay/recovery stream. Client-provided history, Tool schemas, names, and permissions are never authoritative. Owner APIs derive the Principal from the session; external AgentFacts routes select only a verified, enabled publication by the normalized real HTTP `Host`.
 
 ## Current scope
 
-Implemented scope includes authentication, one default Personal Agent per registration, an internal Agent Profile with model-generated Impressions and owner-confirmed Facts, Runtime context injection, AgentFacts publication under a verified hostname, an owner-only AgentCard Draft, Agent-scoped Memory, versioned Skill bundles, a Principal-owned MCP library with per-Agent bindings, typed capability selection, read-only Tool execution, replayable Conversations, and the standalone three-stage Index MVP.
+Implemented scope includes authentication, one default Personal Agent per registration, an internal Agent Profile with model-generated Impressions and owner-confirmed Facts, Runtime context injection, AgentFacts publication, Agent-scoped Memory, versioned Skill bundles, a Principal-owned MCP library with per-Agent bindings, typed capability selection, read-only Tool execution, replayable Conversations, the standalone three-stage Index MVP, and same-Server session-scoped official A2A collaboration.
 
-Not implemented: automatic Agent Server vector publication/caller integration, pgvector HNSW, scoped publisher credentials, a public AgentCard route or A2A endpoint, third-party credentials/attestations, automatic long-term Memory extraction/vector search, write/destructive Tool approval, MCP OAuth or secret storage, delegated access, cross-Agent routing, organizations, WebSocket, gRPC, Redis, or Kubernetes deployment. Index no longer plans an LSH or Facts URL fetch path.
+Not implemented: federated cross-Server collaboration/routing, general public invocation outside an accepted Session, A2A streaming/push notifications, pgvector HNSW, scoped Index publisher credentials, third-party credentials/attestations, automatic long-term Memory extraction/vector search, write/destructive Tool approval, MCP OAuth or secret storage, delegated access, organizations, WebSocket, gRPC, Redis, or Kubernetes deployment.

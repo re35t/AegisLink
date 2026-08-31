@@ -6,8 +6,10 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/re35t/AegisLink/internal/agent"
 	"github.com/re35t/AegisLink/internal/agentindex"
+	"github.com/re35t/AegisLink/internal/collaboration"
 	"github.com/re35t/AegisLink/internal/impression"
 	"github.com/re35t/AegisLink/internal/mcp"
 	"github.com/re35t/AegisLink/internal/memory"
@@ -41,6 +43,12 @@ type ImpressionReader interface {
 
 type AgentSearcher interface {
 	Search(context.Context, string, string, string, int) ([]agentindex.Candidate, error)
+}
+
+type Collaborator interface {
+	RequestAssistance(context.Context, string, string, string, string, string) (collaboration.AssistanceRequest, error)
+	SendMessage(context.Context, string, string, string, string, string) (*a2a.Task, error)
+	GetTask(context.Context, string, string, string, string) (*a2a.Task, error)
 }
 
 type agentContext struct {

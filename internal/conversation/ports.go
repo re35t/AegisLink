@@ -23,6 +23,7 @@ type RunSelection struct {
 }
 
 type HarnessInput struct {
+	RunID       string
 	PrincipalID string
 	Agent       agent.Agent
 	Messages    []Message

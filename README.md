@@ -11,7 +11,7 @@ Successful Run ──durable job────> Curator ──Runtime ──Eino �
 AgentProfile ──Disclosure───────> AgentFacts (published) / AgentCard (draft)
 ```
 
-`AgentProfile` is the private self model used by the owner and Runtime. `AgentFacts` is a filtered, signed, expiring external trust manifest. `AgentCard` is an A2A communication manifest and is currently owner-preview only because no callable A2A endpoint exists. See the [architecture overview](docs/00-overview/architecture-overview.md), [中文架构概览](docs/00-overview/architecture-overview_cn.md), and [cognitive/publication design](docs/02-architecture/cognitive-profile-and-publication.md).
+`AgentProfile` is the private self model used by the owner and Runtime. `AgentFacts` is a filtered, signed, expiring external trust manifest. The broad capability AgentCard remains an owner Draft; an enabled Collaboration Policy produces a separate text-only, Session-secured official A2A 1.0 card. See the [architecture overview](docs/00-overview/architecture-overview.md) and [ADR 0018](docs/adr/0018-secure-session-scoped-a2a-collaboration.md).
 
 ## Stack
 
@@ -99,25 +99,22 @@ Provide the API key only through `MODEL_API_KEY` in an uncommitted `.env`; never
 cp .env.example .env
 # Set MODEL_API_KEY and adjust MODEL_BASE_URL / MODEL_NAME when needed.
 pnpm install
+make dev
+```
+
+`make dev` loads `.env` and `.env.local`, generates and reuses a stable local-only Agent encryption key when none is configured, waits for both development PostgreSQL databases, then starts the Agent Server, standalone Index, and Vite Web application together. Press `Ctrl-C` to stop the three local processes. The PostgreSQL containers and named volumes remain available for the next run.
+
+The granular targets remain available when only one component is needed:
+
+```bash
 make dev-db
 make dev-server
-```
-
-In another terminal:
-
-```bash
 make dev-web
-```
-
-Open `http://127.0.0.1:5173`. The API listens on `http://127.0.0.1:4321`.
-
-The independent Index is optional. It uses its own PostgreSQL database and starts without the Agent Server database or model credentials:
-
-```bash
 make dev-index-db
 make dev-index
-# health/readiness: http://127.0.0.1:4331
 ```
+
+Open `http://127.0.0.1:5173`. The API listens on `http://127.0.0.1:4321`; Index health/readiness is available on `http://127.0.0.1:4331`.
 
 It implements the three-stage Index API: authenticated AgentAddr registration, atomic complete Fact Vector snapshot replacement, and exact cosine Search returning AgentAddr candidates. Public resolve has been removed.
 
@@ -137,7 +134,7 @@ The standalone Index has its own narrow source of truth at [`index/contracts/htt
 
 `POST /api/v1/ag-ui` streams active execution as AG-UI SSE. `GET /api/v1/runs/{runId}/events` exposes authenticated persisted replay and supports `Last-Event-ID`.
 
-Owner routes under `/api/v1/agents/{agentId}` use the authenticated Principal and return Not Found for non-owned Agents. Public AgentFacts routes are selected by the normalized real HTTP `Host`; they do not trust `X-Forwarded-Host`. There is intentionally no public `/.well-known/agent-card.json` route.
+Owner routes under `/api/v1/agents/{agentId}` use the authenticated Principal and return Not Found for non-owned Agents. Public AgentFacts routes are selected by the normalized real HTTP `Host`; they do not trust `X-Forwarded-Host`. Collaboration-enabled Agents expose a registry-addressed official A2A 1.0 AgentCard, including per-Agent discovery at `/a2a/agents/{agentAddr}/.well-known/agent-card.json`, and a shared JSON-RPC endpoint. There is intentionally no ambiguous host-wide `/.well-known/agent-card.json` route for this multi-Agent server.
 
 ## Validate
 
@@ -154,4 +151,4 @@ Runtime persistence goes through GORM. Goose remains authoritative for ordered s
 
 ## Current boundary
 
-This release implements private cognitive Agent Profiles, model-generated Impressions, owner-confirmed Facts, signed/revocable AgentFacts publication, owner-only AgentCard Drafts, Agent-scoped Memory, versioned Skills, MCP bindings, read-only Tool execution, owner isolation, and the standalone three-stage Index MVP. The Index does not yet implement scoped publisher credentials, query rate limiting, or evaluated HNSW retrieval. The product also does not include a public AgentCard/A2A endpoint, third-party attestation, email verification, password reset, MFA, login rate limiting, delegated access, multiple-Agent creation UI, automatic long-term Memory extraction/vector retrieval, executable Skill scripts, MCP OAuth/secret storage, write/destructive Tool Approval, cross-Agent communication, Redis, WebSocket, or sandboxed runners. See the [Index architecture](docs/02-architecture/distributed-agent-index.md) and maintained [technical-document index](docs/README.md).
+This release implements private cognitive Agent Profiles, model-generated Impressions, owner-confirmed Facts, signed/revocable AgentFacts publication, Agent-scoped Memory, versioned Skills, MCP bindings, read-only Tool execution, owner isolation, the standalone three-stage Index MVP, and bounded same-Server cross-owner collaboration. Collaboration is owner-opt-in, text-only, asynchronous, session-scoped, expiring, revocable, audited, and carried as official A2A 1.0 Messages/Tasks; it never creates a normal Conversation for the target Agent. The Index does not yet implement scoped publisher credentials, query rate limiting, or evaluated HNSW retrieval. Federated cross-Server routing, third-party attestation, email verification, password reset, MFA, login rate limiting, delegated access, multiple-Agent creation UI, automatic long-term Memory extraction/vector retrieval, executable Skill scripts, MCP OAuth/secret storage, write/destructive Tool Approval, Redis, WebSocket, and sandboxed runners remain out of scope. See [ADR 0018](docs/adr/0018-secure-session-scoped-a2a-collaboration.md).

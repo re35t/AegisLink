@@ -7,6 +7,7 @@
 - 显式 Agent 范围 Memory、版本化 Skill Bundle、Principal MCP Library 与 Agent Binding、只读动态 Tool，以及类型化 Composer 能力选择。
 - Agent Profile Owner View、Impression 主动提炼、Fact 确认收件箱、Runtime Context 注入、强制 Disclosure Policy、签名 AgentFacts 发布与 Owner-only AgentCard Draft。
 - 独立 `aegislink-index`、独立 PostgreSQL + pgvector、带认证的 AgentAddr 注册、完整向量快照替换、exact cosine Search 与 Health/Readiness。
+- Owner 显式启用的同 Server Assistance Request、Scoped/Expiring Collaboration Session、官方 A2A 1.0 Task、文本临时 Invocation、审计与撤销。
 
 ## 下一阶段
 
@@ -19,4 +20,4 @@
 
 ## 延后范围
 
-公开 AgentCard/A2A Invocation、联邦/全球 Index 路由、LSH、第三方 Attestation、委托所有权、跨 Agent 编排、Organization、Marketplace、gRPC、WebSocket、Redis 和 Kubernetes 均不属于当前版本；LSH 不再属于规划路线。
+跨 Server A2A 联邦路由、Accepted Session 之外的公开调用、A2A Streaming/Push、全球 Index 路由、LSH、第三方 Attestation、委托所有权、跨 Agent 编排、Organization、Marketplace、gRPC、WebSocket、Redis 和 Kubernetes 均不属于当前版本。

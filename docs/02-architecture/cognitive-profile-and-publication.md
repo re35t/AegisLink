@@ -19,7 +19,7 @@ flowchart TD
     disclosure --> card["AgentCard Draft: A2A communication manifest"]
     agentfacts --> wellknown["/.well-known/agentfacts.json"]
     agentfacts --> query["POST /agentfacts/query"]
-    card --> blocker["Not publishable: A2A endpoint missing"]
+    card --> blocker["General card not publishable; collaboration uses a scoped card"]
 ```
 
 | Object         | Primary source                                                                       | Trust level                                               | Lifecycle                                                                     | Consumer/network boundary                       |

@@ -19,7 +19,7 @@ flowchart TD
     disclosure --> card["AgentCard Draft：A2A 通信清单"]
     agentfacts --> wellknown["/.well-known/agentfacts.json"]
     agentfacts --> query["POST /agentfacts/query"]
-    card --> blocker["不可发布：缺少 A2A endpoint"]
+    card --> blocker["通用 Card 不发布；协作使用 Scoped Card"]
 ```
 
 | 对象           | 主要来源                                                           | 信任等级                       | 生命周期                                                   | 消费者/出口                                  |

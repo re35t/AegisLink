@@ -646,6 +646,133 @@ paths:
                 $ref: "#/components/schemas/AgentCardPreview"
         "404":
           $ref: "#/components/responses/Error"
+  /api/v1/agents/{agentId}/collaboration-policy:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+    get:
+      operationId: getAgentCollaborationPolicy
+      responses:
+        "200":
+          description: Owner-only collaboration admission policy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationPolicy"
+        "404":
+          $ref: "#/components/responses/Error"
+    patch:
+      operationId: updateAgentCollaborationPolicy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCollaborationPolicyRequest"
+      responses:
+        "200":
+          description: Collaboration policy updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationPolicy"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /api/v1/agents/{agentId}/collaborations:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+    get:
+      operationId: getAgentCollaborations
+      responses:
+        "200":
+          description: Owner-only assistance request and Collaboration Session audit view
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollaborationOverview"
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/v1/agents/{agentId}/collaboration-sessions/{sessionId}/revoke:
+    parameters:
+      - $ref: "#/components/parameters/AgentId"
+      - in: path
+        name: sessionId
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: revokeCollaborationSession
+      responses:
+        "204":
+          description: Collaboration Session capability revoked
+        "404":
+          $ref: "#/components/responses/Error"
+  /a2a/agents/{agentAddr}/agent-card:
+    parameters:
+      - in: path
+        name: agentAddr
+        required: true
+        schema:
+          type: string
+          pattern: ^agent_[0-9A-HJKMNP-TV-Z]{26}$
+    get:
+      operationId: getCollaborationAgentCard
+      security: []
+      responses:
+        "200":
+          description: Official A2A 1.0 AgentCard for an Agent accepting collaboration
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "404":
+          $ref: "#/components/responses/Error"
+  /a2a/agents/{agentAddr}/.well-known/agent-card.json:
+    parameters:
+      - in: path
+        name: agentAddr
+        required: true
+        schema:
+          type: string
+          pattern: ^agent_[0-9A-HJKMNP-TV-Z]{26}$
+    get:
+      operationId: discoverCollaborationAgentCard
+      security: []
+      responses:
+        "200":
+          description: Official A2A 1.0 well-known AgentCard for an Agent accepting collaboration
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "404":
+          $ref: "#/components/responses/Error"
+  /a2a:
+    post:
+      operationId: handleA2AJsonRpc
+      summary: Official A2A 1.0 JSON-RPC endpoint gated by a Collaboration Session capability
+      security:
+        - collaborationBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Official A2A JSON-RPC response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
   /.well-known/agentfacts.json:
     get:
       operationId: getPublicAgentFacts
@@ -1260,6 +1387,10 @@ components:
       type: apiKey
       in: cookie
       name: aegislink_session
+    collaborationBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
   parameters:
     AgentId:
       name: agentId
@@ -1504,7 +1635,18 @@ components:
           maxLength: 32768
     AgentProfileCapability:
       type: object
-      required: [id, name, description, kind, tags, source, confidence, callable, disclosure]
+      required:
+        [
+          id,
+          name,
+          description,
+          kind,
+          tags,
+          source,
+          confidence,
+          callable,
+          disclosure,
+        ]
       properties:
         id:
           type: string
@@ -1560,7 +1702,25 @@ components:
     Impression:
       type: object
       required:
-        [id, scope, kind, summary, details, tags, evidence, confidence, salience, freshness, firstObservedAt, lastObservedAt, decayHalfLifeSeconds, status, generation, createdAt, updatedAt]
+        [
+          id,
+          scope,
+          kind,
+          summary,
+          details,
+          tags,
+          evidence,
+          confidence,
+          salience,
+          freshness,
+          firstObservedAt,
+          lastObservedAt,
+          decayHalfLifeSeconds,
+          status,
+          generation,
+          createdAt,
+          updatedAt,
+        ]
       properties:
         id:
           type: string
@@ -1569,7 +1729,17 @@ components:
           enum: [user, task, project, environment, relationship]
         kind:
           type: string
-          enum: [current-task, recent-interest, knowledge-exposure, acquired-information, open-loop, temporary-preference, working-style-observation, recent-decision]
+          enum:
+            [
+              current-task,
+              recent-interest,
+              knowledge-exposure,
+              acquired-information,
+              open-loop,
+              temporary-preference,
+              working-style-observation,
+              recent-decision,
+            ]
         summary:
           type: string
         details:
@@ -1658,7 +1828,20 @@ components:
           enum: [active, dismissed]
     FactCandidate:
       type: object
-      required: [id, subject, namespace, key, value, sourceImpressionIds, rationale, confidence, version, status, proposedAt]
+      required:
+        [
+          id,
+          subject,
+          namespace,
+          key,
+          value,
+          sourceImpressionIds,
+          rationale,
+          confidence,
+          version,
+          status,
+          proposedAt,
+        ]
       properties:
         id:
           type: string
@@ -1699,7 +1882,19 @@ components:
           format: date-time
     ConfirmedFact:
       type: object
-      required: [id, subject, namespace, key, value, confidence, confirmation, disclosure, createdAt, updatedAt]
+      required:
+        [
+          id,
+          subject,
+          namespace,
+          key,
+          value,
+          confidence,
+          confirmation,
+          disclosure,
+          createdAt,
+          updatedAt,
+        ]
       properties:
         id:
           type: string
@@ -1781,7 +1976,20 @@ components:
           minimum: 1
     AgentProfile:
       type: object
-      required: [agentId, version, contextRevision, identity, capabilities, endpoints, confirmedFacts, impressions, pendingFactCount, createdAt, updatedAt]
+      required:
+        [
+          agentId,
+          version,
+          contextRevision,
+          identity,
+          capabilities,
+          endpoints,
+          confirmedFacts,
+          impressions,
+          pendingFactCount,
+          createdAt,
+          updatedAt,
+        ]
       properties:
         agentId:
           type: string
@@ -1936,7 +2144,20 @@ components:
           enum: [unavailable, not-generated, active, retired, revoked]
     AgentPublication:
       type: object
-      required: [agentId, revision, enabled, hostname, hostnameStatus, dnsChallenge, ttlSeconds, signingKey, agentFactsReady, agentCard, tokens]
+      required:
+        [
+          agentId,
+          revision,
+          enabled,
+          hostname,
+          hostnameStatus,
+          dnsChallenge,
+          ttlSeconds,
+          signingKey,
+          agentFactsReady,
+          agentCard,
+          tokens,
+        ]
       properties:
         agentId:
           type: string
@@ -2058,6 +2279,175 @@ components:
               type: array
               items:
                 type: string
+    CollaborationPolicy:
+      type: object
+      required:
+        [
+          agentId,
+          enabled,
+          revision,
+          maxSessionTtlSeconds,
+          maxRequestsPerHour,
+          maxActiveSessions,
+          encryptionReady,
+          updatedAt,
+        ]
+      properties:
+        agentId:
+          type: string
+        enabled:
+          type: boolean
+        revision:
+          type: integer
+          format: int64
+          minimum: 1
+        maxSessionTtlSeconds:
+          type: integer
+          format: int64
+          minimum: 300
+          maximum: 86400
+        maxRequestsPerHour:
+          type: integer
+          minimum: 1
+          maximum: 200
+        maxActiveSessions:
+          type: integer
+          minimum: 1
+          maximum: 50
+        encryptionReady:
+          type: boolean
+        updatedAt:
+          type: string
+          format: date-time
+    UpdateCollaborationPolicyRequest:
+      type: object
+      required:
+        [
+          expectedRevision,
+          enabled,
+          maxSessionTtlSeconds,
+          maxRequestsPerHour,
+          maxActiveSessions,
+        ]
+      properties:
+        expectedRevision:
+          type: integer
+          format: int64
+          minimum: 1
+        enabled:
+          type: boolean
+        maxSessionTtlSeconds:
+          type: integer
+          format: int64
+          minimum: 300
+          maximum: 86400
+        maxRequestsPerHour:
+          type: integer
+          minimum: 1
+          maximum: 200
+        maxActiveSessions:
+          type: integer
+          minimum: 1
+          maximum: 50
+    AssistanceRequest:
+      type: object
+      required:
+        [
+          id,
+          requesterAgentId,
+          targetAgentId,
+          targetAgentAddr,
+          purpose,
+          requestedScopes,
+          status,
+          createdAt,
+        ]
+      properties:
+        id:
+          type: string
+        requesterAgentId:
+          type: string
+        targetAgentId:
+          type: string
+        targetAgentAddr:
+          type: string
+        purpose:
+          type: string
+        requestedScopes:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum: [evaluating, accepted, rejected, failed]
+        decisionCode:
+          type: string
+        sessionId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        evaluatedAt:
+          type: string
+          format: date-time
+    CollaborationSession:
+      type: object
+      required:
+        [
+          id,
+          assistanceRequestId,
+          requesterAgentId,
+          targetAgentId,
+          targetAgentAddr,
+          status,
+          scopes,
+          expiresAt,
+          createdAt,
+        ]
+      properties:
+        id:
+          type: string
+        assistanceRequestId:
+          type: string
+        requesterAgentId:
+          type: string
+        targetAgentId:
+          type: string
+        targetAgentAddr:
+          type: string
+        status:
+          type: string
+          enum: [active, revoked, expired]
+        scopes:
+          type: array
+          items:
+            type: string
+        expiresAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        revokedAt:
+          type: string
+          format: date-time
+    CollaborationOverview:
+      type: object
+      required: [policy, requests, sessions]
+      properties:
+        policy:
+          $ref: "#/components/schemas/CollaborationPolicy"
+        requests:
+          type: array
+          items:
+            $ref: "#/components/schemas/AssistanceRequest"
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/CollaborationSession"
     AgentFactsClaim:
       type: object
       required: [id, kind, subject, value, issuer, validFrom, proofRefs]
@@ -2090,7 +2480,20 @@ components:
             type: string
     AgentFactsDocument:
       type: object
-      required: [schemaVersion, publicationId, profileVersion, subject, services, claims, privacy, validFrom, validUntil, revocation, proof]
+      required:
+        [
+          schemaVersion,
+          publicationId,
+          profileVersion,
+          subject,
+          services,
+          claims,
+          privacy,
+          validFrom,
+          validUntil,
+          revocation,
+          proof,
+        ]
       properties:
         schemaVersion:
           type: string

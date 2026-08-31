@@ -153,7 +153,7 @@ function publicationFixture(): AgentPublication {
       },
       readiness: {
         publishable: false,
-        blockers: ["a2a-endpoint-missing"],
+        blockers: ["general-a2a-publication-disabled"],
       },
     },
     tokens: [

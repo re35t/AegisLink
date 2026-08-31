@@ -72,7 +72,8 @@ const agentProfileRoute = createRoute({
       search.section === "overview" ||
       search.section === "impressions" ||
       search.section === "facts" ||
-      search.section === "publication"
+      search.section === "publication" ||
+      search.section === "collaboration"
         ? (search.section as AgentProfileSection)
         : ("configuration" as AgentProfileSection),
   }),

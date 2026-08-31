@@ -19,7 +19,7 @@ AegisLink 当前按 **Personal Agent OS** 开发，而不是 Multi-Agent 平台�
 
 Tracing、Approval 和 Permission 不是独立卖点，但属于上述四项能力的基础设施，必须从第一版开始建设。
 
-本阶段明确不实现 Network、Group、Agent Directory、A2A、跨 Agent 路由或复杂 Multi-Agent 编排。接口保留未来扩展点，但不能为了未来能力提前引入分布式系统复杂度。
+本阶段仍不实现 Network、Group、Agent Directory、跨 Server 联邦路由或复杂 Multi-Agent 编排。ADR 0018 只增加同一 Server 内、Owner 显式启用、Session Scoped、仅文本的官方 A2A 1.0 协作，不把 Personal Agent OS 扩展成通用 Multi-Agent 平台。
 
 ## 2. 当前基线与规划边界
 
@@ -239,7 +239,7 @@ AegisLink
 - 名称、头像、Instructions、模型和可解释的自主级别。
 - Model Provider 配置与 Agent Profile 分离，API key 不进入 Profile 返回值。
 
-当前已实现从内部认知到 AgentFacts 的披露链路；AgentCard 只提供 Owner Draft。独立 Index 已实现 AgentAddr Registration、Representation Publication 与 exact Search，但 Agent Server 自动 Publisher/Caller 与公开 AgentCard/A2A Endpoint 仍未实现。
+当前已实现从内部认知到 AgentFacts 的披露链路；通用能力 AgentCard 仍只提供 Owner Draft。独立 Index 已实现 AgentAddr Registration、Representation Publication 与 exact Search；Agent Server 也已为 Owner 显式启用的同 Server 文本协作提供独立的 Session Secured AgentCard/A2A Endpoint，但自动 Publisher、跨 Server Caller 和通用公开调用仍未实现。
 
 ```mermaid
 flowchart TD
@@ -252,7 +252,7 @@ flowchart TD
     discovery --> facts["AgentFacts"]
     a2a --> card["AgentCard"]
     facts --> factsEndpoint["facts endpoint"]
-    card --> blocker["Owner preview only:<br/>A2A endpoint missing"]
+    card --> blocker["General card remains Owner Draft;<br/>collaboration uses scoped card"]
     factsEndpoint --> index["Index publication/search API"]
 ```
 
@@ -565,7 +565,7 @@ trace_spans
 
 验收：浏览器覆盖创建对话、流式回复、重连、取消、Memory 管理、Skill 启停、MCP 配置与审批；桌面和移动布局均可完成核心流程。
 
-只有完成上述阶段并出现真实的第二个独立 Agent 需求后，才进入 Network/A2A 设计。
+已出现真实的第二个独立 Agent 协作需求，因此 ADR 0018 实现了严格有界的同 Server A2A Session；Network 与跨 Server 联邦仍需单独设计。
 
 ## 13. 学习与技术调研优先级
 
@@ -580,7 +580,7 @@ trace_spans
 | P1     | Tracing / Observability      | Run 调试与成本定位                      |
 | P1     | HITL / Approval              | 外部写入和破坏性操作的控制点            |
 | P2     | Graphiti / temporal KG       | Memory 的时间关系实验                   |
-| P2     | A2A                          | 等真实第二个 Agent 出现                 |
+| P2     | Scoped A2A Collaboration     | 同 Server 文本 Session 已实现；联邦延后 |
 | P3     | Routing / distributed system | 等 Central Server 阶段                  |
 
 本阶段不投入 LangGraph 复杂图编排、CrewAI、AutoGen 或其他 Multi-Agent orchestration。

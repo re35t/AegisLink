@@ -187,6 +187,7 @@ func (handler *handler) streamAGUI(c *gin.Context, principalID string, run conve
 				if !writeAGUIEvent(c, map[string]any{
 					"type": "TOOL_CALL_RESULT", "messageId": payload.ToolCallID + ":result",
 					"toolCallId": payload.ToolCallID, "content": payload.Error, "role": "tool", "isError": true,
+					"structuredContent": map[string]any{"error": payload.Error},
 				}) {
 					return
 				}

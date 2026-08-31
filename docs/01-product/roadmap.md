@@ -7,6 +7,7 @@
 - Explicit Agent-scoped Memory, versioned Skill bundles, Principal MCP library with Agent bindings, read-only dynamic Tools, and typed Composer capability selection.
 - Agent Profile owner view, active Impression curation, Fact confirmation inbox, Runtime context injection, enforced Disclosure Policy, signed AgentFacts publication, and owner-only AgentCard Draft.
 - Standalone `aegislink-index` with independent PostgreSQL + pgvector, authenticated AgentAddr registration, complete vector snapshot replacement, exact cosine Search, and health/readiness.
+- Owner-opt-in same-Server Assistance Requests, scoped/expiring Collaboration Sessions, official A2A 1.0 Tasks, text-only ephemeral target Invocations, audit, and revocation.
 
 ## Next
 
@@ -19,4 +20,4 @@
 
 ## Deferred
 
-Public AgentCard/A2A invocation, federated/global Index routing, LSH, third-party attestation, delegated ownership, cross-Agent orchestration, organizations, marketplaces, gRPC, WebSocket, Redis, and Kubernetes are outside the current release. LSH is no longer on the planned path.
+Federated cross-Server A2A routing, general public invocation outside an accepted Session, A2A streaming/push, global Index routing, LSH, third-party attestation, delegated ownership, cross-Agent orchestration, organizations, marketplaces, gRPC, WebSocket, Redis, and Kubernetes are outside the current release.

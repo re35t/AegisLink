@@ -11,6 +11,7 @@ REST owns durable resources and control operations:
 - owner publication settings, DNS verification, signing-key rotation, one-time access-token creation, and AgentCard Draft preview;
 - Agent Memory, Skill packages/import/bindings, MCP library and Agent bindings;
 - Mention Catalog projections;
+- owner collaboration policy, Assistance Request/Session audit, and Session revocation;
 - Conversation/history reads, Run event replay, and cancellation.
 
 All protected routes use the server session. Owner or Principal IDs are never accepted as authorization inputs. Agent-scoped routes validate that the selected Agent belongs to the authenticated Principal. Identity/Fact/policy writes use Profile versions; Impression/candidate writes use context/candidate versions.
@@ -29,10 +30,14 @@ The client does not authorize Tools by sending AG-UI Tool definitions, schemas, 
 
 `GET /api/v1/runs/{runId}/events` is the authenticated persisted SSE stream. It supports `Last-Event-ID` replay and remains the recovery source while native AG-UI resume is incomplete. Run events are ordered per Run in PostgreSQL.
 
+## Official A2A collaboration
+
+`GET /a2a/agents/{agentAddr}/.well-known/agent-card.json` returns an official A2A 1.0 AgentCard only when the target Owner enabled collaboration; `/a2a/agents/{agentAddr}/agent-card` remains an explicit API alias. The card declares the shared JSON-RPC interface, AgentAddr tenant, text/plain modes, and opaque Bearer Session security. `POST /a2a` is handled by the official Go SDK and supports Session-scoped SendMessage, Get/List Task, and Cancel Task. Streaming, push notification, external capability issuance, and ordinary user cookies are not accepted on this data plane.
+
 ## Standalone Index
 
 The independent contract at [`../../index/contracts/http/v1/openapi.yaml`](../../index/contracts/http/v1/openapi.yaml) exposes health/readiness and all three Bearer-authenticated Index stages: empty-object AgentAddr registration with idempotent replay, complete Representation replacement, and Query Vector Search. It exposes no public resolve route or AgentFacts text.
 
 ## Not provided
 
-The Agent Server contract has no public AgentCard route, A2A invocation endpoint, Index/search/registration API, third-party attestation API, WebSocket API, gRPC API, organization API, cross-Agent routing API, or third-party SDK contract. The independent Index has no search, update, revoke, signing, or AgentFacts verification endpoint yet.
+The Agent Server does not provide federated Server routing, general public A2A invocation without an accepted Collaboration Session, third-party attestation, WebSocket, gRPC, Organization, or external Session issuance APIs.

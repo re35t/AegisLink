@@ -60,25 +60,22 @@ API key 只通过未提交的 `.env` 中 `MODEL_API_KEY` 提供，不能写入�
 cp .env.example .env
 # 填写 MODEL_API_KEY，按需调整 MODEL_BASE_URL 和 MODEL_NAME。
 pnpm install
+make dev
+```
+
+`make dev` 会加载 `.env` 与 `.env.local`，在未配置 Agent 加密密钥时生成并复用一个仅供本地开发的稳定密钥，然后等待两个开发数据库健康并统一启动 Agent Server、独立 Index 与 Vite Web。按 `Ctrl-C` 会停止这三个本地进程；PostgreSQL Container 与命名 Volume 会保留，方便下次快速启动。
+
+只需要单个组件时，仍可使用原有细粒度命令：
+
+```bash
 make dev-db
 make dev-server
-```
-
-另开终端运行：
-
-```bash
 make dev-web
-```
-
-浏览器打开 `http://127.0.0.1:5173`，API 默认监听 `http://127.0.0.1:4321`。
-
-Index 可选，使用独立 PostgreSQL，不依赖 Agent Server 数据库或模型凭据。另开终端运行：
-
-```bash
 make dev-index-db
 make dev-index
-# Health/Readiness: http://127.0.0.1:4331
 ```
+
+浏览器打开 `http://127.0.0.1:5173`，API 默认监听 `http://127.0.0.1:4321`；Index Health/Readiness 位于 `http://127.0.0.1:4331`。
 
 当前 Index 已实现三阶段初版：`POST /api/v1/registry/agents` 分配并持久化不透明 AgentAddr，`PUT /api/v1/registry/agents/{agentAddr}/representation` 原子替换完整 Fact Vector 快照，`POST /api/v1/discovery/search` 通过 PostgreSQL + pgvector exact cosine 返回 AgentAddr 候选；公开 Resolve 已移除。
 

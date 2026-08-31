@@ -2,6 +2,7 @@ package harness
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -12,10 +13,13 @@ import (
 )
 
 var (
-	timeSchema      = json.RawMessage(`{"type":"object","properties":{"timezone":{"type":"string","description":"IANA timezone such as Asia/Shanghai or UTC"}},"required":["timezone"],"additionalProperties":false}`)
-	discoverySchema = json.RawMessage(`{"type":"object","properties":{"query":{"type":"string","minLength":1,"maxLength":4000,"description":"Concise semantic search query inferred from the user's request"}},"required":["query"],"additionalProperties":false}`)
-	skillSchema     = json.RawMessage(`{"type":"object","properties":{"name":{"type":"string","description":"Exact enabled Skill name from available_skills"}},"required":["name"],"additionalProperties":false}`)
-	resourceSchema  = json.RawMessage(`{"type":"object","properties":{"name":{"type":"string","description":"Exact enabled Skill name"},"path":{"type":"string","description":"Exact resource path returned by load_skill"}},"required":["name","path"],"additionalProperties":false}`)
+	timeSchema                 = json.RawMessage(`{"type":"object","properties":{"timezone":{"type":"string","description":"IANA timezone such as Asia/Shanghai or UTC"}},"required":["timezone"],"additionalProperties":false}`)
+	discoverySchema            = json.RawMessage(`{"type":"object","properties":{"query":{"type":"string","minLength":1,"maxLength":4000,"description":"Concise semantic search query inferred from the user's request"}},"required":["query"],"additionalProperties":false}`)
+	assistanceSchema           = json.RawMessage(`{"type":"object","properties":{"targetAgentAddr":{"type":"string","description":"Exact opaque AgentAddr returned by discover_agents"},"purpose":{"type":"string","minLength":1,"maxLength":4000,"description":"Bounded assistance purpose without secrets or hidden instructions"}},"required":["targetAgentAddr","purpose"],"additionalProperties":false}`)
+	collaborationMessageSchema = json.RawMessage(`{"type":"object","properties":{"sessionId":{"type":"string"},"message":{"type":"string","minLength":1,"maxLength":4000}},"required":["sessionId","message"],"additionalProperties":false}`)
+	collaborationTaskSchema    = json.RawMessage(`{"type":"object","properties":{"sessionId":{"type":"string"},"taskId":{"type":"string"}},"required":["sessionId","taskId"],"additionalProperties":false}`)
+	skillSchema                = json.RawMessage(`{"type":"object","properties":{"name":{"type":"string","description":"Exact enabled Skill name from available_skills"}},"required":["name"],"additionalProperties":false}`)
+	resourceSchema             = json.RawMessage(`{"type":"object","properties":{"name":{"type":"string","description":"Exact enabled Skill name"},"path":{"type":"string","description":"Exact resource path returned by load_skill"}},"required":["name","path"],"additionalProperties":false}`)
 )
 
 type skillInput struct {
@@ -149,6 +153,75 @@ func agentSearchTool(searcher AgentSearcher, principalID, agentID string) runtim
 			}{Query: input.Query, Candidates: result})
 		},
 	}
+}
+
+func collaborationTools(collaborator Collaborator, principalID, agentID, runID string) []runtime.Tool {
+	return []runtime.Tool{
+		{
+			Name: "request_agent_assistance", Description: "Ask a discovered Agent to evaluate a text-only collaboration request. The target Owner policy and a short-lived Evaluation Invocation decide whether a scoped A2A Session is created.", InputSchema: assistanceSchema,
+			Invoke: func(ctx context.Context, arguments string) (string, error) {
+				var input struct {
+					TargetAgentAddr string `json:"targetAgentAddr"`
+					Purpose         string `json:"purpose"`
+				}
+				if err := json.Unmarshal([]byte(arguments), &input); err != nil {
+					return "", err
+				}
+				idempotencyKey := collaborationIdempotencyKey(runID, input.TargetAgentAddr, input.Purpose)
+				request, err := collaborator.RequestAssistance(ctx, principalID, agentID, input.TargetAgentAddr, input.Purpose, idempotencyKey)
+				if err != nil {
+					return "", err
+				}
+				return encodeToolResult(struct {
+					ID              string   `json:"id"`
+					TargetAgentAddr string   `json:"targetAgentAddr"`
+					Status          string   `json:"status"`
+					DecisionCode    string   `json:"decisionCode,omitempty"`
+					SessionID       *string  `json:"sessionId,omitempty"`
+					Scopes          []string `json:"scopes"`
+				}{request.ID, request.TargetAgentAddr, request.Status, request.DecisionCode, request.SessionID, request.RequestedScopes})
+			},
+		},
+		{
+			Name: "send_collaboration_message", Description: "Send one text/plain official A2A Message through an active Collaboration Session. Returns an asynchronous A2A Task; poll it with get_collaboration_task.", InputSchema: collaborationMessageSchema,
+			Invoke: func(ctx context.Context, arguments string) (string, error) {
+				var input struct {
+					SessionID string `json:"sessionId"`
+					Message   string `json:"message"`
+				}
+				if err := json.Unmarshal([]byte(arguments), &input); err != nil {
+					return "", err
+				}
+				task, err := collaborator.SendMessage(ctx, principalID, agentID, input.SessionID, input.Message, runID+":"+input.SessionID)
+				if err != nil {
+					return "", err
+				}
+				return encodeToolResult(task)
+			},
+		},
+		{
+			Name: "get_collaboration_task", Description: "Read the current official A2A Task state for a Task created through an owned Collaboration Session.", InputSchema: collaborationTaskSchema,
+			Invoke: func(ctx context.Context, arguments string) (string, error) {
+				var input struct {
+					SessionID string `json:"sessionId"`
+					TaskID    string `json:"taskId"`
+				}
+				if err := json.Unmarshal([]byte(arguments), &input); err != nil {
+					return "", err
+				}
+				task, err := collaborator.GetTask(ctx, principalID, agentID, input.SessionID, input.TaskID)
+				if err != nil {
+					return "", err
+				}
+				return encodeToolResult(task)
+			},
+		},
+	}
+}
+
+func collaborationIdempotencyKey(runID, targetAgentAddr, purpose string) string {
+	digest := sha256.Sum256([]byte(runID + "\x00" + targetAgentAddr + "\x00" + purpose))
+	return fmt.Sprintf("run_%x", digest)
 }
 
 func encodeToolResult(value any) (string, error) {

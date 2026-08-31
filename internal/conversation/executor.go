@@ -27,7 +27,7 @@ func (service *Service) execute(ctx context.Context, principalID string, run Run
 		service.finishFailed(principalID, run.ID, "agent_load_failed", false)
 		return
 	}
-	outputs, err := service.harness.Run(ctx, HarnessInput{PrincipalID: principalID, Agent: agentRecord, Messages: detail.Messages, Policy: run.ExecutionPolicy})
+	outputs, err := service.harness.Run(ctx, HarnessInput{RunID: run.ID, PrincipalID: principalID, Agent: agentRecord, Messages: detail.Messages, Policy: run.ExecutionPolicy})
 	if err != nil {
 		service.logger.Error("prepare agent harness", "runId", run.ID, "error", err)
 		service.finishFailed(principalID, run.ID, "agent_context_load_failed", false)

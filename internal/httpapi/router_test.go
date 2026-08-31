@@ -439,6 +439,43 @@ func TestAGUIRunStreamsProtocolLifecycleAndTextEvents(t *testing.T) {
 	}
 }
 
+func TestAGUIRunMarksFailedToolResultAsError(t *testing.T) {
+	t.Parallel()
+	service := &fakeService{
+		run: conversation.Run{ID: "run-client", ConversationID: "conversation-1", Status: "failed"},
+		events: []conversation.RunEvent{
+			{RunID: "run-client", Sequence: 1, Type: "run.started", Payload: json.RawMessage(`{}`)},
+			{RunID: "run-client", Sequence: 2, Type: "tool.started", Payload: json.RawMessage(`{"toolCallId":"call-one","toolName":"request_agent_assistance","arguments":"{}"}`)},
+			{RunID: "run-client", Sequence: 3, Type: "tool.failed", Payload: json.RawMessage(`{"toolCallId":"call-one","error":"invalid collaboration request"}`)},
+			{RunID: "run-client", Sequence: 4, Type: "run.failed", Payload: json.RawMessage(`{"code":"runtime_error"}`)},
+		},
+	}
+	router := newTestRouter(service, ModelInfo{})
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/ag-ui", strings.NewReader(`{
+		"threadId":"conversation-1",
+		"runId":"run-client",
+		"state":{},
+		"messages":[{"id":"message-client","role":"user","content":"help"}],
+		"tools":[],
+		"context":[]
+	}`))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Accept", "text/event-stream")
+	authorize(request)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%q", response.Code, response.Body.String())
+	}
+	body := response.Body.String()
+	for _, expected := range []string{`"type":"TOOL_CALL_RESULT"`, `"isError":true`, `"structuredContent":{"error":"invalid collaboration request"}`, `"type":"RUN_ERROR"`} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("AG-UI tool failure field %q missing from %q", expected, body)
+		}
+	}
+}
+
 type fakeService struct {
 	conversationError   error
 	profileError        error

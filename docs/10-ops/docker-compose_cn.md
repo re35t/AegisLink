@@ -10,12 +10,15 @@
 | `index-postgres-test` | `test`  |   `55435` | `aegislink_index_test` | Index pgvector 集成测试       |
 
 ```bash
+make dev             # 启动两个开发数据库与全部本地进程
 make dev-db          # 启动开发 PostgreSQL
 make dev-test-db     # 启动隔离测试 PostgreSQL 并等待健康状态
 make test-integration
 make dev-index-db
 make test-index-integration
 ```
+
+`make dev` 在 `Ctrl-C` 后只停止受监督的 Agent Server、Index 与 Vite 进程，两个开发数据库 Container 会继续运行。使用 `docker compose stop postgres index-postgres` 可停止 Container，但不会删除命名 Volume。
 
 `docker compose restart postgres` 和普通容器重建会保留开发命名卷。`docker compose down -v` 等删除 Volume 的命令会有意清除数据，不属于正常开发流程。
 

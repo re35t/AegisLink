@@ -51,7 +51,7 @@ func (service *Service) Preview(ctx context.Context, principalID, agentID string
 		Version: "draft-" + formatVersion(profile.Version), Skills: skills,
 		SecuritySchemes: a2asdk.NamedSecuritySchemes{}, SecurityRequirements: a2asdk.SecurityRequirementsOptions{},
 	}
-	return Preview{Draft: draft, Readiness: Readiness{Publishable: false, Blockers: []string{"a2a-endpoint-missing"}}}, nil
+	return Preview{Draft: draft, Readiness: Readiness{Publishable: false, Blockers: []string{"general-a2a-publication-disabled"}}}, nil
 }
 
 func formatVersion(version int64) string {

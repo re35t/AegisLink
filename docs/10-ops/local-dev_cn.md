@@ -6,20 +6,20 @@
 cp .env.example .env
 # 在 .env 中设置 MODEL_API_KEY。
 pnpm install
-make dev-db
-make dev-server
+make dev
 ```
 
-在另一个终端运行 `make dev-web`。默认 Web 地址为 `http://127.0.0.1:5173`，API 为 `http://127.0.0.1:4321`，开发 PostgreSQL 暴露在 `127.0.0.1:55432`。
+`make dev` 会依次加载 `.env` 与 `.env.local`，等待两个开发 PostgreSQL 数据库健康，然后在同一终端监督 Agent Server、独立 Index 与 Vite Web。默认 Web 地址为 `http://127.0.0.1:5173`，API 为 `http://127.0.0.1:4321`，Index 为 `http://127.0.0.1:4331`；两个开发数据库分别暴露在 `127.0.0.1:55432` 与 `127.0.0.1:55434`。
 
-独立 Index 是可选进程，并使用自己的 PostgreSQL：
+如果环境文件没有设置 `AGENT_KEY_ENCRYPTION_KEY`，`make dev` 会首次生成一个仅供本地开发使用的稳定 32-byte Base64 密钥，保存到 Git 忽略且权限受限的 `.aegislink-dev/agent-key`。后续启动会复用该密钥，使 AgentFacts 与协作 Session 的密文在重启后仍可解密；显式环境配置始终优先。
+
+按 `Ctrl-C` 会停止三个本地进程。开发数据库 Container 会继续运行，命名 Volume 也会保留；需要时可显式停止：
 
 ```bash
-make dev-index-db
-make dev-index
-curl http://127.0.0.1:4331/healthz
-curl http://127.0.0.1:4331/readyz
+docker compose stop postgres index-postgres
 ```
+
+需要细粒度启动时，原有的 `make dev-db`、`make dev-server`、`make dev-index-db`、`make dev-index` 与 `make dev-web` 仍可使用。
 
 Index 读取 `INDEX_SERVER_ADDRESS`、`INDEX_SERVER_SHUTDOWN_TIMEOUT`、`INDEX_DATABASE_URL`、`INDEX_REGISTRATION_TOKEN` 与 `INDEX_QUERY_TOKEN`，不需要主服务的 `DATABASE_URL`、`MODEL_API_KEY` 或 AgentFacts 加密密钥。Index 的 pgvector 数据库与 Agent Server 数据库相互独立。
 
@@ -27,7 +27,7 @@ Index 读取 `INDEX_SERVER_ADDRESS`、`INDEX_SERVER_SHUTDOWN_TIMEOUT`、`INDEX_D
 
 Server 打开数据库时由 Goose 应用有序 migration。运行时持久化使用 GORM，并明确禁用 `AutoMigrate`。
 
-Curator 配置是可选的：每个空的 Provider/模型字段都会回退到对应 `MODEL_*`。Curator 请求默认启用 JSON Output，并设置 `CURATOR_MODEL_THINKING=disabled`；思考模式开关由 DeepSeek Driver 应用。只有 AgentFacts 发布需要 `AGENT_KEY_ENCRYPTION_KEY`，其值必须是恰好 32 个随机字节的 Base64。该密钥必须保持稳定且保密；更换后需要轮换 Agent Signing Key。
+Curator 配置是可选的：每个空的 Provider/模型字段都会回退到对应 `MODEL_*`。Curator 请求默认启用 JSON Output，并设置 `CURATOR_MODEL_THINKING=disabled`；思考模式开关由 DeepSeek Driver 应用。AgentFacts 发布与跨 Agent Collaboration 都需要 `AGENT_KEY_ENCRYPTION_KEY`，其值必须是恰好 32 个随机字节的 Base64。该密钥必须保持稳定且保密；更换后需要轮换 Agent Signing Key，并会使尚未过期的 Collaboration Session 失效。
 
 ## 验证
 

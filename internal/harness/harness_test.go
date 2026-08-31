@@ -7,9 +7,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/re35t/AegisLink/internal/agent"
 	"github.com/re35t/AegisLink/internal/agentindex"
 	"github.com/re35t/AegisLink/internal/catalog"
+	"github.com/re35t/AegisLink/internal/collaboration"
 	"github.com/re35t/AegisLink/internal/conversation"
 	"github.com/re35t/AegisLink/internal/impression"
 	"github.com/re35t/AegisLink/internal/mcp"
@@ -160,6 +162,36 @@ func TestDiscoverAgentsToolHandlesEmptyResultsAndIndexErrors(t *testing.T) {
 	}
 }
 
+func TestRequestAgentAssistanceUsesBoundedIdempotencyKey(t *testing.T) {
+	collaborator := &collaboratorStub{}
+	tool := collaborationTools(collaborator, "principal-one", "agent-one", "k39PGZs")[0]
+	targetAgentAddr := "agent_01M13S2SWBFTYEDQTAVNC7FACB"
+	purpose := strings.Repeat("p", 4000)
+	arguments, err := json.Marshal(map[string]string{"targetAgentAddr": targetAgentAddr, "purpose": purpose})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tool.Invoke(t.Context(), string(arguments)); err != nil {
+		t.Fatal(err)
+	}
+	if len(collaborator.idempotencyKey) != 68 {
+		t.Fatalf("idempotency key length = %d", len(collaborator.idempotencyKey))
+	}
+	firstKey := collaborator.idempotencyKey
+	if _, err := tool.Invoke(t.Context(), string(arguments)); err != nil {
+		t.Fatal(err)
+	}
+	if collaborator.idempotencyKey != firstKey {
+		t.Fatalf("same request produced different idempotency keys: %q != %q", collaborator.idempotencyKey, firstKey)
+	}
+	if _, err := tool.Invoke(t.Context(), `{"targetAgentAddr":"agent_01M13S2SWBFTYEDQTAVNC7FACB","purpose":"different"}`); err != nil {
+		t.Fatal(err)
+	}
+	if collaborator.idempotencyKey == firstKey {
+		t.Fatal("different requests produced the same idempotency key")
+	}
+}
+
 func TestRunMapsForcedPolicyAndSkillValidation(t *testing.T) {
 	stub := &runtimeStub{}
 	harness := newTestHarness(stub)
@@ -228,6 +260,23 @@ type agentSearcherStub struct {
 	topK        int
 	candidates  []agentindex.Candidate
 	err         error
+}
+
+type collaboratorStub struct {
+	idempotencyKey string
+}
+
+func (stub *collaboratorStub) RequestAssistance(_ context.Context, _, _, targetAgentAddr, _, idempotencyKey string) (collaboration.AssistanceRequest, error) {
+	stub.idempotencyKey = idempotencyKey
+	return collaboration.AssistanceRequest{ID: "request-one", TargetAgentAddr: targetAgentAddr, Status: "accepted"}, nil
+}
+
+func (*collaboratorStub) SendMessage(context.Context, string, string, string, string, string) (*a2a.Task, error) {
+	return nil, nil
+}
+
+func (*collaboratorStub) GetTask(context.Context, string, string, string, string) (*a2a.Task, error) {
+	return nil, nil
 }
 
 func (stub *agentSearcherStub) Search(_ context.Context, principalID, agentID, query string, topK int) ([]agentindex.Candidate, error) {
